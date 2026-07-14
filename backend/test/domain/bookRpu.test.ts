@@ -1,0 +1,106 @@
+import { describe, expect, it } from "vitest";
+import {
+  authorizeBookAccess,
+  buildBookDraft,
+  buildDetectedMeta,
+  computeFileHash,
+  detectDuplicate,
+  toBookSummary
+} from "../../src/domain/bookRpu.js";
+import type { Book } from "../../src/domain/types.js";
+
+function makeBook(overrides: Partial<Book> = {}): Book {
+  return {
+    id: "book-1",
+    userId: "user-1",
+    title: "Some Title",
+    author: "Some Author",
+    tags: [],
+    coverUrl: null,
+    addedAt: "2026-01-01T00:00:00.000Z",
+    currentFileHash: "abc123",
+    processingStatus: "ready",
+    ...overrides
+  };
+}
+
+describe("computeFileHash", () => {
+  it("is deterministic sha-256 hex", () => {
+    const buf = Buffer.from("hello world");
+    const hash1 = computeFileHash(buf);
+    const hash2 = computeFileHash(Buffer.from("hello world"));
+    expect(hash1).toBe(hash2);
+    expect(hash1).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("differs for different content", () => {
+    expect(computeFileHash(Buffer.from("a"))).not.toBe(computeFileHash(Buffer.from("b")));
+  });
+});
+
+describe("detectDuplicate", () => {
+  it("reports no duplicate when nothing found", () => {
+    expect(detectDuplicate(null)).toEqual({ isDuplicate: false });
+  });
+
+  it("reports duplicate with existing book id", () => {
+    expect(detectDuplicate({ id: "existing-1" })).toEqual({ isDuplicate: true, existingBookId: "existing-1" });
+  });
+});
+
+describe("buildDetectedMeta", () => {
+  it("uses detected values when present", () => {
+    const meta = buildDetectedMeta({ title: "  Real Title  ", author: "Jane Doe", language: "en" }, "fallback");
+    expect(meta).toEqual({ title: "Real Title", author: "Jane Doe", language: "en" });
+  });
+
+  it("falls back to filename-derived title and Unknown author when missing", () => {
+    const meta = buildDetectedMeta({}, "My Book");
+    expect(meta).toEqual({ title: "My Book", author: "Unknown" });
+  });
+
+  it("omits language when blank", () => {
+    const meta = buildDetectedMeta({ title: "T", author: "A", language: "   " }, "fallback");
+    expect(meta).toEqual({ title: "T", author: "A" });
+  });
+});
+
+describe("buildBookDraft", () => {
+  it("normalizes title/author and defaults processingStatus to ready", () => {
+    const draft = buildBookDraft({ title: "  T  ", author: " A ", fileHash: "hash1" });
+    expect(draft).toEqual({ title: "T", author: "A", fileHash: "hash1", tags: [], processingStatus: "ready" });
+  });
+
+  it("falls back to Untitled/Unknown for blank strings", () => {
+    const draft = buildBookDraft({ title: "  ", author: "  ", fileHash: "hash2" });
+    expect(draft.title).toBe("Untitled");
+    expect(draft.author).toBe("Unknown");
+  });
+});
+
+describe("toBookSummary", () => {
+  it("projects the public fields only", () => {
+    const book = makeBook();
+    expect(toBookSummary(book)).toEqual({
+      id: "book-1",
+      title: "Some Title",
+      author: "Some Author",
+      fileHash: "abc123",
+      processingStatus: "ready"
+    });
+  });
+});
+
+describe("authorizeBookAccess", () => {
+  it("denies access when book is null (not found)", () => {
+    expect(authorizeBookAccess(null, "user-1")).toBe(false);
+  });
+
+  it("denies access when userId does not match owner", () => {
+    expect(authorizeBookAccess(makeBook({ userId: "other-user" }), "user-1")).toBe(false);
+  });
+
+  it("grants access when userId matches owner", () => {
+    expect(authorizeBookAccess(makeBook({ userId: "user-1" }), "user-1")).toBe(true);
+  });
+});

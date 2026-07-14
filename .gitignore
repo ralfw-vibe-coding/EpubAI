@@ -1,0 +1,10 @@
+.env
+.env.*
+node_modules/
+dist/
+build/
+.svelte-kit/
+coverage/
+*.log
+.DS_Store
+example books/
