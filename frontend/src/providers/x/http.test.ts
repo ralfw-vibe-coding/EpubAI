@@ -181,6 +181,24 @@ describe('createHttpClient', () => {
 		expect((getSentBody() as FormData).get('file')).toBeInstanceOf(Blob);
 	});
 
+	it('passes through coverKey and coverPreviewUrl when the server detected a cover', async () => {
+		const { instance } = fakeXhr(200, {
+			detectedMeta: { title: 'T', author: 'A' },
+			fileHash: 'h1',
+			coverKey: 'cover-key-1',
+			coverPreviewUrl: 'https://covers.example/preview.jpg'
+		});
+		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
+		const res = await http.uploadEpub(new Blob(['x']), 'buch.epub');
+
+		expect(res).toEqual({
+			detectedMeta: { title: 'T', author: 'A' },
+			fileHash: 'h1',
+			coverKey: 'cover-key-1',
+			coverPreviewUrl: 'https://covers.example/preview.jpg'
+		});
+	});
+
 	it('returns a duplicate result on 409 instead of throwing', async () => {
 		const { instance } = fakeXhr(409, { error: 'duplicate', existingBookId: 'b9' });
 		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
@@ -215,6 +233,26 @@ describe('createHttpClient', () => {
 		const [url, opts] = fetchMock.mock.calls[0];
 		expect(url).toBe('http://api/books');
 		expect(opts.method).toBe('POST');
+		expect(JSON.parse(opts.body)).toEqual({ title: 'T', author: 'A', fileHash: 'h1' });
+	});
+
+	it('includes coverKey in the body when provided', async () => {
+		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: [], coverUrl: null };
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(book));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.createBook('T', 'A', 'h1', 'cover-key-1');
+
+		const [, opts] = fetchMock.mock.calls[0];
+		expect(JSON.parse(opts.body)).toEqual({ title: 'T', author: 'A', fileHash: 'h1', coverKey: 'cover-key-1' });
+	});
+
+	it('omits coverKey from the body when not provided', async () => {
+		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: [], coverUrl: null };
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(book));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.createBook('T', 'A', 'h1');
+
+		const [, opts] = fetchMock.mock.calls[0];
 		expect(JSON.parse(opts.body)).toEqual({ title: 'T', author: 'A', fileHash: 'h1' });
 	});
 

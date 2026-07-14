@@ -96,7 +96,8 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		author: 'A',
 		fileHash: 'h1',
 		processingStatus: 'ready',
-		tags: []
+		tags: [],
+		coverUrl: null
 	};
 	const defaultLoan: LoanResponse = {
 		id: 'loan1',

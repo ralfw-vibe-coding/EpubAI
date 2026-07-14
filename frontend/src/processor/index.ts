@@ -46,8 +46,12 @@ export function createProcessor(deps: ReactorDeps) {
 			filename: string,
 			onProgress?: (percent: number) => void
 		): Promise<UploadEpubResult> => uploadEpub(deps, file, filename, onProgress),
-		confirmAddBook: (title: string, author: string, fileHash: string): Promise<CatalogBook> =>
-			confirmAddBook(deps, title, author, fileHash),
+		confirmAddBook: (
+			title: string,
+			author: string,
+			fileHash: string,
+			coverKey?: string
+		): Promise<CatalogBook> => confirmAddBook(deps, title, author, fileHash, coverKey),
 		updateBookMetadata: (bookId: string, patch: BookMetadataPatch): Promise<CatalogBook> =>
 			updateBookMetadata(deps, bookId, patch),
 		deleteBook: (bookId: string): Promise<void> => deleteBook(deps, bookId)

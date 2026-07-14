@@ -7,7 +7,8 @@ vi.mock("../../src/providers/d/bookFileRepo.js", () => ({
   insert: vi.fn()
 }));
 vi.mock("../../src/providers/x/r2.js", () => ({
-  headObject: vi.fn()
+  headObject: vi.fn(),
+  getPresignedUrl: vi.fn()
 }));
 
 import { createBook } from "../../src/processor/createBook.js";
@@ -70,7 +71,8 @@ describe("createBook reactor", () => {
       author: "A",
       fileHash: "hash-1",
       tags: [],
-      processingStatus: "ready"
+      processingStatus: "ready",
+      coverKey: null
     });
     expect(r2.headObject).toHaveBeenCalledWith("hash-1.epub");
     expect(bookFileRepo.insert).toHaveBeenCalledWith({
@@ -79,10 +81,60 @@ describe("createBook reactor", () => {
       fileHash: "hash-1",
       sizeBytes: 2048
     });
+    expect(r2.getPresignedUrl).not.toHaveBeenCalled();
     expect(result).toEqual({
       status: 201,
-      body: { id: "book-1", title: "T", author: "A", tags: [], fileHash: "hash-1", processingStatus: "ready" }
+      body: {
+        id: "book-1",
+        title: "T",
+        author: "A",
+        tags: [],
+        coverUrl: null,
+        fileHash: "hash-1",
+        processingStatus: "ready"
+      }
     });
+  });
+
+  it("accepts a coverKey matching the fileHash prefix, stores it, and returns a presigned coverUrl", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue(
+      makeBook({ coverUrl: "hash-1-cover.jpg" })
+    );
+    (r2.headObject as ReturnType<typeof vi.fn>).mockResolvedValue({ sizeBytes: 2048 });
+    (bookFileRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (r2.getPresignedUrl as ReturnType<typeof vi.fn>).mockResolvedValue("https://example.com/presigned-cover");
+
+    const result = await createBook(`Bearer ${token}`, {
+      title: "T",
+      author: "A",
+      fileHash: "hash-1",
+      coverKey: "hash-1-cover.jpg"
+    });
+
+    expect(bookRepo.insert).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ coverKey: "hash-1-cover.jpg" })
+    );
+    expect(r2.getPresignedUrl).toHaveBeenCalledWith("hash-1-cover.jpg");
+    expect((result.body as { coverUrl: string }).coverUrl).toBe("https://example.com/presigned-cover");
+  });
+
+  it("discards a coverKey that does not match this upload's fileHash prefix (rejects a spoofed key)", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
+    (r2.headObject as ReturnType<typeof vi.fn>).mockResolvedValue({ sizeBytes: 2048 });
+    (bookFileRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+    await createBook(`Bearer ${token}`, {
+      title: "T",
+      author: "A",
+      fileHash: "hash-1",
+      coverKey: "someone-elses-hash-cover.jpg"
+    });
+
+    expect(bookRepo.insert).toHaveBeenCalledWith("user-1", expect.objectContaining({ coverKey: null }));
+    expect(r2.getPresignedUrl).not.toHaveBeenCalled();
   });
 
   it("defaults sizeBytes to 0 when the R2 head lookup fails to find the object", async () => {

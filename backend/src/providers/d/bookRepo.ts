@@ -54,10 +54,10 @@ export async function listByUser(userId: string): Promise<Book[]> {
 
 export async function insert(userId: string, draft: BookDraft): Promise<Book> {
   const result = await pool.query<BookRow>(
-    `insert into book (user_id, title, author, tags, current_file_hash, processing_status)
-     values ($1, $2, $3, $4, $5, $6)
+    `insert into book (user_id, title, author, tags, cover_url, current_file_hash, processing_status)
+     values ($1, $2, $3, $4, $5, $6, $7)
      returning ${SELECT_FIELDS}`,
-    [userId, draft.title, draft.author, draft.tags, draft.fileHash, draft.processingStatus]
+    [userId, draft.title, draft.author, draft.tags, draft.coverKey, draft.fileHash, draft.processingStatus]
   );
   return toBook(result.rows[0]);
 }

@@ -9,7 +9,8 @@ const book: CatalogBook = {
 	author: 'A',
 	fileHash: 'h1',
 	processingStatus: 'ready',
-	tags: []
+	tags: [],
+	coverUrl: null
 };
 
 describe('createReaderDomain', () => {

@@ -1,6 +1,7 @@
 import { authorizeBookAccess, toBookSummary, updateBookMetadata } from "../domain/bookRpu.js";
 import type { BookSummary } from "../domain/types.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
+import * as r2 from "../providers/x/r2.js";
 import { requireUserId, AuthError } from "./shared/requireUserId.js";
 import { ok, type ReactorResult } from "./shared/result.js";
 
@@ -42,5 +43,6 @@ export async function updateBook(
   }
 
   const updated = await bookRepo.update(bookId, validation.patch);
-  return ok(200, toBookSummary(updated));
+  const coverUrl = updated.coverUrl ? await r2.getPresignedUrl(updated.coverUrl) : null;
+  return ok(200, toBookSummary(updated, coverUrl));
 }

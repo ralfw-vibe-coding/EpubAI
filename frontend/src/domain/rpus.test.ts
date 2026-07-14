@@ -44,7 +44,8 @@ describe('toBookDetail', () => {
 		author: 'A',
 		fileHash: 'h',
 		processingStatus: 'ready',
-		tags: []
+		tags: [],
+		coverUrl: null
 	};
 	it('marks isLocal true when loaned', () => {
 		const loans: Loan[] = [{ bookId: 'b1', deviceId: 'd', fileHash: 'h', borrowedAt: 'n' }];

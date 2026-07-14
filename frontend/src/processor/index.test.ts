@@ -130,7 +130,14 @@ describe('processor reactors', () => {
 		const book = await createProcessor(deps).confirmAddBook('Titel', 'Autor', 'hash1');
 		expect(book.id).toBe('b1');
 		const call = http.calls.find((c) => c.method === 'createBook');
-		expect(call?.args).toEqual(['Titel', 'Autor', 'hash1']);
+		expect(call?.args).toEqual(['Titel', 'Autor', 'hash1', undefined]);
+	});
+
+	it('confirmAddBook forwards an optional coverKey to http.createBook', async () => {
+		const { deps, http } = makeDeps();
+		await createProcessor(deps).confirmAddBook('Titel', 'Autor', 'hash1', 'cover-key-1');
+		const call = http.calls.find((c) => c.method === 'createBook');
+		expect(call?.args).toEqual(['Titel', 'Autor', 'hash1', 'cover-key-1']);
 	});
 
 	it('updateBookMetadata delegates to http.updateBookMetadata', async () => {

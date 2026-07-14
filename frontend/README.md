@@ -89,9 +89,10 @@ curl -s -X POST http://localhost:3000/books \
 
 ## Was AR konkret abzunehmen hat
 
-Manueller Durchklick-Test für Katalog-Upload, Metadaten-Bearbeitung und
-Löschen. Voraussetzung: Backend läuft und ist unter `PUBLIC_API_BASE_URL`
-erreichbar (siehe oben), ein EPUB-Testbuch liegt lokal bereit.
+Manueller Durchklick-Test für Katalog-Upload, Metadaten-Bearbeitung,
+Cover-Anzeige und Löschen. Voraussetzung: Backend läuft und ist unter
+`PUBLIC_API_BASE_URL` erreichbar (siehe oben), ein EPUB-Testbuch liegt lokal
+bereit.
 
 1. **Server starten:** `npm run dev`, Browser öffnet `http://localhost:5173`.
 2. **Einloggen** mit E-Mail + OTP (`AUTH_SECRET_OTP` aus der Backend-Config) —
@@ -100,9 +101,15 @@ erreichbar (siehe oben), ein EPUB-Testbuch liegt lokal bereit.
    öffnet sich mit einem Datei-Auswahlfeld → EPUB-Testdatei auswählen.
    - Erwartung: kurz „Wird hochgeladen…“, danach erscheinen der erkannte
      Titel und Autor sowie ein Button „Zum Katalog hinzufügen“.
+   - **Cover-Vorschau (falls die Testdatei ein Cover-Bild enthält):** über den
+     Titel-/Autor-Feldern erscheint eine kleine Bildvorschau des erkannten
+     Covers.
 4. **Hinzufügen bestätigen:** auf „Zum Katalog hinzufügen“ klicken.
    - Erwartung: Panel schließt sich, die Bücherliste lädt neu und zeigt das
      neue Buch.
+   - **Cover in der Liste:** wurde beim Upload ein Cover erkannt, zeigt die
+     Buchreihe jetzt das echte Cover-Bild anstelle der Farbfläche mit
+     Anfangsbuchstabe.
 5. **Duplikat testen (optional):** denselben Upload-Vorgang mit derselben
    Datei wiederholen.
    - Erwartung: statt der Metadaten erscheint „Bereits in deiner
@@ -112,6 +119,9 @@ erreichbar (siehe oben), ein EPUB-Testbuch liegt lokal bereit.
    Buchdetail), dort auf „Bearbeiten“ klicken.
    - Erwartung: Titel und Autor werden zu Eingabefeldern, darunter ein
      Tag-Bereich mit Eingabefeld.
+   - **Cover im Buchdetail:** hat das Buch ein Cover, erscheint links neben
+     Titel/Autor eine größere Cover-Fläche mit dem echten Bild statt der
+     Farbfläche.
    - Titel/Autor ändern, ein Tag eintippen und Enter drücken (erscheint als
      Chip mit „×“), Chip durch Klick auf „×“ wieder entfernen testen, dann
      ein Tag stehen lassen.
@@ -127,6 +137,15 @@ erreichbar (siehe oben), ein EPUB-Testbuch liegt lokal bereit.
 8. **Fehlerfall (optional):** Backend kurz stoppen und einen der obigen
    Schritte wiederholen (z. B. Speichern) — es muss eine sichtbare
    Fehlermeldung erscheinen, kein stiller Fehlschlag.
+
+**Hinweis zu Cover-Bildern:** Bücher, die schon vor dieser Änderung angelegt
+wurden, liefern `coverUrl: null` vom Backend — dort bleibt bewusst die
+Farbfläche mit Anfangsbuchstabe stehen (kein Bug). Um ein echtes Cover zu
+sehen, muss entweder ein Testbuch mit Cover frisch hochgeladen werden (Schritt
+3/4 oben) oder das Backend-Team hat bereits ein Buch mit Cover angelegt. Falls
+beim Test noch kein Buch mit Cover existiert, ist das kein Blocker für die
+übrige Abnahme — einfach vermerken und mit den restlichen Schritten
+fortfahren.
 
 ## Designentscheidungen / Notizen
 

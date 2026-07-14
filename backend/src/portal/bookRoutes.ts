@@ -27,11 +27,17 @@ export async function registerBookRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/books", async (request, reply) => {
-    const body = (request.body ?? {}) as { title?: unknown; author?: unknown; fileHash?: unknown };
+    const body = (request.body ?? {}) as {
+      title?: unknown;
+      author?: unknown;
+      fileHash?: unknown;
+      coverKey?: unknown;
+    };
     const result = await createBook(request.headers.authorization, {
       title: body.title,
       author: body.author,
-      fileHash: body.fileHash
+      fileHash: body.fileHash,
+      coverKey: body.coverKey
     });
     return reply.code(result.status).send(result.body);
   });

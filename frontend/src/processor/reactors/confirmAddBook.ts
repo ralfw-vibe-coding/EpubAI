@@ -10,7 +10,8 @@ export async function confirmAddBook(
 	deps: Pick<ReactorDeps, 'http'>,
 	title: string,
 	author: string,
-	fileHash: string
+	fileHash: string,
+	coverKey?: string
 ): Promise<CatalogBook> {
-	return deps.http.createBook(title, author, fileHash);
+	return deps.http.createBook(title, author, fileHash, coverKey);
 }

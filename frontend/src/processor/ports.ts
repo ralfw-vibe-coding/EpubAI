@@ -33,7 +33,14 @@ export interface DetectedMeta {
 
 /** Result of an EPUB upload: either freshly detected metadata, or a duplicate hit. */
 export type UploadEpubResult =
-	| { detectedMeta: DetectedMeta; fileHash: string }
+	| {
+			detectedMeta: DetectedMeta;
+			fileHash: string;
+			/** Opaque key identifying the extracted cover, if any; pass through unchanged to createBook. */
+			coverKey?: string;
+			/** Ready-to-use preview image URL for the cover, shown only during the edit step. */
+			coverPreviewUrl?: string;
+	  }
 	| { duplicate: true; existingBookId: string };
 
 /** Editable subset of a catalog book's metadata. */
@@ -56,7 +63,12 @@ export interface HttpClient {
 		filename: string,
 		onProgress?: (percent: number) => void
 	): Promise<UploadEpubResult>;
-	createBook(title: string, author: string, fileHash: string): Promise<CatalogBook>;
+	createBook(
+		title: string,
+		author: string,
+		fileHash: string,
+		coverKey?: string
+	): Promise<CatalogBook>;
 	updateBookMetadata(bookId: string, patch: BookMetadataPatch): Promise<CatalogBook>;
 	deleteBook(bookId: string): Promise<void>;
 }

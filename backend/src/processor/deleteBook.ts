@@ -35,6 +35,9 @@ export async function deleteBook(
   if (bookFile) {
     await r2.deleteObject(bookFile.storageKey);
   }
+  if (book.coverUrl) {
+    await r2.deleteObject(book.coverUrl);
+  }
   await bookFileRepo.deleteByBookId(bookId);
 
   await loanRepo.deleteByBookId(bookId);

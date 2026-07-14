@@ -12,6 +12,8 @@ export interface CatalogBook {
 	fileHash: string;
 	processingStatus: string;
 	tags: string[];
+	/** Ready-to-use cover image URL, or null if the book has no cover. */
+	coverUrl: string | null;
 }
 
 /** A local loan: the book's EPUB is present in OPFS on this device. */

@@ -16,6 +16,10 @@ export interface Book {
   title: string;
   author: string;
   tags: string[];
+  // Despite the name, this is an R2 *storage key* (e.g. `<fileHash>-cover.jpg`),
+  // not a directly fetchable URL - R2 is not publicly readable. A real,
+  // time-limited URL is presigned fresh on every request by the Reactor
+  // (never stored, since a stored presigned URL would eventually expire).
   coverUrl: string | null;
   addedAt: string;
   currentFileHash: string;
@@ -47,6 +51,10 @@ export interface BookSummary {
   title: string;
   author: string;
   tags: string[];
+  // A real, presigned, time-limited fetchable URL - resolved by the Reactor
+  // from the Book's `coverUrl` storage key (see comment there), never the
+  // storage key itself. Null when the book has no cover.
+  coverUrl: string | null;
   fileHash: string;
   processingStatus: ProcessingStatus;
 }

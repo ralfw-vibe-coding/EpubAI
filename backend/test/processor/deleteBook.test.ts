@@ -108,6 +108,36 @@ describe("deleteBook reactor", () => {
     expect(result).toEqual({ status: 204, body: undefined });
   });
 
+  it("also deletes the cover R2 object when the book has one", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook({ coverUrl: "hash-1-cover.jpg" }));
+    (bookFileRepo.findByBookId as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "file-1",
+      bookId: "book-1",
+      storageKey: "hash-1.epub",
+      fileHash: "hash-1",
+      sizeBytes: 2048,
+      uploadedAt: "2026-01-01T00:00:00.000Z"
+    });
+
+    const result = await deleteBook(`Bearer ${token}`, "book-1");
+
+    expect(r2.deleteObject).toHaveBeenCalledWith("hash-1.epub");
+    expect(r2.deleteObject).toHaveBeenCalledWith("hash-1-cover.jpg");
+    expect(r2.deleteObject).toHaveBeenCalledTimes(2);
+    expect(result.status).toBe(204);
+  });
+
+  it("skips the cover R2 delete when the book has no cover", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook({ coverUrl: null }));
+    (bookFileRepo.findByBookId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    await deleteBook(`Bearer ${token}`, "book-1");
+
+    expect(r2.deleteObject).not.toHaveBeenCalled();
+  });
+
   it("skips the R2 delete when there is no book_file row, but still cleans up the rest", async () => {
     const token = sign({ userId: "user-1" });
     (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());

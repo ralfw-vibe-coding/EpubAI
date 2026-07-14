@@ -19,9 +19,19 @@
 	let editTitle = $state('');
 	let editAuthor = $state('');
 	let fileHash = $state('');
+	let coverKey = $state<string | undefined>(undefined);
+	let coverPreviewUrl = $state<string | undefined>(undefined);
+	let coverPreviewBroken = $state(false);
 	let duplicateBookId = $state<string | null>(null);
 	let adding = $state(false);
 	let fileInput = $state<HTMLInputElement | null>(null);
+
+	// Book covers that failed to load fall back to the color-swatch display
+	// instead of a broken-image icon (Aufgabe 7).
+	let brokenCovers = $state<Set<string>>(new Set());
+	function markCoverBroken(bookId: string) {
+		brokenCovers = new Set(brokenCovers).add(bookId);
+	}
 
 	onMount(async () => {
 		if (!isAuthenticated()) {
@@ -62,6 +72,9 @@
 		editTitle = '';
 		editAuthor = '';
 		fileHash = '';
+		coverKey = undefined;
+		coverPreviewUrl = undefined;
+		coverPreviewBroken = false;
 		duplicateBookId = null;
 		if (fileInput) fileInput.value = '';
 	}
@@ -85,6 +98,9 @@
 				editTitle = res.detectedMeta.title;
 				editAuthor = res.detectedMeta.author;
 				fileHash = res.fileHash;
+				coverKey = res.coverKey;
+				coverPreviewUrl = res.coverPreviewUrl;
+				coverPreviewBroken = false;
 				phase = 'edit';
 			}
 		} catch (e2) {
@@ -101,7 +117,7 @@
 		adding = true;
 		uploadError = null;
 		try {
-			await getProcessor().confirmAddBook(title, author, fileHash);
+			await getProcessor().confirmAddBook(title, author, fileHash, coverKey);
 			resetUpload();
 			await reload();
 		} catch (e) {
@@ -159,6 +175,14 @@
 					</a>
 				</p>
 			{:else if phase === 'edit'}
+				{#if coverPreviewUrl && !coverPreviewBroken}
+					<img
+						src={coverPreviewUrl}
+						alt=""
+						class="h-24 w-16 flex-none border border-[var(--color-divider)] object-cover"
+						onerror={() => (coverPreviewBroken = true)}
+					/>
+				{/if}
 				<label class="flex flex-col gap-1 text-sm">
 					<span class="text-[var(--color-neutral-700)]">Titel</span>
 					<input
@@ -204,11 +228,20 @@
 						onclick={() => goto(`/book/${book.id}`)}
 						class="flex w-full items-center gap-4 border border-[var(--color-divider)] bg-[var(--color-surface)] px-4 py-4 text-left transition hover:border-[var(--color-accent)]"
 					>
-						<div
-							class="flex h-16 w-12 flex-none items-center justify-center bg-[var(--color-accent)] text-lg font-extrabold text-[var(--color-bg)]"
-						>
-							{book.title.slice(0, 1).toUpperCase()}
-						</div>
+						{#if book.coverUrl && !brokenCovers.has(book.id)}
+							<img
+								src={book.coverUrl}
+								alt=""
+								class="h-16 w-12 flex-none border border-[var(--color-divider)] object-cover"
+								onerror={() => markCoverBroken(book.id)}
+							/>
+						{:else}
+							<div
+								class="flex h-16 w-12 flex-none items-center justify-center bg-[var(--color-accent)] text-lg font-extrabold text-[var(--color-bg)]"
+							>
+								{book.title.slice(0, 1).toUpperCase()}
+							</div>
+						{/if}
 						<div class="min-w-0">
 							<p class="truncate font-medium">{book.title}</p>
 							<p class="truncate text-sm text-[var(--color-neutral-700)]">{book.author}</p>

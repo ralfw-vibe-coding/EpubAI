@@ -24,6 +24,10 @@
 	let confirmingDelete = $state(false);
 	let deleting = $state(false);
 
+	// The cover image falls back to the color-swatch display if it fails to
+	// load (broken/expired URL) instead of showing a broken-image icon.
+	let coverBroken = $state(false);
+
 	onMount(async () => {
 		if (!isAuthenticated()) {
 			await goto('/login', { replaceState: true });
@@ -37,6 +41,7 @@
 		error = null;
 		try {
 			detail = await getProcessor().openBookDetail(bookId);
+			coverBroken = false;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Buch konnte nicht geladen werden.';
 		} finally {
@@ -146,11 +151,20 @@
 		<p class="bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">{error}</p>
 	{:else if detail}
 		<div class="flex gap-5">
-			<div
-				class="flex h-40 w-28 flex-none items-center justify-center bg-[var(--color-accent)] text-3xl font-extrabold text-[var(--color-bg)]"
-			>
-				{detail.title.slice(0, 1).toUpperCase()}
-			</div>
+			{#if detail.coverUrl && !coverBroken}
+				<img
+					src={detail.coverUrl}
+					alt=""
+					class="h-40 w-28 flex-none border border-[var(--color-divider)] object-cover"
+					onerror={() => (coverBroken = true)}
+				/>
+			{:else}
+				<div
+					class="flex h-40 w-28 flex-none items-center justify-center bg-[var(--color-accent)] text-3xl font-extrabold text-[var(--color-bg)]"
+				>
+					{detail.title.slice(0, 1).toUpperCase()}
+				</div>
+			{/if}
 			<div class="min-w-0 flex-1">
 				{#if editing}
 					<div class="flex flex-col gap-3">

@@ -45,25 +45,62 @@ export interface BookDraft {
   fileHash: string;
   tags: string[];
   processingStatus: ProcessingStatus;
+  coverKey: string | null;
 }
 
 /**
  * Builds the normalized draft for a new catalog entry from caller-confirmed
  * metadata. No background text-extraction pipeline exists in the walking
- * skeleton, so the book is immediately marked "ready".
+ * skeleton, so the book is immediately marked "ready". `coverKey` must
+ * already have been validated by `resolveCoverKey` - this function does not
+ * re-check it.
  */
-export function buildBookDraft(input: { title: string; author: string; fileHash: string }): BookDraft {
+export function buildBookDraft(input: {
+  title: string;
+  author: string;
+  fileHash: string;
+  coverKey?: string | null;
+}): BookDraft {
   const title = normalizeText(input.title) ?? "Untitled";
   const author = normalizeText(input.author) ?? "Unknown";
-  return { title, author, fileHash: input.fileHash, tags: [], processingStatus: "ready" };
+  return {
+    title,
+    author,
+    fileHash: input.fileHash,
+    tags: [],
+    processingStatus: "ready",
+    coverKey: input.coverKey ?? null
+  };
 }
 
-export function toBookSummary(book: Book): BookSummary {
+/**
+ * Security check for the client-supplied `coverKey` on POST /books: only
+ * accept it if it is exactly the storage key `uploadEpub` would have
+ * produced for *this* upload (`<fileHash>-cover.<anything>`). This prevents
+ * a client from pointing a book at an arbitrary R2 key belonging to another
+ * upload/user, which would otherwise surface as someone else's cover image.
+ * Anything else - wrong prefix, non-string, missing - resolves to null
+ * (silently dropped, not an error; a cover is optional).
+ */
+export function resolveCoverKey(coverKey: unknown, fileHash: string): string | null {
+  if (typeof coverKey !== "string") return null;
+  const prefix = `${fileHash}-cover.`;
+  return coverKey.startsWith(prefix) ? coverKey : null;
+}
+
+/**
+ * Projects a Book into its public BookSummary shape. Pure RPU: the domain
+ * knows nothing about R2, so it cannot turn `book.coverUrl` (a storage key)
+ * into a fetchable URL itself - the Reactor resolves that via
+ * `r2.getPresignedUrl` beforehand and passes the result in.
+ */
+export function toBookSummary(book: Book, coverUrl: string | null): BookSummary {
   return {
     id: book.id,
     title: book.title,
     author: book.author,
     tags: book.tags,
+    coverUrl,
     fileHash: book.currentFileHash,
     processingStatus: book.processingStatus
   };

@@ -4,7 +4,8 @@ vi.mock("../../src/providers/d/bookRepo.js", () => ({
   findByUserAndHash: vi.fn()
 }));
 vi.mock("../../src/providers/x/r2.js", () => ({
-  uploadObject: vi.fn()
+  uploadObject: vi.fn(),
+  getPresignedUrl: vi.fn()
 }));
 vi.mock("../../src/providers/x/epubParser.js", async () => {
   const actual = await vi.importActual<typeof import("../../src/providers/x/epubParser.js")>(
@@ -77,6 +78,64 @@ describe("uploadEpub reactor", () => {
       detectedMeta: { title: "Helgoland", author: "Carlo Rovelli", language: "en" }
     });
     expect((result.body as { fileHash: string }).fileHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("uploads the cover to R2 and returns coverKey/coverPreviewUrl when the EPUB has a cover", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "Helgoland",
+      author: "Carlo Rovelli",
+      language: "en",
+      cover: { data: Buffer.from("fake jpg bytes"), mediaType: "image/jpeg", href: "images/cover.jpg" }
+    });
+    (r2.getPresignedUrl as ReturnType<typeof vi.fn>).mockResolvedValue("https://example.com/presigned-cover");
+
+    const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "helgoland.epub" });
+
+    const fileHash = (result.body as { fileHash: string }).fileHash;
+    expect(r2.uploadObject).toHaveBeenCalledTimes(2);
+    expect(r2.uploadObject).toHaveBeenNthCalledWith(1, `${fileHash}.epub`, buf);
+    expect(r2.uploadObject).toHaveBeenNthCalledWith(
+      2,
+      `${fileHash}-cover.jpg`,
+      Buffer.from("fake jpg bytes"),
+      "image/jpeg"
+    );
+    expect(r2.getPresignedUrl).toHaveBeenCalledWith(`${fileHash}-cover.jpg`);
+    expect(result.body).toMatchObject({
+      coverKey: `${fileHash}-cover.jpg`,
+      coverPreviewUrl: "https://example.com/presigned-cover"
+    });
+  });
+
+  it("derives the cover extension from the href when the media type is unknown", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({
+      title: "T",
+      author: "A",
+      cover: { data: Buffer.from("x"), mediaType: "application/octet-stream", href: "images/cover.webp" }
+    });
+    (r2.getPresignedUrl as ReturnType<typeof vi.fn>).mockResolvedValue("https://example.com/presigned-cover");
+
+    const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "book.epub" });
+
+    const fileHash = (result.body as { fileHash: string }).fileHash;
+    expect(result.body).toMatchObject({ coverKey: `${fileHash}-cover.webp` });
+  });
+
+  it("omits coverKey/coverPreviewUrl entirely when the EPUB has no cover", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({ title: "T", author: "A" });
+
+    const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "book.epub" });
+
+    expect(r2.uploadObject).toHaveBeenCalledTimes(1);
+    expect(r2.getPresignedUrl).not.toHaveBeenCalled();
+    expect(result.body).not.toHaveProperty("coverKey");
+    expect(result.body).not.toHaveProperty("coverPreviewUrl");
   });
 
   it("falls back to the filename when no title was detected", async () => {

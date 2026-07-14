@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { EpubTooLargeError, parseEpub } from "../../src/providers/x/epubParser.js";
-import { buildEpubWithoutOpf, buildNotAZip, buildValidEpub, buildZipBomb } from "./epubFixtures.js";
+import {
+  buildEpubWithEpub2Cover,
+  buildEpubWithEpub3Cover,
+  buildEpubWithoutOpf,
+  buildNotAZip,
+  buildValidEpub,
+  buildZipBomb,
+  FAKE_COVER_BYTES
+} from "./epubFixtures.js";
 
 const MAX = 25 * 1024 * 1024;
 
@@ -9,6 +17,42 @@ describe("parseEpub", () => {
     const buf = await buildValidEpub({ title: "Helgoland", author: "Carlo Rovelli", language: "en" });
     const meta = await parseEpub(buf, MAX);
     expect(meta).toEqual({ title: "Helgoland", author: "Carlo Rovelli", language: "en" });
+  });
+
+  it("leaves cover undefined (not an error) when the epub declares no cover", async () => {
+    const buf = await buildValidEpub();
+    const meta = await parseEpub(buf, MAX);
+    expect(meta.cover).toBeUndefined();
+  });
+
+  it("extracts the cover image via the EPUB3 properties=\"cover-image\" manifest token", async () => {
+    const buf = await buildEpubWithEpub3Cover({ title: "T", author: "A" });
+    const meta = await parseEpub(buf, MAX);
+    expect(meta.cover).toBeDefined();
+    expect(meta.cover?.mediaType).toBe("image/jpeg");
+    expect(meta.cover?.href).toBe("images/cover.jpg");
+    expect(meta.cover?.data.equals(FAKE_COVER_BYTES)).toBe(true);
+  });
+
+  it("extracts the cover image via the EPUB2 <meta name=\"cover\"> fallback", async () => {
+    const buf = await buildEpubWithEpub2Cover({ title: "T", author: "A" });
+    const meta = await parseEpub(buf, MAX);
+    expect(meta.cover).toBeDefined();
+    expect(meta.cover?.mediaType).toBe("image/png");
+    expect(meta.cover?.href).toBe("cover.png");
+    expect(meta.cover?.data.equals(FAKE_COVER_BYTES)).toBe(true);
+  });
+
+  it("still extracts title/author alongside the cover", async () => {
+    const buf = await buildEpubWithEpub3Cover({ title: "Helgoland", author: "Carlo Rovelli", language: "en" });
+    const meta = await parseEpub(buf, MAX);
+    expect(meta).toMatchObject({ title: "Helgoland", author: "Carlo Rovelli", language: "en" });
+  });
+
+  it("respects the zip-bomb byte budget when reading the cover entry too", async () => {
+    const buf = await buildEpubWithEpub3Cover();
+    // container.xml (251 bytes) + OPF (459 bytes) fit; the cover (27 bytes) does not.
+    await expect(parseEpub(buf, 720)).rejects.toThrow(EpubTooLargeError);
   });
 
   it("returns empty meta when container.xml is missing", async () => {

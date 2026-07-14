@@ -19,8 +19,8 @@ Four layers, per Requirements §4.7:
     is ever expressed through (`db.ts`, `userRepo.ts`, `bookRepo.ts`, `bookFileRepo.ts`, `loanRepo.ts`).
   - **xProvider** (`src/providers/x/`) — everything else external: `emailPlaceholder.ts` (OTP
     "send", console.log only), `otpCheck.ts` (compares against `AUTH_SECRET_OTP`), `jwt.ts`
-    (sign/verify), `r2.ts` (Cloudflare R2 / S3), `epubParser.ts` (zip + OPF/XML metadata
-    extraction, zip-bomb and XXE guarded).
+    (sign/verify), `r2.ts` (Cloudflare R2 / S3, incl. presigned GET URLs), `epubParser.ts` (zip +
+    OPF/XML metadata extraction incl. cover image, zip-bomb and XXE guarded).
 
 ## Setup
 
@@ -54,11 +54,14 @@ npm run coverage    # vitest run --coverage
 
 Domain, Reactors, and the provider wrappers that don't need a real network connection
 (`jwt.ts`, `otpCheck.ts`, `emailPlaceholder.ts`, `epubParser.ts`) are unit-tested with fakes/doubles
-and are held to an 80%+ coverage bar (currently **92.5% statements/lines, 88.6% branches, 100%
-functions**, 94 tests — see `vitest.config.ts`). `epubParser.ts` in particular has a dedicated test
+and are held to an 80%+ coverage bar (currently **93.8% statements/lines, 89.9% branches, 100%
+functions**, 115 tests — see `vitest.config.ts`). `epubParser.ts` in particular has a dedicated test
 (`test/providers/epubParser.test.ts`) that builds an in-memory zip-bomb-shaped fixture (tiny
 compressed size, large decompressed size) and asserts the parser aborts mid-stream once the
-~25 MB unpacked budget is exceeded — the actual zip-bomb defense, not just a config value.
+~25 MB unpacked budget is exceeded — the actual zip-bomb defense, not just a config value — plus
+cover-image extraction fixtures for both the EPUB3 `properties="cover-image"` manifest token and
+the EPUB2 `<meta name="cover">` fallback (`test/providers/epubFixtures.ts`), including a case that
+proves the byte budget is enforced while reading the cover entry too, not just the OPF/container.
 
 Excluded from the coverage gate, per Requirements §4.7 ("schwer testbare Provider"): Portal
 (pure routing), `providers/d/**` (real Neon connection) and `providers/x/r2.ts` (real R2/S3
@@ -191,6 +194,35 @@ this reproduced 100% of the time, independent of R2 (a plain `fs.createReadStrea
 issue). Fix: every route handler in `src/portal/` now does `return reply....send(...)`. Re-ran
 the full flow after the fix — file streamed correctly with a byte-for-byte matching sha256.
 
+### Cover image smoke test (against the real test EPUB and real R2 bucket)
+
+The real test EPUB (`../example books/Helgoland, ...epub`) does embed a cover: parsing it
+directly confirmed `mediaType: image/jpeg`, `href: images/cover.jpg`, `713704` bytes, found via
+the EPUB3 `properties="cover-image"` manifest token.
+
+Full flow run against the real Neon DB and real R2 bucket (server on port 3000, path copied to
+one without a comma first, see the note in the main smoke test above):
+
+1. `POST /books/upload` → `200` with `coverKey` and a presigned `coverPreviewUrl` alongside the
+   usual `detectedMeta`/`fileHash`.
+2. `POST /books` with that `coverKey` → `201` with a real presigned `coverUrl`.
+3. `GET /books` → `200`, same book's `coverUrl` freshly presigned (different signature/timestamp
+   than step 2's, confirming it's generated per-request, not stored/cached).
+4. That `coverUrl`, fetched with a real `GET` (not `curl -I` - see note below) → `200
+   Content-Type: image/jpeg Content-Length: 713704`; downloaded bytes verified as a valid JPEG
+   (1238×1900) with `file`.
+5. Security check: `POST /books` with a `coverKey` prefixed with a different (nonexistent)
+   `fileHash` than the one in the same request → accepted, but `coverUrl: null` in the response -
+   the mismatched key was silently dropped rather than stored.
+6. `DELETE /books/:id` on the book from step 2 → `204`; the same `coverUrl` from step 3, fetched
+   again afterward → `404` - the R2 cover object is actually gone, not just the catalog row.
+
+Note on `curl -I`: a presigned URL is signed for one specific HTTP method (`GET` here). `curl -I`
+sends a `HEAD` request, which the signature doesn't cover and R2 correctly rejects with `403` -
+this is expected S3/R2 presigned-URL behavior, not a bug. Reachability must be checked with an
+actual `GET` (e.g. `curl -s -o /dev/null -D - "$URL"` to see headers without downloading the
+body, or `curl -o file.jpg "$URL"` to download it).
+
 ## Known deviations / additions beyond the literal 8-endpoint contract
 
 - `POST /books/upload` can also return `400 {"error":"invalid_epub"}` or
@@ -218,7 +250,47 @@ edit metadata (title/author/tags) and remove books from their catalog:
   `book_file` row(s), then those `book_file` rows, then any `loan` rows, then the `book` row
   itself.
 - `GET /books` and `GET /books/:id` now also return `tags: string[]` (the `book.tags` column
-  already existed but wasn't surfaced before).
+  already existed but wasn't surfaced before), and `coverUrl: string | null` (see "Cover images"
+  below).
+
+## Cover images
+
+Real cover images embedded in the uploaded EPUB replace the frontend's letter-avatar placeholder
+once present. Important architectural point: `Book.coverUrl` / `BookSummary.coverUrl` is **not**
+a stored URL - the DB column (and the `Book` domain type) actually holds an **R2 object storage
+key** (e.g. `<fileHash>-cover.jpg`), because R2 is not publicly readable. A real, time-limited,
+directly-fetchable URL is **presigned fresh on every request** (`r2.getPresignedUrl`, 1 hour
+expiry) by the Reactor - never stored, since a stored presigned URL would eventually go stale.
+This keeps `toBookSummary` in `domain/bookRpu.ts` a pure RPU (no R2 access): it now takes the
+already-resolved `coverUrl` (or `null`) as a parameter, and every caller (`getBook`, `listBooks`,
+`createBook`, `updateBook`) resolves it via R2 first.
+
+Flow:
+
+1. `POST /books/upload` - `epubParser.ts` looks for a cover image in the OPF manifest (EPUB3
+   `properties="cover-image"` token, or the EPUB2 `<meta name="cover" content="ID">` fallback,
+   resolved against the manifest item with that `id`; whichever the file actually uses). If
+   found, the reactor uploads the cover bytes to R2 under `<fileHash>-cover.<ext>` (extension
+   from the media type, or the original href, or `bin`) and returns `coverKey` (opaque, to be
+   echoed back unchanged) and `coverPreviewUrl` (a presigned URL, for showing the cover in the
+   edit-metadata step only - not persisted).
+2. `POST /books` - accepts an optional `coverKey` from the client. **Security check**
+   (`resolveCoverKey` in `bookRpu.ts`): only accepted if it starts with `<fileHash>-cover.` for
+   *this* upload's own `fileHash` - otherwise silently dropped (`null`), so a client can never
+   point a book at another upload's (or another user's) R2 object.
+3. `GET /books` / `GET /books/:id` / `PATCH /books/:id` - all resolve the stored key to a fresh
+   presigned URL before returning the summary.
+4. `DELETE /books/:id` - deletes the cover's R2 object too, alongside the existing `book_file`
+   object cleanup.
+
+Books created before this feature have `cover_url = null` and simply have no cover (no
+reprocessing job exists in this project state - expected, not a bug).
+
+One implementation detail found only during the live smoke test below: the AWS SDK v3 default of
+`requestChecksumCalculation`/`responseChecksumValidation: "WHEN_SUPPORTED"` appends flexible-
+checksum query parameters to presigned URLs that Cloudflare R2 doesn't support, causing every
+presigned GET to 403 the moment it's actually fetched by a plain client. `r2.ts` now pins both
+back to `"WHEN_REQUIRED"` (the pre-3.729 SDK default) in the `S3Client` constructor.
 
 ## What's not built (out of scope for this walking skeleton)
 

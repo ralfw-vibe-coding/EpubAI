@@ -148,7 +148,14 @@ export function createHttpClient(
 				};
 				xhr.onerror = () => reject(new HttpError(0, 'Netzwerkfehler beim Hochladen.'));
 				xhr.onload = () => {
-					let body: { error?: string; existingBookId?: string; detectedMeta?: DetectedMeta; fileHash?: string };
+					let body: {
+						error?: string;
+						existingBookId?: string;
+						detectedMeta?: DetectedMeta;
+						fileHash?: string;
+						coverKey?: string;
+						coverPreviewUrl?: string;
+					};
 					try {
 						body = xhr.responseText ? JSON.parse(xhr.responseText) : {};
 					} catch {
@@ -165,17 +172,27 @@ export function createHttpClient(
 						reject(new HttpError(xhr.status, body.error ?? `HTTP ${xhr.status}`));
 						return;
 					}
-					resolve({ detectedMeta: body.detectedMeta as DetectedMeta, fileHash: body.fileHash as string });
+					resolve({
+						detectedMeta: body.detectedMeta as DetectedMeta,
+						fileHash: body.fileHash as string,
+						coverKey: body.coverKey,
+						coverPreviewUrl: body.coverPreviewUrl
+					});
 				};
 				xhr.send(form);
 			});
 		},
 
-		async createBook(title: string, author: string, fileHash: string): Promise<CatalogBook> {
+		async createBook(
+			title: string,
+			author: string,
+			fileHash: string,
+			coverKey?: string
+		): Promise<CatalogBook> {
 			const res = await fetchImpl(`${base}/books`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', ...authHeaders() },
-				body: JSON.stringify({ title, author, fileHash })
+				body: JSON.stringify(coverKey ? { title, author, fileHash, coverKey } : { title, author, fileHash })
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 			return (await res.json()) as CatalogBook;

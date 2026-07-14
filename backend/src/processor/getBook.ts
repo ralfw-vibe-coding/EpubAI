@@ -1,6 +1,7 @@
 import { authorizeBookAccess, toBookSummary } from "../domain/bookRpu.js";
 import type { BookSummary } from "../domain/types.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
+import * as r2 from "../providers/x/r2.js";
 import { requireUserId, AuthError } from "./shared/requireUserId.js";
 import { ok, type ReactorResult } from "./shared/result.js";
 
@@ -24,5 +25,6 @@ export async function getBook(
     return ok(404, { error: "not_found" });
   }
 
-  return ok(200, toBookSummary(book));
+  const coverUrl = book.coverUrl ? await r2.getPresignedUrl(book.coverUrl) : null;
+  return ok(200, toBookSummary(book, coverUrl));
 }
