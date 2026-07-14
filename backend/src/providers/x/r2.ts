@@ -1,4 +1,4 @@
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { Readable } from "node:stream";
 import { env } from "../../config.js";
 
@@ -32,4 +32,8 @@ export async function headObject(key: string): Promise<{ sizeBytes: number } | n
 export async function getObjectStream(key: string): Promise<Readable> {
   const result = await client.send(new GetObjectCommand({ Bucket: env.R2_BUCKET, Key: key }));
   return result.Body as Readable;
+}
+
+export async function deleteObject(key: string): Promise<void> {
+  await client.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: key }));
 }

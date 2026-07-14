@@ -33,3 +33,8 @@ export async function insert(userId: string, draft: LoanDraft): Promise<Loan> {
   );
   return toLoan(result.rows[0]);
 }
+
+/** Deletes all loan rows for a book. Used by deleteBook before removing the book row itself. */
+export async function deleteByBookId(bookId: string): Promise<void> {
+  await pool.query("delete from loan where book_id = $1", [bookId]);
+}

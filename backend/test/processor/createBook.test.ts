@@ -81,7 +81,7 @@ describe("createBook reactor", () => {
     });
     expect(result).toEqual({
       status: 201,
-      body: { id: "book-1", title: "T", author: "A", fileHash: "hash-1", processingStatus: "ready" }
+      body: { id: "book-1", title: "T", author: "A", tags: [], fileHash: "hash-1", processingStatus: "ready" }
     });
   });
 

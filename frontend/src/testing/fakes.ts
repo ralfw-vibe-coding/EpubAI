@@ -7,7 +7,8 @@ import type {
 	FileStore,
 	HttpClient,
 	LoanResponse,
-	Session
+	Session,
+	UploadEpubResult
 } from '../processor/ports';
 import type { CatalogBook } from '../domain/types';
 
@@ -94,13 +95,18 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		title: 'T',
 		author: 'A',
 		fileHash: 'h1',
-		processingStatus: 'ready'
+		processingStatus: 'ready',
+		tags: []
 	};
 	const defaultLoan: LoanResponse = {
 		id: 'loan1',
 		bookId: 'b1',
 		fileHash: 'h1',
 		borrowedAt: '2026-07-13T00:00:00.000Z'
+	};
+	const defaultUpload: UploadEpubResult = {
+		detectedMeta: { title: 'Erkannter Titel', author: 'Erkannter Autor' },
+		fileHash: 'h2'
 	};
 
 	const impl: HttpClient = {
@@ -110,6 +116,10 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		getBook: record('getBook', defaultBook),
 		createLoan: record('createLoan', defaultLoan),
 		getBookFile: record('getBookFile', new ArrayBuffer(8)),
+		uploadEpub: record('uploadEpub', defaultUpload),
+		createBook: record('createBook', defaultBook),
+		updateBookMetadata: record('updateBookMetadata', defaultBook),
+		deleteBook: record('deleteBook', undefined as void),
 		...overrides
 	};
 	return { impl, calls };

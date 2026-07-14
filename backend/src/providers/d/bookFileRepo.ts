@@ -43,3 +43,8 @@ export async function findByBookId(bookId: string): Promise<BookFile | null> {
   );
   return result.rows[0] ? toBookFile(result.rows[0]) : null;
 }
+
+/** Deletes all book_file rows for a book. Used by deleteBook before removing the book row itself. */
+export async function deleteByBookId(bookId: string): Promise<void> {
+  await pool.query("delete from book_file where book_id = $1", [bookId]);
+}

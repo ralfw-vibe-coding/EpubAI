@@ -24,6 +24,25 @@ export interface LoanResponse {
 	borrowedAt: string;
 }
 
+/** Metadata the backend auto-detects from an uploaded EPUB's OPF file. */
+export interface DetectedMeta {
+	title: string;
+	author: string;
+	language?: string;
+}
+
+/** Result of an EPUB upload: either freshly detected metadata, or a duplicate hit. */
+export type UploadEpubResult =
+	| { detectedMeta: DetectedMeta; fileHash: string }
+	| { duplicate: true; existingBookId: string };
+
+/** Editable subset of a catalog book's metadata. */
+export interface BookMetadataPatch {
+	title?: string;
+	author?: string;
+	tags?: string[];
+}
+
 /** HTTP client to the backend. Mirrors the backend contract exactly. */
 export interface HttpClient {
 	requestLoginCode(email: string): Promise<LoginRequestResult>;
@@ -32,6 +51,14 @@ export interface HttpClient {
 	getBook(bookId: string): Promise<CatalogBook>;
 	createLoan(bookId: string, deviceId: string): Promise<LoanResponse>;
 	getBookFile(bookId: string): Promise<ArrayBuffer>;
+	uploadEpub(
+		file: Blob | ArrayBuffer,
+		filename: string,
+		onProgress?: (percent: number) => void
+	): Promise<UploadEpubResult>;
+	createBook(title: string, author: string, fileHash: string): Promise<CatalogBook>;
+	updateBookMetadata(bookId: string, patch: BookMetadataPatch): Promise<CatalogBook>;
+	deleteBook(bookId: string): Promise<void>;
 }
 
 /** Stores the auth session (token + userId) and the backend auth header. */

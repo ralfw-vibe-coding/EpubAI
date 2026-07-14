@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { listBooks } from "../processor/listBooks.js";
 import { getBook } from "../processor/getBook.js";
 import { createBook } from "../processor/createBook.js";
+import { updateBook } from "../processor/updateBook.js";
+import { deleteBook } from "../processor/deleteBook.js";
 import { uploadEpub } from "../processor/uploadEpub.js";
 import { getBookFile } from "../processor/getBookFile.js";
 
@@ -31,6 +33,21 @@ export async function registerBookRoutes(app: FastifyInstance): Promise<void> {
       author: body.author,
       fileHash: body.fileHash
     });
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.patch<{ Params: { id: string } }>("/books/:id", async (request, reply) => {
+    const body = (request.body ?? {}) as { title?: unknown; author?: unknown; tags?: unknown };
+    const result = await updateBook(request.headers.authorization, request.params.id, {
+      title: body.title,
+      author: body.author,
+      tags: body.tags
+    });
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.delete<{ Params: { id: string } }>("/books/:id", async (request, reply) => {
+    const result = await deleteBook(request.headers.authorization, request.params.id);
     return reply.code(result.status).send(result.body);
   });
 

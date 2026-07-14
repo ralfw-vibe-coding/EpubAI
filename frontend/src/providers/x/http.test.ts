@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fakeAuthStore } from '../../testing/fakes';
-import { createHttpClient, HttpError } from './http';
+import { createHttpClient, HttpError, type XhrLike } from './http';
 
 function jsonResponse(body: unknown, init: Partial<{ ok: boolean; status: number }> = {}) {
 	return {
@@ -10,6 +10,31 @@ function jsonResponse(body: unknown, init: Partial<{ ok: boolean; status: number
 		json: async () => body,
 		arrayBuffer: async () => new ArrayBuffer(4)
 	} as unknown as Response;
+}
+
+/** Fake XHR for `uploadEpub`: records method/url/headers, fires onload synchronously on send(). */
+function fakeXhr(status: number, body: unknown) {
+	const headers: Record<string, string> = {};
+	let call: { method: string; url: string } | undefined;
+	let sentBody: FormData | undefined;
+	const instance: XhrLike = {
+		open: (method, url) => {
+			call = { method, url };
+		},
+		setRequestHeader: (name, value) => {
+			headers[name] = value;
+		},
+		upload: { onprogress: null },
+		onload: null,
+		onerror: null,
+		status,
+		responseText: JSON.stringify(body),
+		send(form) {
+			sentBody = form;
+			instance.onload?.();
+		}
+	};
+	return { instance, headers, getCall: () => call, getSentBody: () => sentBody };
 }
 
 describe('createHttpClient', () => {
@@ -109,5 +134,135 @@ describe('createHttpClient', () => {
 		const fetchMock = vi.fn().mockResolvedValue(res);
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
 		await expect(http.getBooks()).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('uploads an EPUB as multipart form data and returns detected metadata', async () => {
+		const { instance, headers, getCall, getSentBody } = fakeXhr(200, {
+			detectedMeta: { title: 'T', author: 'A' },
+			fileHash: 'h1'
+		});
+		const http = createHttpClient(
+			'http://api',
+			fakeAuthStore({ token: 't', userId: 'u' }),
+			fetch,
+			() => instance
+		);
+		const file = new Blob(['epub bytes']);
+		const res = await http.uploadEpub(file, 'buch.epub');
+
+		expect(res).toEqual({ detectedMeta: { title: 'T', author: 'A' }, fileHash: 'h1' });
+		expect(getCall()).toEqual({ method: 'POST', url: 'http://api/books/upload' });
+		expect(headers.Authorization).toBe('Bearer t');
+		expect(headers['ngrok-skip-browser-warning']).toBe('true');
+		expect(getSentBody()).toBeInstanceOf(FormData);
+		expect((getSentBody() as FormData).get('file')).toBeInstanceOf(Blob);
+	});
+
+	it('reports upload progress', async () => {
+		const { instance } = fakeXhr(200, { detectedMeta: { title: 'T', author: 'A' }, fileHash: 'h1' });
+		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
+		const progressUpdates: number[] = [];
+
+		const promise = http.uploadEpub(new Blob(['x']), 'buch.epub', (pct) => progressUpdates.push(pct));
+		instance.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 });
+		instance.upload.onprogress?.({ lengthComputable: true, loaded: 100, total: 100 });
+		await promise;
+
+		expect(progressUpdates).toEqual([50, 100]);
+	});
+
+	it('accepts an ArrayBuffer for uploadEpub', async () => {
+		const { instance, getSentBody } = fakeXhr(200, {
+			detectedMeta: { title: 'T', author: 'A' },
+			fileHash: 'h1'
+		});
+		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
+		await http.uploadEpub(new ArrayBuffer(4), 'buch.epub');
+		expect((getSentBody() as FormData).get('file')).toBeInstanceOf(Blob);
+	});
+
+	it('returns a duplicate result on 409 instead of throwing', async () => {
+		const { instance } = fakeXhr(409, { error: 'duplicate', existingBookId: 'b9' });
+		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
+		const res = await http.uploadEpub(new Blob(['x']), 'buch.epub');
+		expect(res).toEqual({ duplicate: true, existingBookId: 'b9' });
+	});
+
+	it('throws on a non-409 upload failure', async () => {
+		const { instance } = fakeXhr(413, { error: 'too large' });
+		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
+		await expect(http.uploadEpub(new Blob(['x']), 'buch.epub')).rejects.toMatchObject({
+			name: 'HttpError',
+			status: 413,
+			message: 'too large'
+		});
+	});
+
+	it('rejects with HttpError on an XHR network error', async () => {
+		const { instance } = fakeXhr(0, {});
+		instance.send = () => instance.onerror?.();
+		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
+		await expect(http.uploadEpub(new Blob(['x']), 'buch.epub')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('creates a book with title, author and fileHash', async () => {
+		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: [] };
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(book));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.createBook('T', 'A', 'h1');
+
+		expect(res).toEqual(book);
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books');
+		expect(opts.method).toBe('POST');
+		expect(JSON.parse(opts.body)).toEqual({ title: 'T', author: 'A', fileHash: 'h1' });
+	});
+
+	it('throws on a failed createBook', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'invalid' }, { ok: false, status: 400 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.createBook('T', 'A', 'h1')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('patches book metadata', async () => {
+		const book = { id: 'b1', title: 'Neu', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: ['x'] };
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(book));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.updateBookMetadata('b1', { title: 'Neu', tags: ['x'] });
+
+		expect(res).toEqual(book);
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1');
+		expect(opts.method).toBe('PATCH');
+		expect(JSON.parse(opts.body)).toEqual({ title: 'Neu', tags: ['x'] });
+	});
+
+	it('throws on a failed updateBookMetadata', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'invalid' }, { ok: false, status: 400 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.updateBookMetadata('b1', { title: 'x' })).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('deletes a book', async () => {
+		const res = { ok: true, status: 204, statusText: 'No Content', json: async () => null } as unknown as Response;
+		const fetchMock = vi.fn().mockResolvedValue(res);
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.deleteBook('b1');
+
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1');
+		expect(opts.method).toBe('DELETE');
+	});
+
+	it('throws on a failed delete', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.deleteBook('missing')).rejects.toBeInstanceOf(HttpError);
 	});
 });

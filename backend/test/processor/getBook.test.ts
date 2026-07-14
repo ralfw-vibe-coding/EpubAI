@@ -52,12 +52,12 @@ describe("getBook reactor", () => {
 
   it("returns the book summary for the owner", async () => {
     const token = sign({ userId: "user-1" });
-    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
+    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook({ tags: ["a"] }));
 
     const result = await getBook(`Bearer ${token}`, "book-1");
     expect(result).toEqual({
       status: 200,
-      body: { id: "book-1", title: "T", author: "A", fileHash: "hash-1", processingStatus: "ready" }
+      body: { id: "book-1", title: "T", author: "A", tags: ["a"], fileHash: "hash-1", processingStatus: "ready" }
     });
   });
 });

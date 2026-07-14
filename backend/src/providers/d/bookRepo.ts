@@ -1,5 +1,5 @@
 import type { Book, ProcessingStatus } from "../../domain/types.js";
-import type { BookDraft } from "../../domain/bookRpu.js";
+import type { BookDraft, BookMetadataPatch } from "../../domain/bookRpu.js";
 import { pool } from "./db.js";
 
 interface BookRow {
@@ -60,4 +60,44 @@ export async function insert(userId: string, draft: BookDraft): Promise<Book> {
     [userId, draft.title, draft.author, draft.tags, draft.fileHash, draft.processingStatus]
   );
   return toBook(result.rows[0]);
+}
+
+/**
+ * Applies a partial metadata patch, updating only the fields actually
+ * present on it. An empty patch is a no-op that just re-reads the row.
+ */
+export async function update(bookId: string, patch: BookMetadataPatch): Promise<Book> {
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+  let paramIndex = 1;
+
+  if (patch.title !== undefined) {
+    setClauses.push(`title = $${paramIndex++}`);
+    values.push(patch.title);
+  }
+  if (patch.author !== undefined) {
+    setClauses.push(`author = $${paramIndex++}`);
+    values.push(patch.author);
+  }
+  if (patch.tags !== undefined) {
+    setClauses.push(`tags = $${paramIndex++}`);
+    values.push(patch.tags);
+  }
+
+  if (setClauses.length === 0) {
+    const existing = await findById(bookId);
+    if (!existing) throw new Error(`book not found: ${bookId}`);
+    return existing;
+  }
+
+  values.push(bookId);
+  const result = await pool.query<BookRow>(
+    `update book set ${setClauses.join(", ")} where id = $${paramIndex} returning ${SELECT_FIELDS}`,
+    values
+  );
+  return toBook(result.rows[0]);
+}
+
+export async function remove(bookId: string): Promise<void> {
+  await pool.query("delete from book where id = $1", [bookId]);
 }

@@ -10,7 +10,8 @@ Four layers, per Requirements §4.7:
 
 - **Portal** (`src/portal/`) — Fastify routes. Pure HTTP-to-Reactor translation, no business logic.
 - **Processor** (`src/processor/`) — one Reactor per endpoint (`authRequestCode`, `authVerifyCode`,
-  `listBooks`, `getBook`, `uploadEpub`, `createBook`, `borrowBook`, `getBookFile`). Composition only.
+  `listBooks`, `getBook`, `uploadEpub`, `createBook`, `updateBook`, `deleteBook`, `borrowBook`,
+  `getBookFile`). Composition only.
 - **Domain** (`src/domain/`) — RPUs (nearly-pure functions) + shared types. Knows nothing about
   Postgres, R2, JWT, etc.
 - **Providers**:
@@ -53,8 +54,8 @@ npm run coverage    # vitest run --coverage
 
 Domain, Reactors, and the provider wrappers that don't need a real network connection
 (`jwt.ts`, `otpCheck.ts`, `emailPlaceholder.ts`, `epubParser.ts`) are unit-tested with fakes/doubles
-and are held to an 80%+ coverage bar (currently **92% statements/lines, 87% branches, 100%
-functions** — see `vitest.config.ts`). `epubParser.ts` in particular has a dedicated test
+and are held to an 80%+ coverage bar (currently **92.5% statements/lines, 88.6% branches, 100%
+functions**, 94 tests — see `vitest.config.ts`). `epubParser.ts` in particular has a dedicated test
 (`test/providers/epubParser.test.ts`) that builds an in-memory zip-bomb-shaped fixture (tiny
 compressed size, large decompressed size) and asserts the parser aborts mid-stream once the
 ~25 MB unpacked budget is exceeded — the actual zip-bomb defense, not just a config value.
@@ -122,6 +123,26 @@ curl -s -X POST http://localhost:3000/loans \
 # 7. Download the file
 curl -s http://localhost:3000/books/$BOOK_ID/file \
   -H "Authorization: Bearer $TOKEN" -o downloaded.epub
+
+# 8. Edit catalog metadata (only the given fields change; omitted fields are left as-is)
+curl -s -X PATCH http://localhost:3000/books/$BOOK_ID \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"title":"Helgoland (Edited)","tags":["physics","quantum"]}'
+# -> {"id":"<uuid>","title":"Helgoland (Edited)","author":"Carlo Rovelli","tags":["physics","quantum"],"fileHash":"<sha256>","processingStatus":"ready"}
+
+# Invalid patches are rejected without touching the row:
+curl -s -X PATCH http://localhost:3000/books/$BOOK_ID \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"title":"   "}'
+# -> 400 {"error":"invalid_request"}
+
+# 9. Delete the catalog entry (R2 object + book_file row(s) + loan rows + book row, in that order)
+curl -s -o /dev/null -w "%{http_code}\n" -X DELETE http://localhost:3000/books/$BOOK_ID \
+  -H "Authorization: Bearer $TOKEN"
+# -> 204, empty body
+
+# Book is gone for good:
+curl -s http://localhost:3000/books/$BOOK_ID -H "Authorization: Bearer $TOKEN"
+# -> 404 {"error":"not_found"}
 ```
 
 ### Result of the last run against the real test EPUB
@@ -143,9 +164,20 @@ in `.env`:
 6. `POST /loans` → `201` with a loan row referencing the book's current `fileHash`.
 7. `GET /books/:id/file` → `200`, streamed 2,303,894 bytes whose sha256 matched the original
    file's hash exactly (byte-for-byte round trip via R2).
+8. `PATCH /books/:id` with `{"title":"Helgoland (Edited)","tags":["physics","quantum"]}` → `200`
+   with the updated summary (`author` left untouched since it wasn't in the patch); a follow-up
+   `GET /books/:id` confirmed the change persisted. `{"title":"   "}` → `400
+   {"error":"invalid_request"}`, and `{"tags":["ok",5]}` → `400 {"error":"invalid_request"}`,
+   neither one touching the row.
+9. `DELETE /books/:id` → `204` with an empty body. Verified `headObject` on the book's R2 key
+   returned a real object (`{"sizeBytes":2303894}`) immediately before the delete and `null`
+   immediately after — the R2 object is actually removed, not just the catalog row. A second
+   `GET /books/:id` afterward → `404 {"error":"not_found"}`, and a second `DELETE` on the same
+   (now-gone) id → `404` as well rather than erroring.
 
-Negative paths verified: no/garbage bearer token → `401`; accessing a book that exists but
-belongs to another user → `404` (never a distinguishing error that would leak existence).
+Negative paths verified: no/garbage bearer token → `401` (including on `PATCH`/`DELETE`);
+accessing a book that exists but belongs to another user → `404` (never a distinguishing error
+that would leak existence).
 
 ### One real bug found and fixed during the smoke test
 
@@ -170,9 +202,27 @@ the full flow after the fix — file streamed correctly with a byte-for-byte mat
   (`catalog.epubai.com` / `reader.epubai.com`) can call this API from the browser; not part of
   the given contract but operationally necessary.
 
+## Catalog maintenance (beyond the 8-endpoint walking skeleton)
+
+`PATCH /books/:id` and `DELETE /books/:id` were added on top of the walking skeleton to let users
+edit metadata (title/author/tags) and remove books from their catalog:
+
+- `PATCH /books/:id` — body `{ title?, author?, tags? }`; only the given fields change (omitted
+  fields are left as-is; there is no upsert with empty values). A given field must still be
+  well-formed: non-blank title/author after trim, `tags` an array of non-blank strings. Otherwise
+  `400 {"error":"invalid_request"}`. `401`/`404` follow the same rules as every other book
+  endpoint (ownership check via `authorizeBookAccess`, never a distinguishing error).
+- `DELETE /books/:id` — `204` with an empty body on success. Since `book_file.book_id` and
+  `loan.book_id` reference `book(id)` with no `ON DELETE CASCADE` (schema intentionally left
+  unchanged), the Reactor cleans up explicitly and in order: the R2 object(s) for the book's
+  `book_file` row(s), then those `book_file` rows, then any `loan` rows, then the `book` row
+  itself.
+- `GET /books` and `GET /books/:id` now also return `tags: string[]` (the `book.tags` column
+  already existed but wasn't surfaced before).
+
 ## What's not built (out of scope for this walking skeleton)
 
-Everything beyond the 8 listed endpoints: signout, PATCH/DELETE books, reading progress,
-annotations sync, archive export, chat/translate/lookup (Claude API), account settings, and the
-async text-extraction queue (§4.6) — `processingStatus` is set to `"ready"` immediately at
+Everything beyond the 8 listed endpoints plus the catalog maintenance above: signout, reading
+progress, annotations sync, archive export, chat/translate/lookup (Claude API), account settings,
+and the async text-extraction queue (§4.6) — `processingStatus` is set to `"ready"` immediately at
 `POST /books` since no background pipeline exists yet to move it there later.

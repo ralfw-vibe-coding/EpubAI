@@ -38,6 +38,11 @@ export function createReaderDomain(d: DProvider) {
 			return d.allLoans();
 		},
 
+		/** Forget a local loan (used when a book is removed from the catalog). */
+		async forgetLoan(bookId: string): Promise<void> {
+			await d.deleteLoan(bookId);
+		},
+
 		/** Enrich a catalog book with its local-loan status. */
 		async detailFor(book: CatalogBook): Promise<BookDetail> {
 			return toBookDetail(book, await d.allLoans());

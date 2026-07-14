@@ -103,4 +103,63 @@ describe('processor reactors', () => {
 		const progress = await createProcessor(deps).saveReadingProgress('b1', 'cfi', 5);
 		expect(progress.updatedAt).toBe('2026-07-13T12:00:00.000Z');
 	});
+
+	it('uploadEpub delegates to http with the file and filename', async () => {
+		const { deps, http } = makeDeps();
+		const file = new Blob(['epub bytes']);
+		const res = await createProcessor(deps).uploadEpub(file, 'buch.epub');
+		expect(res).toEqual({
+			detectedMeta: { title: 'Erkannter Titel', author: 'Erkannter Autor' },
+			fileHash: 'h2'
+		});
+		const call = http.calls.find((c) => c.method === 'uploadEpub');
+		expect(call?.args[0]).toBe(file);
+		expect(call?.args[1]).toBe('buch.epub');
+	});
+
+	it('uploadEpub forwards the onProgress callback to http', async () => {
+		const { deps, http } = makeDeps();
+		const onProgress = () => {};
+		await createProcessor(deps).uploadEpub(new Blob(['x']), 'buch.epub', onProgress);
+		const call = http.calls.find((c) => c.method === 'uploadEpub');
+		expect(call?.args[2]).toBe(onProgress);
+	});
+
+	it('confirmAddBook delegates to http.createBook', async () => {
+		const { deps, http } = makeDeps();
+		const book = await createProcessor(deps).confirmAddBook('Titel', 'Autor', 'hash1');
+		expect(book.id).toBe('b1');
+		const call = http.calls.find((c) => c.method === 'createBook');
+		expect(call?.args).toEqual(['Titel', 'Autor', 'hash1']);
+	});
+
+	it('updateBookMetadata delegates to http.updateBookMetadata', async () => {
+		const { deps, http } = makeDeps();
+		const patch = { title: 'Neuer Titel', tags: ['scifi'] };
+		await createProcessor(deps).updateBookMetadata('b1', patch);
+		const call = http.calls.find((c) => c.method === 'updateBookMetadata');
+		expect(call?.args).toEqual(['b1', patch]);
+	});
+
+	it('deleteBook cleans up the local loan and file when the book is loaned on this device', async () => {
+		const { deps, http, files, domain } = makeDeps();
+		const p = createProcessor(deps);
+		await p.borrowBook('b1');
+		expect(await domain.isLocal('b1')).toBe(true);
+		expect(await files.impl.exists('b1')).toBe(true);
+
+		await p.deleteBook('b1');
+
+		expect(http.calls.map((c) => c.method)).toContain('deleteBook');
+		expect(await domain.isLocal('b1')).toBe(false);
+		expect(await files.impl.exists('b1')).toBe(false);
+	});
+
+	it('deleteBook does not touch local storage when the book is not loaned on this device', async () => {
+		const { deps, http, files } = makeDeps();
+		await createProcessor(deps).deleteBook('b1');
+
+		expect(http.calls.map((c) => c.method)).toContain('deleteBook');
+		expect(await files.impl.exists('b1')).toBe(false);
+	});
 });

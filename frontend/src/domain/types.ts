@@ -11,6 +11,7 @@ export interface CatalogBook {
 	author: string;
 	fileHash: string;
 	processingStatus: string;
+	tags: string[];
 }
 
 /** A local loan: the book's EPUB is present in OPFS on this device. */

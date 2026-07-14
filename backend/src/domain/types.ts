@@ -46,6 +46,7 @@ export interface BookSummary {
   id: string;
   title: string;
   author: string;
+  tags: string[];
   fileHash: string;
   processingStatus: ProcessingStatus;
 }

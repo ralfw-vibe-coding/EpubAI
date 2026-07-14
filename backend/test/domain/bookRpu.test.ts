@@ -5,7 +5,8 @@ import {
   buildDetectedMeta,
   computeFileHash,
   detectDuplicate,
-  toBookSummary
+  toBookSummary,
+  updateBookMetadata
 } from "../../src/domain/bookRpu.js";
 import type { Book } from "../../src/domain/types.js";
 
@@ -80,13 +81,80 @@ describe("buildBookDraft", () => {
 
 describe("toBookSummary", () => {
   it("projects the public fields only", () => {
-    const book = makeBook();
+    const book = makeBook({ tags: ["sci-fi", "physics"] });
     expect(toBookSummary(book)).toEqual({
       id: "book-1",
       title: "Some Title",
       author: "Some Author",
+      tags: ["sci-fi", "physics"],
       fileHash: "abc123",
       processingStatus: "ready"
+    });
+  });
+});
+
+describe("updateBookMetadata", () => {
+  it("accepts an empty patch (no fields provided -> nothing changes)", () => {
+    expect(updateBookMetadata({})).toEqual({ valid: true, patch: {} });
+  });
+
+  it("trims and accepts a valid title", () => {
+    expect(updateBookMetadata({ title: "  New Title  " })).toEqual({
+      valid: true,
+      patch: { title: "New Title" }
+    });
+  });
+
+  it("rejects a non-string title", () => {
+    expect(updateBookMetadata({ title: 123 })).toEqual({ valid: false });
+  });
+
+  it("rejects a blank title", () => {
+    expect(updateBookMetadata({ title: "   " })).toEqual({ valid: false });
+  });
+
+  it("trims and accepts a valid author", () => {
+    expect(updateBookMetadata({ author: "  Jane Doe  " })).toEqual({
+      valid: true,
+      patch: { author: "Jane Doe" }
+    });
+  });
+
+  it("rejects a non-string author", () => {
+    expect(updateBookMetadata({ author: null })).toEqual({ valid: false });
+  });
+
+  it("rejects a blank author", () => {
+    expect(updateBookMetadata({ author: "" })).toEqual({ valid: false });
+  });
+
+  it("trims and accepts a valid tags array", () => {
+    expect(updateBookMetadata({ tags: ["  sci-fi  ", "physics"] })).toEqual({
+      valid: true,
+      patch: { tags: ["sci-fi", "physics"] }
+    });
+  });
+
+  it("accepts an empty tags array (clears all tags)", () => {
+    expect(updateBookMetadata({ tags: [] })).toEqual({ valid: true, patch: { tags: [] } });
+  });
+
+  it("rejects tags that are not an array", () => {
+    expect(updateBookMetadata({ tags: "sci-fi" })).toEqual({ valid: false });
+  });
+
+  it("rejects a tags array with a non-string element", () => {
+    expect(updateBookMetadata({ tags: ["sci-fi", 42] })).toEqual({ valid: false });
+  });
+
+  it("rejects a tags array with a blank string element", () => {
+    expect(updateBookMetadata({ tags: ["sci-fi", "   "] })).toEqual({ valid: false });
+  });
+
+  it("combines multiple valid fields into one patch", () => {
+    expect(updateBookMetadata({ title: "T", author: "A", tags: ["x"] })).toEqual({
+      valid: true,
+      patch: { title: "T", author: "A", tags: ["x"] }
     });
   });
 });

@@ -42,14 +42,18 @@ describe("listBooks reactor", () => {
 
   it("lists the caller's own books as summaries, filtered by userId from the JWT", async () => {
     const token = sign({ userId: "user-1" });
-    (bookRepo.listByUser as ReturnType<typeof vi.fn>).mockResolvedValue([makeBook()]);
+    (bookRepo.listByUser as ReturnType<typeof vi.fn>).mockResolvedValue([makeBook({ tags: ["a", "b"] })]);
 
     const result = await listBooks(`Bearer ${token}`);
 
     expect(bookRepo.listByUser).toHaveBeenCalledWith("user-1");
     expect(result).toEqual({
       status: 200,
-      body: { books: [{ id: "book-1", title: "T", author: "A", fileHash: "hash-1", processingStatus: "ready" }] }
+      body: {
+        books: [
+          { id: "book-1", title: "T", author: "A", tags: ["a", "b"], fileHash: "hash-1", processingStatus: "ready" }
+        ]
+      }
     });
   });
 });
