@@ -14,7 +14,13 @@ import { createFileStore } from '../providers/x/opfs-files';
  * localStorage), so it is created lazily on first access from a component.
  */
 
-const API_BASE_URL = env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+// PUBLIC_API_BASE_URL overrides this when set (e.g. frontend and backend
+// deployed as genuinely separate origins). Otherwise: in a production build
+// the backend serves this same static bundle from its own origin (see
+// backend/src/server.ts), so relative paths are correct with no config
+// needed; local dev runs frontend and backend on different Vite/tsx ports
+// (see run.sh), which does need the explicit localhost fallback.
+const API_BASE_URL = env.PUBLIC_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:3000' : '');
 
 let processor: Processor | null = null;
 
