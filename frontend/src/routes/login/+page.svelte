@@ -1,6 +1,16 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { getProcessor } from '../../portal/runtime';
+	import { getProcessor, isAuthenticated } from '../../portal/runtime';
+
+	// The iOS home-screen shortcut always opens at /login (its pinned
+	// start URL) - skip straight past it when already authenticated instead
+	// of forcing a login every time the app is launched from the home screen.
+	onMount(() => {
+		if (isAuthenticated()) {
+			void goto('/library', { replaceState: true });
+		}
+	});
 
 	type Step = 'email' | 'code';
 
