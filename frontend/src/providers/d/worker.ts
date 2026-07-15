@@ -229,6 +229,30 @@ interface Request {
 	args: unknown[];
 }
 
+// Several requests can arrive before the first boot() resolves (a page's own
+// load already fires more than one dProvider call at once, and with several
+// tabs relaying through one leader's worker - see dprovider.ts - that's even
+// more likely). `if (!db) db = await boot()` alone isn't safe against that:
+// every message that arrives while db is still null would start its own
+// independent boot() call, each trying to install the same OPFS SAH pool at
+// once and racing itself. Cache the in-flight promise so concurrent callers
+// all await the same single boot() instead.
+let bootPromise: Promise<Database> | null = null;
+function ensureDb(): Promise<Database> {
+	if (db) return Promise.resolve(db);
+	if (!bootPromise) {
+		bootPromise = boot()
+			.then((database) => {
+				db = database;
+				return database;
+			})
+			.finally(() => {
+				bootPromise = null;
+			});
+	}
+	return bootPromise;
+}
+
 self.onmessage = async (event: MessageEvent<Request>) => {
 	const { id, method, args } = event.data;
 	try {
@@ -244,7 +268,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 			(self as DedicatedWorkerGlobalScope).postMessage({ id, result: undefined });
 			return;
 		}
-		if (!db) db = await boot();
+		if (!db) await ensureDb();
 		const handler = handlers[method];
 		if (!handler) throw new Error(`Unknown dProvider method: ${method}`);
 		const result = handler(args);
