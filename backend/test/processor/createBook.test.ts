@@ -137,6 +137,40 @@ describe("createBook reactor", () => {
     expect(r2.getPresignedUrl).not.toHaveBeenCalled();
   });
 
+  it("accepts and stores tags provided at creation time", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook({ tags: ["sci-fi", "favorit"] }));
+    (r2.headObject as ReturnType<typeof vi.fn>).mockResolvedValue({ sizeBytes: 2048 });
+    (bookFileRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+    const result = await createBook(`Bearer ${token}`, {
+      title: "T",
+      author: "A",
+      fileHash: "hash-1",
+      tags: [" sci-fi ", "favorit"]
+    });
+
+    expect(bookRepo.insert).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ tags: ["sci-fi", "favorit"] })
+    );
+    expect((result.body as { tags: string[] }).tags).toEqual(["sci-fi", "favorit"]);
+  });
+
+  it("returns 400 for a malformed tags array (non-string entry)", async () => {
+    const token = sign({ userId: "user-1" });
+
+    const result = await createBook(`Bearer ${token}`, {
+      title: "T",
+      author: "A",
+      fileHash: "hash-1",
+      tags: ["ok", 42]
+    });
+
+    expect(result.status).toBe(400);
+    expect(bookRepo.insert).not.toHaveBeenCalled();
+  });
+
   it("defaults sizeBytes to 0 when the R2 head lookup fails to find the object", async () => {
     const token = sign({ userId: "user-1" });
     (bookRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());

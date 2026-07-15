@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { Pencil } from 'lucide-svelte';
 	import type { BookDetail } from '../../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../../portal/runtime';
 
@@ -11,6 +12,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let borrowing = $state(false);
+	let returning = $state(false);
 
 	// Edit flow: view -> edit (title/author/tags) -> save.
 	let editing = $state(false);
@@ -19,6 +21,13 @@
 	let authorDraft = $state('');
 	let tagsDraft = $state<string[]>([]);
 	let tagInput = $state('');
+	let tagInputFocused = $state(false);
+
+	// Tag suggestions: distinct tags across the whole catalog, loaded once
+	// (lazily, on first edit / first tag-field focus) and then filtered
+	// client-side as the user types.
+	let knownTags = $state<string[]>([]);
+	let knownTagsLoaded = false;
 
 	// Delete flow: two-step confirmation.
 	let confirmingDelete = $state(false);
@@ -50,16 +59,30 @@
 	}
 
 	async function borrow() {
-		if (borrowing) return;
+		if (borrowing || !detail) return;
 		borrowing = true;
 		error = null;
 		try {
-			await getProcessor().borrowBook(bookId);
+			await getProcessor().borrowBook(bookId, detail.title);
 			await load();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Ausleihen fehlgeschlagen.';
 		} finally {
 			borrowing = false;
+		}
+	}
+
+	async function returnBook() {
+		if (returning) return;
+		returning = true;
+		error = null;
+		try {
+			await getProcessor().returnLoan(bookId);
+			await load();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Zurückgeben fehlgeschlagen.';
+		} finally {
+			returning = false;
 		}
 	}
 
@@ -71,6 +94,7 @@
 		tagInput = '';
 		error = null;
 		editing = true;
+		loadKnownTags();
 	}
 
 	function cancelEdit() {
@@ -78,10 +102,29 @@
 		tagInput = '';
 	}
 
-	function addTagFromInput() {
-		const tag = tagInput.trim();
-		if (tag && !tagsDraft.includes(tag)) {
-			tagsDraft = [...tagsDraft, tag];
+	// Distinct tags used anywhere in the user's own catalog, for the
+	// autocomplete suggestions below the tag input. Loaded at most once per
+	// page visit (idempotent — safe to call again from the input's focus
+	// handler).
+	async function loadKnownTags() {
+		if (knownTagsLoaded) return;
+		knownTagsLoaded = true;
+		try {
+			const catalog = await getProcessor().loadCatalog();
+			const distinct = new Set<string>();
+			for (const book of catalog) {
+				for (const tag of book.tags) distinct.add(tag);
+			}
+			knownTags = [...distinct];
+		} catch {
+			// Suggestions are a convenience only; silently skip on failure.
+		}
+	}
+
+	function addTag(tag: string) {
+		const trimmed = tag.trim();
+		if (trimmed && !tagsDraft.includes(trimmed)) {
+			tagsDraft = [...tagsDraft, trimmed];
 		}
 		tagInput = '';
 	}
@@ -93,9 +136,32 @@
 	function onTagKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') {
 			e.preventDefault();
-			addTagFromInput();
+			addTag(tagInput);
 		}
 	}
+
+	function onTagInputFocus() {
+		tagInputFocused = true;
+		loadKnownTags();
+	}
+
+	function onTagInputBlur() {
+		// Delay hiding so a click on a suggestion chip registers before the
+		// list disappears (blur fires before the chip's click otherwise).
+		setTimeout(() => {
+			tagInputFocused = false;
+		}, 150);
+	}
+
+	// Empty query -> the full list of not-yet-assigned known tags (so focusing
+	// the field shows everything available); typing narrows it down. No cap -
+	// the wrapping container scrolls if the list is long (see markup below).
+	const tagSuggestions = $derived.by(() => {
+		const query = tagInput.trim().toLowerCase();
+		return knownTags.filter(
+			(tag) => tag.toLowerCase().includes(query) && !tagsDraft.includes(tag)
+		);
+	});
 
 	async function save() {
 		if (saving) return;
@@ -203,13 +269,43 @@
 							<input
 								bind:value={tagInput}
 								onkeydown={onTagKeydown}
+								onfocus={onTagInputFocus}
+								onblur={onTagInputBlur}
 								placeholder="Tag eingeben, Enter zum Hinzufügen"
 								class="border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2"
 							/>
+							{#if tagInputFocused}
+								{#if tagSuggestions.length > 0}
+									<div class="flex max-h-32 flex-wrap gap-2 overflow-y-auto">
+										{#each tagSuggestions as suggestion (suggestion)}
+											<button
+												type="button"
+												onclick={() => addTag(suggestion)}
+												class="border border-[var(--color-divider)] bg-[var(--color-surface)] px-2 py-1 text-xs transition hover:border-[var(--color-accent)]"
+											>
+												{suggestion}
+											</button>
+										{/each}
+									</div>
+								{:else if tagInput.trim()}
+									<p class="text-xs text-[var(--color-neutral-700)]">
+										kein Treffer — Enter zum Anlegen von „{tagInput.trim()}“
+									</p>
+								{/if}
+							{/if}
 						</div>
 					</div>
 				{:else}
-					<h1 class="font-[var(--font-heading)] text-2xl font-extrabold tracking-tight">{detail.title}</h1>
+					<div class="flex items-center gap-2">
+						<h1 class="font-[var(--font-heading)] text-2xl font-extrabold tracking-tight">{detail.title}</h1>
+						<button
+							onclick={startEdit}
+							aria-label="Metadaten bearbeiten"
+							class="text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
+						>
+							<Pencil size={18} />
+						</button>
+					</div>
 					<p class="mt-1 text-[var(--color-neutral-700)]">{detail.author}</p>
 					{#if detail.tags.length > 0}
 						<div class="mt-2 flex flex-wrap gap-2">
@@ -223,47 +319,59 @@
 					<p class="mt-2 text-xs text-[var(--color-neutral-700)]">
 						Status: {detail.isLocal ? 'auf diesem Gerät' : 'nicht ausgeliehen'}
 					</p>
+					{#if detail.progress}
+						<div class="mt-2 max-w-xs">
+							<div class="h-1 w-full bg-[var(--color-neutral-300)]">
+								<div class="h-full bg-[var(--color-accent)]" style="width: {detail.progress.percent}%"></div>
+							</div>
+							<p class="mt-1 text-xs text-[var(--color-neutral-700)]">
+								{detail.progress.percent}%{#if detail.progress.page !== null && detail.progress.totalPages !== null}
+									&nbsp;· Seite {detail.progress.page} von {detail.progress.totalPages}
+								{/if}
+							</p>
+						</div>
+					{/if}
 				{/if}
 			</div>
 		</div>
 
-		<div class="mt-6">
-			{#if editing}
-				<div class="flex gap-3">
-					<button
-						onclick={save}
-						disabled={saving}
-						class="flex-1 bg-[var(--color-accent)] px-4 py-2 text-center font-semibold text-[var(--color-bg)] disabled:opacity-45"
-					>
-						{saving ? 'Speichert…' : 'Speichern'}
-					</button>
-					<button
-						onclick={cancelEdit}
-						disabled={saving}
-						class="flex-1 border border-[var(--color-divider)] px-4 py-2 text-center font-semibold"
-					>
-						Abbrechen
-					</button>
-				</div>
-			{:else}
+		{#if editing}
+			<div class="mt-6 flex gap-3">
 				<button
-					onclick={startEdit}
-					class="border border-[var(--color-divider)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-semibold transition hover:border-[var(--color-accent)]"
+					onclick={save}
+					disabled={saving}
+					class="flex-1 bg-[var(--color-accent)] px-4 py-2 text-center font-semibold text-[var(--color-bg)] disabled:opacity-45"
 				>
-					Bearbeiten
+					{saving ? 'Speichert…' : 'Speichern'}
 				</button>
-			{/if}
-		</div>
+				<button
+					onclick={cancelEdit}
+					disabled={saving}
+					class="flex-1 border border-[var(--color-divider)] px-4 py-2 text-center font-semibold"
+				>
+					Abbrechen
+				</button>
+			</div>
+		{/if}
 
 		{#if !editing}
 			<div class="mt-8">
 				{#if detail.isLocal}
-					<button
-						onclick={() => goto(`/read/${bookId}`)}
-						class="w-full bg-[var(--color-accent)] px-4 py-3 text-left font-semibold text-[var(--color-bg)]"
-					>
-						Lesen →
-					</button>
+					<div class="flex flex-col gap-3">
+						<button
+							onclick={() => goto(`/read/${bookId}`)}
+							class="w-full bg-[var(--color-accent)] px-4 py-3 text-left font-semibold text-[var(--color-bg)]"
+						>
+							Lesen →
+						</button>
+						<button
+							onclick={returnBook}
+							disabled={returning}
+							class="w-full border border-[var(--color-divider)] px-4 py-3 text-left font-semibold disabled:opacity-45"
+						>
+							{returning ? 'Wird zurückgegeben…' : 'Zurückgeben'}
+						</button>
+					</div>
 				{:else}
 					<button
 						onclick={borrow}

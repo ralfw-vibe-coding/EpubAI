@@ -1,6 +1,2 @@
-- Katalog soll zwei Ansichten haben: cover view vs list view. Im Prototyp ist beides schon entworfen.
-- Ich will Büchern Tags zuweisen können. Der Prototyp zeigt, wie die implementiert werden sollen.
-- Wenn ich ein Buch aufschlage zum Lesen, will ich sehen, auf welcher Seite ich von wievielen stehe zusätzlich zum Progress Bar Fortschritt.
-- Der Fortschritt soll im Katalog und bei den Details und beim ausgeliehenen Buch angezeigt werden ebenso wie die Seitenzahl.
-- Der Bearbeiten Button auf der Buchdetailseite soll ein Icon werden (Lucide Icons) hinter dem Titel.
-- Die Seiten im Reader sehen gut aus, wenn ich auf einem schmalen Screen arbeite. Auf dem Desktop sind sie so breit wie das Browserfenster, was sehr breit sein kann. Besser ist es, wenn im Reader die Seiten mit einer maximalen Breite angezeigt werden, die ungefähr dem entspricht, was ich auf einem Smartphone erwarten kann. Es macht keinen Sinn, den Inhalt auf beliebige Breite "fließen zu lassen".
+- In der Cover und Listenübersicht soll mit einem Symbol angezeigt werden, dass ein Buch gerade ausgeliehen ist (auf dem Gerät). Kann das zb ein weißer Haken in einem roten Kreis auf dem Buchcover rechts unten sein?
+-

@@ -12,9 +12,10 @@ export function makeLoan(
 	bookId: string,
 	fileHash: string,
 	deviceId: string,
+	title: string,
 	now: string
 ): Loan {
-	return { bookId, fileHash, deviceId, borrowedAt: now };
+	return { bookId, fileHash, deviceId, title, borrowedAt: now };
 }
 
 /** Build a reading-progress record, clamping percent into [0, 100]. */
@@ -22,10 +23,12 @@ export function makeProgress(
 	bookId: string,
 	cfi: string,
 	percent: number,
+	page: number | null,
+	totalPages: number | null,
 	now: string
 ): ReadingProgress {
 	const clamped = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
-	return { bookId, cfi, percent: clamped, updatedAt: now };
+	return { bookId, cfi, percent: clamped, page, totalPages, updatedAt: now };
 }
 
 /** Whether a given book is currently loaned on this device. */
@@ -33,7 +36,17 @@ export function isBookLocal(loans: Loan[], bookId: string): boolean {
 	return loans.some((l) => l.bookId === bookId);
 }
 
-/** Enrich a catalog book with its local-loan status. */
-export function toBookDetail(book: CatalogBook, loans: Loan[]): BookDetail {
-	return { ...book, isLocal: isBookLocal(loans, book.id) };
+/** Enrich a catalog book with its local-loan status and reading progress. */
+export function toBookDetail(
+	book: CatalogBook,
+	loans: Loan[],
+	progress: ReadingProgress | null
+): BookDetail {
+	return {
+		...book,
+		isLocal: isBookLocal(loans, book.id),
+		progress: progress
+			? { percent: progress.percent, page: progress.page, totalPages: progress.totalPages }
+			: null
+	};
 }

@@ -26,11 +26,95 @@
 	let adding = $state(false);
 	let fileInput = $state<HTMLInputElement | null>(null);
 
+	// Tags for the book being added, same autocomplete pattern as the book-detail
+	// edit screen: full list of already-used tags on focus, narrowed while typing.
+	let editTagsDraft = $state<string[]>([]);
+	let editTagInput = $state('');
+	let editTagInputFocused = $state(false);
+	let editKnownTags = $state<string[]>([]);
+	let editKnownTagsLoaded = false;
+
+	async function loadEditKnownTags() {
+		if (editKnownTagsLoaded) return;
+		editKnownTagsLoaded = true;
+		try {
+			const catalog = await getProcessor().loadCatalog();
+			const distinct = new Set<string>();
+			for (const b of catalog) {
+				for (const tag of b.tags) distinct.add(tag);
+			}
+			editKnownTags = [...distinct];
+		} catch {
+			// Suggestions are a convenience only; silently skip on failure.
+		}
+	}
+
+	function addEditTag(tag: string) {
+		const trimmed = tag.trim();
+		if (trimmed && !editTagsDraft.includes(trimmed)) {
+			editTagsDraft = [...editTagsDraft, trimmed];
+		}
+		editTagInput = '';
+	}
+
+	function removeEditTag(tag: string) {
+		editTagsDraft = editTagsDraft.filter((t) => t !== tag);
+	}
+
+	function onEditTagKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			addEditTag(editTagInput);
+		}
+	}
+
+	function onEditTagInputFocus() {
+		editTagInputFocused = true;
+		loadEditKnownTags();
+	}
+
+	function onEditTagInputBlur() {
+		setTimeout(() => {
+			editTagInputFocused = false;
+		}, 150);
+	}
+
+	const editTagSuggestions = $derived.by(() => {
+		const query = editTagInput.trim().toLowerCase();
+		return editKnownTags.filter(
+			(tag) => tag.toLowerCase().includes(query) && !editTagsDraft.includes(tag)
+		);
+	});
+
 	// Book covers that failed to load fall back to the color-swatch display
 	// instead of a broken-image icon (Aufgabe 7).
 	let brokenCovers = $state<Set<string>>(new Set());
 	function markCoverBroken(bookId: string) {
 		brokenCovers = new Set(brokenCovers).add(bookId);
+	}
+
+	// Cover/Liste-Umschalter (Segmented Control) - Cover-Ansicht ist Standard.
+	let viewMode = $state<'cover' | 'list'>('cover');
+
+	// Tag-Filter: distinct Tags aus allen geladenen Büchern, alphabetisch.
+	// Aktive Tags werden ODER-verknüpft (Buch muss mindestens einen tragen).
+	let activeTags = $state<Set<string>>(new Set());
+
+	let allTags = $derived(
+		Array.from(new Set(books.flatMap((b) => b.tags))).sort((a, b) => a.localeCompare(b, 'de'))
+	);
+	let filteredBooks = $derived(
+		activeTags.size === 0 ? books : books.filter((b) => b.tags.some((t) => activeTags.has(t)))
+	);
+
+	function toggleTag(tag: string) {
+		const next = new Set(activeTags);
+		if (next.has(tag)) {
+			next.delete(tag);
+		} else {
+			next.add(tag);
+		}
+		activeTags = next;
 	}
 
 	onMount(async () => {
@@ -76,6 +160,8 @@
 		coverPreviewUrl = undefined;
 		coverPreviewBroken = false;
 		duplicateBookId = null;
+		editTagsDraft = [];
+		editTagInput = '';
 		if (fileInput) fileInput.value = '';
 	}
 
@@ -101,6 +187,8 @@
 				coverKey = res.coverKey;
 				coverPreviewUrl = res.coverPreviewUrl;
 				coverPreviewBroken = false;
+				editTagsDraft = [];
+				editTagInput = '';
 				phase = 'edit';
 			}
 		} catch (e2) {
@@ -117,7 +205,7 @@
 		adding = true;
 		uploadError = null;
 		try {
-			await getProcessor().confirmAddBook(title, author, fileHash, coverKey);
+			await getProcessor().confirmAddBook(title, author, fileHash, coverKey, editTagsDraft);
 			resetUpload();
 			await reload();
 		} catch (e) {
@@ -197,6 +285,52 @@
 						class="border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2"
 					/>
 				</label>
+				<div class="flex flex-col gap-1 text-sm">
+					<span class="text-[var(--color-neutral-700)]">Tags</span>
+					<div class="flex flex-wrap gap-2">
+						{#each editTagsDraft as tag (tag)}
+							<span
+								class="flex items-center gap-1 border border-[var(--color-divider)] bg-[var(--color-bg)] px-2 py-1 text-xs"
+							>
+								{tag}
+								<button
+									onclick={() => removeEditTag(tag)}
+									aria-label={`Tag ${tag} entfernen`}
+									class="text-[var(--color-accent-700)]"
+								>
+									×
+								</button>
+							</span>
+						{/each}
+					</div>
+					<input
+						bind:value={editTagInput}
+						onkeydown={onEditTagKeydown}
+						onfocus={onEditTagInputFocus}
+						onblur={onEditTagInputBlur}
+						placeholder="Tag eingeben, Enter zum Hinzufügen"
+						class="border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2"
+					/>
+					{#if editTagInputFocused}
+						{#if editTagSuggestions.length > 0}
+							<div class="flex max-h-32 flex-wrap gap-2 overflow-y-auto">
+								{#each editTagSuggestions as suggestion (suggestion)}
+									<button
+										type="button"
+										onclick={() => addEditTag(suggestion)}
+										class="border border-[var(--color-divider)] bg-[var(--color-surface)] px-2 py-1 text-xs transition hover:border-[var(--color-accent)]"
+									>
+										{suggestion}
+									</button>
+								{/each}
+							</div>
+						{:else if editTagInput.trim()}
+							<p class="text-xs text-[var(--color-neutral-700)]">
+								kein Treffer — Enter zum Anlegen von „{editTagInput.trim()}“
+							</p>
+						{/if}
+					{/if}
+				</div>
 				<button
 					onclick={confirmAdd}
 					disabled={adding || !editTitle.trim() || !editAuthor.trim()}
@@ -214,6 +348,21 @@
 		</div>
 	{/if}
 
+	{#snippet progressDisplay(book: CatalogBook)}
+		{#if book.progress}
+			<div class="mt-1.5">
+				<div class="h-1 w-full bg-[var(--color-neutral-300)]">
+					<div class="h-full bg-[var(--color-accent)]" style="width: {book.progress.percent}%"></div>
+				</div>
+				<p class="mt-0.5 text-xs text-[var(--color-neutral-700)]">
+					{book.progress.percent}%{#if book.progress.page !== null && book.progress.totalPages !== null}
+						· Seite {book.progress.page}/{book.progress.totalPages}
+					{/if}
+				</p>
+			</div>
+		{/if}
+	{/snippet}
+
 	{#if loading}
 		<p class="text-[var(--color-neutral-700)]">Lädt…</p>
 	{:else if error}
@@ -221,41 +370,134 @@
 	{:else if books.length === 0}
 		<p class="text-[var(--color-neutral-700)]">Noch keine Bücher im Katalog.</p>
 	{:else}
-		<ul class="flex flex-col gap-3">
-			{#each books as book (book.id)}
-				<li>
+		<div class="mb-4 flex items-center justify-between gap-4">
+			<h2 class="sr-only">Ansicht</h2>
+			<div class="seg flex border border-[var(--color-divider)]">
+				<button
+					onclick={() => (viewMode = 'cover')}
+					class="seg-opt px-4 py-1.5 text-sm font-semibold {viewMode === 'cover'
+						? 'bg-[var(--color-accent)] text-[var(--color-bg)]'
+						: 'bg-[var(--color-surface)]'}"
+				>
+					Cover
+				</button>
+				<button
+					onclick={() => (viewMode = 'list')}
+					class="seg-opt px-4 py-1.5 text-sm font-semibold {viewMode === 'list'
+						? 'bg-[var(--color-accent)] text-[var(--color-bg)]'
+						: 'bg-[var(--color-surface)]'}"
+				>
+					Liste
+				</button>
+			</div>
+		</div>
+
+		{#if allTags.length > 0}
+			<div class="mb-4 flex gap-2 overflow-x-auto pb-1">
+				{#each allTags as tag (tag)}
 					<button
-						onclick={() => goto(`/book/${book.id}`)}
-						class="flex w-full items-center gap-4 border border-[var(--color-divider)] bg-[var(--color-surface)] px-4 py-4 text-left transition hover:border-[var(--color-accent)]"
+						onclick={() => toggleTag(tag)}
+						class="flex-none whitespace-nowrap border border-[var(--color-divider)] px-3 py-1 text-xs font-semibold {activeTags.has(
+							tag
+						)
+							? 'bg-[var(--color-accent)] text-[var(--color-bg)]'
+							: 'bg-[var(--color-surface)]'}"
 					>
+						{tag}
+					</button>
+				{/each}
+			</div>
+		{/if}
+
+		{#if filteredBooks.length === 0}
+			<p class="text-[var(--color-neutral-700)]">Keine Bücher mit diesen Tags.</p>
+		{:else if viewMode === 'cover'}
+			<div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+				{#each filteredBooks as book (book.id)}
+					<button onclick={() => goto(`/book/${book.id}`)} class="flex flex-col text-left">
 						{#if book.coverUrl && !brokenCovers.has(book.id)}
 							<img
 								src={book.coverUrl}
 								alt=""
-								class="h-16 w-12 flex-none border border-[var(--color-divider)] object-cover"
+								class="aspect-[2/3] w-full border border-[var(--color-divider)] object-cover"
 								onerror={() => markCoverBroken(book.id)}
 							/>
 						{:else}
 							<div
-								class="flex h-16 w-12 flex-none items-center justify-center bg-[var(--color-accent)] text-lg font-extrabold text-[var(--color-bg)]"
+								class="flex aspect-[2/3] w-full items-center justify-center bg-[var(--color-accent)] text-3xl font-extrabold text-[var(--color-bg)]"
 							>
 								{book.title.slice(0, 1).toUpperCase()}
 							</div>
 						{/if}
-						<div class="min-w-0">
-							<p class="truncate font-medium">{book.title}</p>
-							<p class="truncate text-sm text-[var(--color-neutral-700)]">{book.author}</p>
-							{#if book.processingStatus !== 'ready'}
-								<p class="mt-1 text-xs text-[var(--color-accent-700)]">
-									{book.processingStatus === 'failed'
-										? 'Verarbeitung fehlgeschlagen'
-										: 'wird verarbeitet…'}
-								</p>
-							{/if}
-						</div>
+						<p class="mt-2 truncate text-sm font-medium">{book.title}</p>
+						<p class="truncate text-xs text-[var(--color-neutral-700)]">{book.author}</p>
+						{#if book.tags.length > 0}
+							<div class="mt-1 flex flex-wrap gap-1">
+								{#each book.tags as tag (tag)}
+									<span class="border border-[var(--color-divider)] bg-[var(--color-surface)] px-1.5 py-0.5 text-[10px]">
+										{tag}
+									</span>
+								{/each}
+							</div>
+						{/if}
+						{#if book.processingStatus !== 'ready'}
+							<p class="mt-1 text-xs text-[var(--color-accent-700)]">
+								{book.processingStatus === 'failed'
+									? 'Verarbeitung fehlgeschlagen'
+									: 'wird verarbeitet…'}
+							</p>
+						{/if}
+						{@render progressDisplay(book)}
 					</button>
-				</li>
-			{/each}
-		</ul>
+				{/each}
+			</div>
+		{:else}
+			<ul class="flex flex-col gap-3">
+				{#each filteredBooks as book (book.id)}
+					<li>
+						<button
+							onclick={() => goto(`/book/${book.id}`)}
+							class="flex w-full items-center gap-4 border border-[var(--color-divider)] bg-[var(--color-surface)] px-4 py-1.5 text-left transition hover:border-[var(--color-accent)]"
+						>
+							{#if book.coverUrl && !brokenCovers.has(book.id)}
+								<img
+									src={book.coverUrl}
+									alt=""
+									class="aspect-[2/3] h-28 flex-none border border-[var(--color-divider)] object-cover"
+									onerror={() => markCoverBroken(book.id)}
+								/>
+							{:else}
+								<div
+									class="flex aspect-[2/3] h-28 flex-none items-center justify-center bg-[var(--color-accent)] text-lg font-extrabold text-[var(--color-bg)]"
+								>
+									{book.title.slice(0, 1).toUpperCase()}
+								</div>
+							{/if}
+							<div class="min-w-0 flex-1">
+								<p class="truncate font-medium">{book.title}</p>
+								<p class="truncate text-sm text-[var(--color-neutral-700)]">{book.author}</p>
+								{#if book.tags.length > 0}
+									<div class="mt-1 flex flex-wrap gap-1">
+										{#each book.tags as tag (tag)}
+											<span class="border border-[var(--color-divider)] bg-[var(--color-bg)] px-1.5 py-0.5 text-[10px]">
+												{tag}
+											</span>
+										{/each}
+									</div>
+								{/if}
+								{#if book.processingStatus !== 'ready'}
+									<p class="mt-1 text-xs text-[var(--color-accent-700)]">
+										{book.processingStatus === 'failed'
+											? 'Verarbeitung fehlgeschlagen'
+											: 'wird verarbeitet…'}
+									</p>
+								{/if}
+								{@render progressDisplay(book)}
+							</div>
+						</button>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	{/if}
 </main>

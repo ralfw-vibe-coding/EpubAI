@@ -1,4 +1,4 @@
-import { buildBookDraft, resolveCoverKey, toBookSummary } from "../domain/bookRpu.js";
+import { buildBookDraft, parseTags, resolveCoverKey, toBookSummary } from "../domain/bookRpu.js";
 import type { BookSummary } from "../domain/types.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
 import * as bookFileRepo from "../providers/d/bookFileRepo.js";
@@ -11,6 +11,7 @@ export interface CreateBookInput {
   author: unknown;
   fileHash: unknown;
   coverKey?: unknown;
+  tags?: unknown;
 }
 
 export type CreateBookBody = BookSummary | { error: string };
@@ -42,8 +43,15 @@ export async function createBook(
     return ok(400, { error: "invalid_request" });
   }
 
+  let tags: string[] | undefined;
+  if (input.tags !== undefined) {
+    const parsed = parseTags(input.tags);
+    if (!parsed) return ok(400, { error: "invalid_request" });
+    tags = parsed;
+  }
+
   const coverKey = resolveCoverKey(input.coverKey, input.fileHash);
-  const draft = buildBookDraft({ title: input.title, author: input.author, fileHash: input.fileHash, coverKey });
+  const draft = buildBookDraft({ title: input.title, author: input.author, fileHash: input.fileHash, coverKey, tags });
   const book = await bookRepo.insert(userId, draft);
 
   const storageKey = `${draft.fileHash}.epub`;

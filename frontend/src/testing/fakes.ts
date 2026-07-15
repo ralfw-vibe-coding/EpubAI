@@ -34,6 +34,9 @@ export function fakeDProvider(): DProvider {
 		},
 		async findProgress(bookId) {
 			return progress.get(bookId) ?? null;
+		},
+		async allProgress() {
+			return [...progress.values()];
 		}
 	};
 }
@@ -97,7 +100,8 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		fileHash: 'h1',
 		processingStatus: 'ready',
 		tags: [],
-		coverUrl: null
+		coverUrl: null,
+		progress: null
 	};
 	const defaultLoan: LoanResponse = {
 		id: 'loan1',
@@ -116,6 +120,7 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		getBooks: record('getBooks', [defaultBook]),
 		getBook: record('getBook', defaultBook),
 		createLoan: record('createLoan', defaultLoan),
+		returnLoan: record('returnLoan', undefined as void),
 		getBookFile: record('getBookFile', new ArrayBuffer(8)),
 		uploadEpub: record('uploadEpub', defaultUpload),
 		createBook: record('createBook', defaultBook),

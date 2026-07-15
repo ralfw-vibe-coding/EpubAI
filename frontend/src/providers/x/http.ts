@@ -113,6 +113,15 @@ export function createHttpClient(
 			return (await res.json()) as LoanResponse;
 		},
 
+		async returnLoan(bookId: string, deviceId: string): Promise<void> {
+			const res = await fetchImpl(`${base}/loans/${encodeURIComponent(bookId)}`, {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({ deviceId })
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+		},
+
 		async getBookFile(bookId: string): Promise<ArrayBuffer> {
 			const res = await fetchImpl(
 				`${base}/books/${encodeURIComponent(bookId)}/file`,
@@ -187,12 +196,19 @@ export function createHttpClient(
 			title: string,
 			author: string,
 			fileHash: string,
-			coverKey?: string
+			coverKey?: string,
+			tags?: string[]
 		): Promise<CatalogBook> {
 			const res = await fetchImpl(`${base}/books`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', ...authHeaders() },
-				body: JSON.stringify(coverKey ? { title, author, fileHash, coverKey } : { title, author, fileHash })
+				body: JSON.stringify({
+					title,
+					author,
+					fileHash,
+					...(coverKey ? { coverKey } : {}),
+					...(tags ? { tags } : {})
+				})
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 			return (await res.json()) as CatalogBook;

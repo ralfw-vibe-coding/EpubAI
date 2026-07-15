@@ -38,3 +38,18 @@ export async function insert(userId: string, draft: LoanDraft): Promise<Loan> {
 export async function deleteByBookId(bookId: string): Promise<void> {
   await pool.query("delete from loan where book_id = $1", [bookId]);
 }
+
+/**
+ * Marks the active (not yet returned) loan for this book/user/device as
+ * returned. Keeps the row for history instead of deleting it. Returns the
+ * updated loan, or null if no matching active loan exists.
+ */
+export async function markReturned(bookId: string, userId: string, deviceId: string): Promise<Loan | null> {
+  const result = await pool.query<LoanRow>(
+    `update loan set returned_at = now()
+     where book_id = $1 and user_id = $2 and device_id = $3 and returned_at is null
+     returning id, book_id, user_id, device_id, file_hash, borrowed_at, returned_at`,
+    [bookId, userId, deviceId]
+  );
+  return result.rows[0] ? toLoan(result.rows[0]) : null;
+}

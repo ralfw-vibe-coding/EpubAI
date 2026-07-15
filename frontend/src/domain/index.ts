@@ -16,11 +16,22 @@ export function createReaderDomain(d: DProvider) {
 			bookId: string,
 			fileHash: string,
 			deviceId: string,
+			title: string,
 			now: string
 		): Promise<Loan> {
-			const loan = makeLoan(bookId, fileHash, deviceId, now);
+			const loan = makeLoan(bookId, fileHash, deviceId, title, now);
 			await d.saveLoan(loan);
 			return loan;
+		},
+
+		/**
+		 * Keep a local loan's cached title in sync with a metadata edit, so the
+		 * Reader shows the current catalog title rather than a stale one from
+		 * borrow time. A no-op if the book isn't (or is no longer) loaned here.
+		 */
+		async renameLoanIfPresent(bookId: string, title: string): Promise<void> {
+			const loan = await d.findLoan(bookId);
+			if (loan) await d.saveLoan({ ...loan, title });
 		},
 
 		/** Is this book currently loaned locally (EPUB present in OPFS)? */
@@ -43,9 +54,10 @@ export function createReaderDomain(d: DProvider) {
 			await d.deleteLoan(bookId);
 		},
 
-		/** Enrich a catalog book with its local-loan status. */
+		/** Enrich a catalog book with its local-loan status and reading progress. */
 		async detailFor(book: CatalogBook): Promise<BookDetail> {
-			return toBookDetail(book, await d.allLoans());
+			const [loans, progress] = await Promise.all([d.allLoans(), d.findProgress(book.id)]);
+			return toBookDetail(book, loans, progress);
 		},
 
 		/** Persist reading progress for a book. */
@@ -53,9 +65,11 @@ export function createReaderDomain(d: DProvider) {
 			bookId: string,
 			cfi: string,
 			percent: number,
+			page: number | null,
+			totalPages: number | null,
 			now: string
 		): Promise<ReadingProgress> {
-			const progress = makeProgress(bookId, cfi, percent, now);
+			const progress = makeProgress(bookId, cfi, percent, page, totalPages, now);
 			await d.saveProgress(progress);
 			return progress;
 		},
@@ -63,6 +77,11 @@ export function createReaderDomain(d: DProvider) {
 		/** The latest stored reading progress for a book, or null. */
 		async progressFor(bookId: string): Promise<ReadingProgress | null> {
 			return d.findProgress(bookId);
+		},
+
+		/** All reading-progress rows stored on this device. */
+		async allProgress(): Promise<ReadingProgress[]> {
+			return d.allProgress();
 		}
 	};
 }

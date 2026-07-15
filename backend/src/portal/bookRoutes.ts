@@ -32,12 +32,14 @@ export async function registerBookRoutes(app: FastifyInstance): Promise<void> {
       author?: unknown;
       fileHash?: unknown;
       coverKey?: unknown;
+      tags?: unknown;
     };
     const result = await createBook(request.headers.authorization, {
       title: body.title,
       author: body.author,
       fileHash: body.fileHash,
-      coverKey: body.coverKey
+      coverKey: body.coverKey,
+      tags: body.tags
     });
     return reply.code(result.status).send(result.body);
   });

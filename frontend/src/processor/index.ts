@@ -13,6 +13,7 @@ import { loadCatalog } from './reactors/loadCatalog';
 import { openBookDetail } from './reactors/openBookDetail';
 import { openBookForReading, type OpenForReadingResult } from './reactors/openBookForReading';
 import { requestLoginCode } from './reactors/requestLoginCode';
+import { returnLoan } from './reactors/returnLoan';
 import { saveReadingProgress } from './reactors/saveReadingProgress';
 import { signOut } from './reactors/signOut';
 import { updateBookMetadata } from './reactors/updateBookMetadata';
@@ -33,14 +34,19 @@ export function createProcessor(deps: ReactorDeps) {
 		signOut: (): Promise<void> => signOut(deps),
 		loadCatalog: (): Promise<CatalogBook[]> => loadCatalog(deps),
 		openBookDetail: (bookId: string): Promise<BookDetail> => openBookDetail(deps, bookId),
-		borrowBook: (bookId: string): Promise<Loan> => borrowBook(deps, bookId),
+		borrowBook: (bookId: string, title: string): Promise<Loan> =>
+			borrowBook(deps, bookId, title),
+		returnLoan: (bookId: string): Promise<void> => returnLoan(deps, bookId),
 		openBookForReading: (bookId: string): Promise<OpenForReadingResult> =>
 			openBookForReading(deps, bookId),
 		saveReadingProgress: (
 			bookId: string,
 			cfi: string,
-			percent: number
-		): Promise<ReadingProgress> => saveReadingProgress(deps, bookId, cfi, percent),
+			percent: number,
+			page: number | null,
+			totalPages: number | null
+		): Promise<ReadingProgress> =>
+			saveReadingProgress(deps, bookId, cfi, percent, page, totalPages),
 		uploadEpub: (
 			file: Blob | ArrayBuffer,
 			filename: string,
@@ -50,8 +56,9 @@ export function createProcessor(deps: ReactorDeps) {
 			title: string,
 			author: string,
 			fileHash: string,
-			coverKey?: string
-		): Promise<CatalogBook> => confirmAddBook(deps, title, author, fileHash, coverKey),
+			coverKey?: string,
+			tags?: string[]
+		): Promise<CatalogBook> => confirmAddBook(deps, title, author, fileHash, coverKey, tags),
 		updateBookMetadata: (bookId: string, patch: BookMetadataPatch): Promise<CatalogBook> =>
 			updateBookMetadata(deps, bookId, patch),
 		deleteBook: (bookId: string): Promise<void> => deleteBook(deps, bookId)

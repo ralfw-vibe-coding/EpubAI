@@ -22,4 +22,6 @@ export interface DProvider {
 	saveProgress(progress: ReadingProgress): Promise<void>;
 	/** The latest reading progress for a book, or null if none stored. */
 	findProgress(bookId: string): Promise<ReadingProgress | null>;
+	/** All reading-progress rows stored on this device (used to enrich the catalog). */
+	allProgress(): Promise<ReadingProgress[]>;
 }

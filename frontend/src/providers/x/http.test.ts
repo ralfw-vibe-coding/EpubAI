@@ -102,6 +102,26 @@ describe('createHttpClient', () => {
 		expect(JSON.parse(opts.body)).toEqual({ bookId: 'b1', deviceId: 'dev1' });
 	});
 
+	it('ends a loan with bookId in the URL and deviceId in the body', async () => {
+		const res = { ok: true, status: 204, statusText: 'No Content', json: async () => null } as unknown as Response;
+		const fetchMock = vi.fn().mockResolvedValue(res);
+		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u' }), fetchMock);
+		await http.returnLoan('b1', 'dev1');
+
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/loans/b1');
+		expect(opts.method).toBe('DELETE');
+		expect(JSON.parse(opts.body)).toEqual({ deviceId: 'dev1' });
+	});
+
+	it('throws on a failed returnLoan', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.returnLoan('b1', 'dev1')).rejects.toBeInstanceOf(HttpError);
+	});
+
 	it('returns the raw file bytes', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(null));
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
@@ -254,6 +274,21 @@ describe('createHttpClient', () => {
 
 		const [, opts] = fetchMock.mock.calls[0];
 		expect(JSON.parse(opts.body)).toEqual({ title: 'T', author: 'A', fileHash: 'h1' });
+	});
+
+	it('includes tags in the body when provided', async () => {
+		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: ['sci-fi'], coverUrl: null };
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(book));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.createBook('T', 'A', 'h1', undefined, ['sci-fi', 'favorit']);
+
+		const [, opts] = fetchMock.mock.calls[0];
+		expect(JSON.parse(opts.body)).toEqual({
+			title: 'T',
+			author: 'A',
+			fileHash: 'h1',
+			tags: ['sci-fi', 'favorit']
+		});
 	});
 
 	it('throws on a failed createBook', async () => {

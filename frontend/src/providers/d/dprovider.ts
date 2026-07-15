@@ -35,6 +35,7 @@ export function createDProvider(): DProvider {
 		findLoan: (bookId: string) => call<Loan | null>('findLoan', bookId),
 		deleteLoan: (bookId: string) => call<void>('deleteLoan', bookId),
 		saveProgress: (progress: ReadingProgress) => call<void>('saveProgress', progress),
-		findProgress: (bookId: string) => call<ReadingProgress | null>('findProgress', bookId)
+		findProgress: (bookId: string) => call<ReadingProgress | null>('findProgress', bookId),
+		allProgress: () => call<ReadingProgress[]>('allProgress')
 	};
 }

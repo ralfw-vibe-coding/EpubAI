@@ -57,6 +57,7 @@ export interface HttpClient {
 	getBooks(): Promise<CatalogBook[]>;
 	getBook(bookId: string): Promise<CatalogBook>;
 	createLoan(bookId: string, deviceId: string): Promise<LoanResponse>;
+	returnLoan(bookId: string, deviceId: string): Promise<void>;
 	getBookFile(bookId: string): Promise<ArrayBuffer>;
 	uploadEpub(
 		file: Blob | ArrayBuffer,
@@ -67,7 +68,8 @@ export interface HttpClient {
 		title: string,
 		author: string,
 		fileHash: string,
-		coverKey?: string
+		coverKey?: string,
+		tags?: string[]
 	): Promise<CatalogBook>;
 	updateBookMetadata(bookId: string, patch: BookMetadataPatch): Promise<CatalogBook>;
 	deleteBook(bookId: string): Promise<void>;

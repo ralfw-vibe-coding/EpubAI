@@ -11,11 +11,12 @@ import type { ReactorDeps } from '../deps';
  */
 export async function borrowBook(
 	deps: Pick<ReactorDeps, 'http' | 'files' | 'domain' | 'device' | 'clock'>,
-	bookId: string
+	bookId: string,
+	title: string
 ): Promise<Loan> {
 	const deviceId = deps.device.id();
 	const loan = await deps.http.createLoan(bookId, deviceId);
 	const bytes = await deps.http.getBookFile(bookId);
 	await deps.files.write(bookId, bytes);
-	return deps.domain.recordLoan(bookId, loan.fileHash, deviceId, deps.clock.nowIso());
+	return deps.domain.recordLoan(bookId, loan.fileHash, deviceId, title, deps.clock.nowIso());
 }

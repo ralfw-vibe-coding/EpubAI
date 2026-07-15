@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@sqlite.org/sqlite-wasm": "^3.47.0-build1",
-    "epubjs": "^0.3.93"
+    "epubjs": "^0.3.93",
+    "lucide-svelte": "^1.0.1"
   }
 }

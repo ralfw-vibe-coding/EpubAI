@@ -60,6 +60,7 @@ export function buildBookDraft(input: {
   author: string;
   fileHash: string;
   coverKey?: string | null;
+  tags?: string[];
 }): BookDraft {
   const title = normalizeText(input.title) ?? "Untitled";
   const author = normalizeText(input.author) ?? "Unknown";
@@ -67,7 +68,7 @@ export function buildBookDraft(input: {
     title,
     author,
     fileHash: input.fileHash,
-    tags: [],
+    tags: input.tags ?? [],
     processingStatus: "ready",
     coverKey: input.coverKey ?? null
   };
@@ -147,15 +148,27 @@ export function updateBookMetadata(input: { title?: unknown; author?: unknown; t
   }
 
   if (input.tags !== undefined) {
-    if (!Array.isArray(input.tags) || !input.tags.every((tag): tag is string => typeof tag === "string")) {
-      return { valid: false };
-    }
-    const tags = input.tags.map((tag) => tag.trim());
-    if (tags.some((tag) => tag.length === 0)) return { valid: false };
+    const tags = parseTags(input.tags);
+    if (!tags) return { valid: false };
     patch.tags = tags;
   }
 
   return { valid: true, patch };
+}
+
+/**
+ * Validates and normalizes a tags array from untrusted input: must be an
+ * array of strings, each trimmed and non-blank. Returns `null` if malformed
+ * (caller decides how to react - e.g. 400 invalid_request). Shared between
+ * `updateBookMetadata` (PATCH) and `createBook`'s optional `tags` on creation.
+ */
+export function parseTags(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every((tag): tag is string => typeof tag === "string")) {
+    return null;
+  }
+  const tags = value.map((tag) => tag.trim());
+  if (tags.some((tag) => tag.length === 0)) return null;
+  return tags;
 }
 
 function normalizeText(value?: string | null): string | undefined {

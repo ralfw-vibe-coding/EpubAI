@@ -11,7 +11,8 @@ export async function confirmAddBook(
 	title: string,
 	author: string,
 	fileHash: string,
-	coverKey?: string
+	coverKey?: string,
+	tags?: string[]
 ): Promise<CatalogBook> {
-	return deps.http.createBook(title, author, fileHash, coverKey);
+	return deps.http.createBook(title, author, fileHash, coverKey, tags);
 }
