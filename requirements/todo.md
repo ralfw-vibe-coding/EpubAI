@@ -1,2 +1,0 @@
-- In der Cover und Listenübersicht soll mit einem Symbol angezeigt werden, dass ein Buch gerade ausgeliehen ist (auf dem Gerät). Kann das zb ein weißer Haken in einem roten Kreis auf dem Buchcover rechts unten sein?
--

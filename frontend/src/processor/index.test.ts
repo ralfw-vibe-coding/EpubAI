@@ -10,6 +10,7 @@ import {
 } from '../testing/fakes';
 import { createProcessor } from './index';
 import type { ReactorDeps } from './deps';
+import type { Annotation } from '../domain/types';
 
 function makeDeps(overrides: Partial<ReactorDeps> = {}) {
 	const http = fakeHttp();
@@ -69,6 +70,15 @@ describe('processor reactors', () => {
 
 		const books = await p.loadCatalog();
 		expect(books[0].progress).toEqual({ percent: 40, page: 8, totalPages: 20 });
+	});
+
+	it('loadCatalog marks a borrowed book as isLocal', async () => {
+		const { deps } = makeDeps();
+		const p = createProcessor(deps);
+		expect((await p.loadCatalog())[0].isLocal).toBe(false);
+
+		await p.borrowBook('b1', 'Titel');
+		expect((await p.loadCatalog())[0].isLocal).toBe(true);
 	});
 
 	it('openBookDetail enriches with local-loan status', async () => {
@@ -265,5 +275,154 @@ describe('processor reactors', () => {
 
 		expect(http.calls.map((c) => c.method)).toContain('deleteBook');
 		expect(await files.impl.exists('b1')).toBe(false);
+	});
+
+	describe('annotations', () => {
+		const created: Annotation = {
+			id: 'a1',
+			bookId: 'b1',
+			cfiRange: 'epubcfi(/6/2!/4,/1:0,/1:8)',
+			excerpt: 'markiert',
+			note: null,
+			color: 'accent',
+			createdAt: '2026-07-13T00:00:00.000Z',
+			updatedAt: '2026-07-13T00:00:00.000Z'
+		};
+
+		it('syncAnnotations pulls from the backend and replaces the local cache', async () => {
+			const http = fakeHttp({ getAllAnnotations: async () => [created] });
+			const { deps, domain } = makeDeps({ http: http.impl });
+			const result = await createProcessor(deps).syncAnnotations();
+
+			expect(result).toEqual([created]);
+			expect(await domain.annotationsFor('b1')).toEqual([created]);
+		});
+
+		it('syncAnnotations wipes local annotations no longer present on the backend', async () => {
+			const { deps, domain } = makeDeps();
+			await domain.saveAnnotation({ ...created, id: 'stale' });
+			const http = fakeHttp({ getAllAnnotations: async () => [] });
+			const p = createProcessor({ ...deps, http: http.impl });
+			await p.syncAnnotations();
+			expect(await domain.annotationsFor('b1')).toEqual([]);
+		});
+
+		it('createAnnotation posts to the backend first, then caches with the returned id', async () => {
+			const { deps, http, domain } = makeDeps();
+			const res = await createProcessor(deps).createAnnotation('b1', 'cfi', 'markiert');
+
+			// The default fake returns an annotation with id 'a1' for book 'b1'.
+			expect(res.id).toBe('a1');
+			expect(http.calls.map((c) => c.method)).toContain('createAnnotation');
+			expect(await domain.annotationsFor('b1')).toEqual([res]);
+		});
+
+		it('createAnnotation throws and stores nothing locally when the backend fails', async () => {
+			const http = fakeHttp({
+				createAnnotation: async () => {
+					throw new Error('offline');
+				}
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await expect(
+				createProcessor(deps).createAnnotation('b1', created.cfiRange, 'markiert')
+			).rejects.toThrow('offline');
+			expect(await domain.annotationsFor('b1')).toEqual([]);
+		});
+
+		it('createAnnotation forwards an optional note to http', async () => {
+			const { deps, http } = makeDeps();
+			await createProcessor(deps).createAnnotation('b1', 'cfi', 'text', 'meine Notiz');
+			const call = http.calls.find((c) => c.method === 'createAnnotation');
+			expect(call?.args).toEqual(['b1', 'cfi', 'text', 'meine Notiz', undefined]);
+		});
+
+		it('createAnnotation forwards an optional color to http', async () => {
+			const { deps, http } = makeDeps();
+			await createProcessor(deps).createAnnotation('b1', 'cfi', 'text', undefined, 'blue');
+			const call = http.calls.find((c) => c.method === 'createAnnotation');
+			expect(call?.args).toEqual(['b1', 'cfi', 'text', undefined, 'blue']);
+		});
+
+		it('updateAnnotationNote updates locally first and pushes to the backend', async () => {
+			const { deps, http, domain } = makeDeps();
+			await domain.saveAnnotation(created);
+			const updated = await createProcessor(deps).updateAnnotationNote(created, 'Notiz');
+
+			expect(updated.note).toBe('Notiz');
+			expect(updated.updatedAt).toBe('2026-07-13T12:00:00.000Z');
+			expect((await domain.annotationsFor('b1'))[0].note).toBe('Notiz');
+			const call = http.calls.find((c) => c.method === 'updateAnnotationNote');
+			expect(call?.args).toEqual(['a1', 'Notiz']);
+		});
+
+		it('updateAnnotationNote keeps the local edit even if the backend push fails', async () => {
+			const http = fakeHttp({
+				updateAnnotationNote: async () => {
+					throw new Error('offline');
+				}
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveAnnotation(created);
+			const updated = await createProcessor(deps).updateAnnotationNote(created, 'Notiz');
+			expect(updated.note).toBe('Notiz');
+			expect((await domain.annotationsFor('b1'))[0].note).toBe('Notiz');
+		});
+
+		it('updateAnnotationColor updates locally first and pushes to the backend', async () => {
+			const { deps, http, domain } = makeDeps();
+			await domain.saveAnnotation(created);
+			const updated = await createProcessor(deps).updateAnnotationColor(created, 'green');
+
+			expect(updated.color).toBe('green');
+			expect(updated.updatedAt).toBe('2026-07-13T12:00:00.000Z');
+			expect((await domain.annotationsFor('b1'))[0].color).toBe('green');
+			const call = http.calls.find((c) => c.method === 'updateAnnotationColor');
+			expect(call?.args).toEqual(['a1', 'green']);
+		});
+
+		it('updateAnnotationColor keeps the local edit even if the backend push fails', async () => {
+			const http = fakeHttp({
+				updateAnnotationColor: async () => {
+					throw new Error('offline');
+				}
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveAnnotation(created);
+			const updated = await createProcessor(deps).updateAnnotationColor(created, 'purple');
+			expect(updated.color).toBe('purple');
+			expect((await domain.annotationsFor('b1'))[0].color).toBe('purple');
+		});
+
+		it('deleteAnnotation removes locally and calls the backend', async () => {
+			const { deps, http, domain } = makeDeps();
+			await domain.saveAnnotation(created);
+			await createProcessor(deps).deleteAnnotation('a1');
+
+			expect(await domain.annotationsFor('b1')).toEqual([]);
+			const call = http.calls.find((c) => c.method === 'deleteAnnotation');
+			expect(call?.args).toEqual(['a1']);
+		});
+
+		it('deleteAnnotation still removes locally when the backend push fails', async () => {
+			const http = fakeHttp({
+				deleteAnnotation: async () => {
+					throw new Error('offline');
+				}
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveAnnotation(created);
+			await createProcessor(deps).deleteAnnotation('a1');
+			expect(await domain.annotationsFor('b1')).toEqual([]);
+		});
+
+		it('loadAnnotations reads the local cache without any network call', async () => {
+			const { deps, http, domain } = makeDeps();
+			await domain.saveAnnotation(created);
+			const res = await createProcessor(deps).loadAnnotations('b1');
+
+			expect(res).toEqual([created]);
+			expect(http.calls.map((c) => c.method)).not.toContain('getAllAnnotations');
+		});
 	});
 });

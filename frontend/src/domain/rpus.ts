@@ -1,4 +1,4 @@
-import type { BookDetail, CatalogBook, Loan, ReadingProgress } from './types';
+import type { Annotation, AnnotationColor, BookDetail, CatalogBook, Loan, ReadingProgress } from './types';
 
 /**
  * RPUs (Request Processing Units) — nearly-pure functions that know only
@@ -34,6 +34,25 @@ export function makeProgress(
 /** Whether a given book is currently loaned on this device. */
 export function isBookLocal(loans: Loan[], bookId: string): boolean {
 	return loans.some((l) => l.bookId === bookId);
+}
+
+/**
+ * Produce an annotation with only its note edited (and updatedAt re-stamped).
+ * cfiRange/excerpt/id/createdAt are immutable — they identify what was
+ * highlighted. An empty/whitespace-only note collapses to null ("just marked").
+ */
+export function withEditedNote(annotation: Annotation, note: string | null, now: string): Annotation {
+	const trimmed = note?.trim() ?? '';
+	return { ...annotation, note: trimmed === '' ? null : trimmed, updatedAt: now };
+}
+
+/**
+ * Produce an annotation with only its color edited (and updatedAt
+ * re-stamped). Independently callable from `withEditedNote` — the backend's
+ * PATCH accepts either/both/neither field on its own.
+ */
+export function withEditedColor(annotation: Annotation, color: AnnotationColor, now: string): Annotation {
+	return { ...annotation, color, updatedAt: now };
 }
 
 /** Enrich a catalog book with its local-loan status and reading progress. */

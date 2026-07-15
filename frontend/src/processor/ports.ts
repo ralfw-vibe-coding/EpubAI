@@ -1,4 +1,4 @@
-import type { CatalogBook } from '../domain/types';
+import type { Annotation, CatalogBook } from '../domain/types';
 
 /**
  * xProvider ports used by the reactors (Requirements §4.7). These are external
@@ -73,6 +73,22 @@ export interface HttpClient {
 	): Promise<CatalogBook>;
 	updateBookMetadata(bookId: string, patch: BookMetadataPatch): Promise<CatalogBook>;
 	deleteBook(bookId: string): Promise<void>;
+	/** ALL of the user's annotations across every book — the bulk sync-at-startup call. */
+	getAllAnnotations(): Promise<Annotation[]>;
+	/** Create an annotation on a book; the backend assigns the id we then cache locally. */
+	createAnnotation(
+		bookId: string,
+		cfiRange: string,
+		excerpt: string,
+		note?: string,
+		color?: string
+	): Promise<Annotation>;
+	/** Edit an existing annotation's note. */
+	updateAnnotationNote(id: string, note: string | null): Promise<Annotation>;
+	/** Edit an existing annotation's color. */
+	updateAnnotationColor(id: string, color: string): Promise<Annotation>;
+	/** Delete an annotation by id. */
+	deleteAnnotation(id: string): Promise<void>;
 }
 
 /** Stores the auth session (token + userId) and the backend auth header. */

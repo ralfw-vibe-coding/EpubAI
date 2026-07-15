@@ -1,4 +1,4 @@
-import type { CatalogBook } from '../../domain/types';
+import type { Annotation, CatalogBook } from '../../domain/types';
 import type {
 	AuthStore,
 	BookMetadataPatch,
@@ -226,6 +226,62 @@ export function createHttpClient(
 
 		async deleteBook(bookId: string): Promise<void> {
 			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}`, {
+				method: 'DELETE',
+				headers: authHeaders()
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+		},
+
+		async getAllAnnotations(): Promise<Annotation[]> {
+			const res = await fetchImpl(`${base}/annotations`, { headers: authHeaders() });
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			const body = (await res.json()) as { annotations: Annotation[] };
+			return body.annotations;
+		},
+
+		async createAnnotation(
+			bookId: string,
+			cfiRange: string,
+			excerpt: string,
+			note?: string,
+			color?: string
+		): Promise<Annotation> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/annotations`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({
+					cfiRange,
+					excerpt,
+					...(note !== undefined ? { note } : {}),
+					...(color !== undefined ? { color } : {})
+				})
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as Annotation;
+		},
+
+		async updateAnnotationNote(id: string, note: string | null): Promise<Annotation> {
+			const res = await fetchImpl(`${base}/annotations/${encodeURIComponent(id)}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({ note })
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as Annotation;
+		},
+
+		async updateAnnotationColor(id: string, color: string): Promise<Annotation> {
+			const res = await fetchImpl(`${base}/annotations/${encodeURIComponent(id)}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({ color })
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as Annotation;
+		},
+
+		async deleteAnnotation(id: string): Promise<void> {
+			const res = await fetchImpl(`${base}/annotations/${encodeURIComponent(id)}`, {
 				method: 'DELETE',
 				headers: authHeaders()
 			});

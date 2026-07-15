@@ -4,6 +4,12 @@
 
 export type ProcessingStatus = "pending" | "processing" | "ready" | "failed";
 
+// The 6 selectable highlight colors. "accent" is the default - it matches
+// the app's original single hardcoded highlight color, so old/no-color
+// annotations keep looking the same. The actual hex values are a
+// frontend-only rendering concern; the backend only stores/validates the slug.
+export type AnnotationColor = "accent" | "orange" | "yellow" | "green" | "blue" | "purple";
+
 export interface User {
   id: string;
   email: string;
@@ -63,4 +69,28 @@ export interface DetectedMeta {
   title: string;
   author: string;
   language?: string;
+}
+
+export interface Annotation {
+  id: string;
+  bookId: string;
+  userId: string;
+  cfiRange: string;
+  excerpt: string;
+  note: string | null;
+  color: AnnotationColor;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Public projection returned to clients for an Annotation (matches the interface contract).
+export interface AnnotationSummary {
+  id: string;
+  bookId: string;
+  cfiRange: string;
+  excerpt: string;
+  note: string | null;
+  color: AnnotationColor;
+  createdAt: string;
+  updatedAt: string;
 }

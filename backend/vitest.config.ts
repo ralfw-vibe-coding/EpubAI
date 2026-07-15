@@ -12,13 +12,13 @@ export default defineConfig({
         "src/processor/**",
         "src/providers/x/jwt.ts",
         "src/providers/x/otpCheck.ts",
-        "src/providers/x/emailPlaceholder.ts",
         "src/providers/x/epubParser.ts"
       ],
       exclude: [
         "src/portal/**",
         "src/providers/d/**",
         "src/providers/x/r2.ts",
+        "src/providers/x/resend.ts",
         "src/server.ts",
         "src/index.ts",
         "src/config.ts",

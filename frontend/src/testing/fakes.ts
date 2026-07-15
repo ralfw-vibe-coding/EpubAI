@@ -1,5 +1,5 @@
 import type { DProvider } from '../domain/ports';
-import type { Loan, ReadingProgress } from '../domain/types';
+import type { Annotation, Loan, ReadingProgress } from '../domain/types';
 import type {
 	AuthStore,
 	Clock,
@@ -16,6 +16,7 @@ import type { CatalogBook } from '../domain/types';
 export function fakeDProvider(): DProvider {
 	const loans = new Map<string, Loan>();
 	const progress = new Map<string, ReadingProgress>();
+	const annotations = new Map<string, Annotation>();
 	return {
 		async saveLoan(loan) {
 			loans.set(loan.bookId, loan);
@@ -37,6 +38,19 @@ export function fakeDProvider(): DProvider {
 		},
 		async allProgress() {
 			return [...progress.values()];
+		},
+		async saveAnnotation(a) {
+			annotations.set(a.id, a);
+		},
+		async allAnnotationsForBook(bookId) {
+			return [...annotations.values()].filter((a) => a.bookId === bookId);
+		},
+		async deleteAnnotation(id) {
+			annotations.delete(id);
+		},
+		async replaceAllAnnotations(all) {
+			annotations.clear();
+			for (const a of all) annotations.set(a.id, a);
 		}
 	};
 }
@@ -113,6 +127,16 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		detectedMeta: { title: 'Erkannter Titel', author: 'Erkannter Autor' },
 		fileHash: 'h2'
 	};
+	const defaultAnnotation: Annotation = {
+		id: 'a1',
+		bookId: 'b1',
+		cfiRange: 'epubcfi(/6/2!/4/2,/1:0,/1:10)',
+		excerpt: 'Ein markierter Satz',
+		note: null,
+		color: 'accent',
+		createdAt: '2026-07-13T00:00:00.000Z',
+		updatedAt: '2026-07-13T00:00:00.000Z'
+	};
 
 	const impl: HttpClient = {
 		requestLoginCode: record('requestLoginCode', { ok: true }),
@@ -126,6 +150,11 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		createBook: record('createBook', defaultBook),
 		updateBookMetadata: record('updateBookMetadata', defaultBook),
 		deleteBook: record('deleteBook', undefined as void),
+		getAllAnnotations: record('getAllAnnotations', [defaultAnnotation]),
+		createAnnotation: record('createAnnotation', defaultAnnotation),
+		updateAnnotationNote: record('updateAnnotationNote', defaultAnnotation),
+		updateAnnotationColor: record('updateAnnotationColor', defaultAnnotation),
+		deleteAnnotation: record('deleteAnnotation', undefined as void),
 		...overrides
 	};
 	return { impl, calls };

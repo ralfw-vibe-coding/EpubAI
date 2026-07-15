@@ -1,5 +1,5 @@
 import type { DProvider } from '../../domain/ports';
-import type { Loan, ReadingProgress } from '../../domain/types';
+import type { Annotation, Loan, ReadingProgress } from '../../domain/types';
 import SqliteWorker from './worker?worker';
 
 /**
@@ -29,6 +29,17 @@ export function createDProvider(): DProvider {
 		});
 	}
 
+	// Best-effort: ask the worker to release its OPFS SAH pool lock before
+	// this tab actually goes away, so a freshly reopened tab doesn't have to
+	// fall back to boot()'s retry-with-backoff (see worker.ts). `pagehide`
+	// only fires on a real navigation-away/close/bfcache-eligible unload,
+	// never on in-app SvelteKit route changes, so this can't interrupt normal
+	// navigation. Fire-and-forget: the page may be gone before any reply
+	// arrives, and that's fine, there's nothing to do with it.
+	window.addEventListener('pagehide', () => {
+		worker.postMessage({ id: 0, method: 'close', args: [] });
+	});
+
 	return {
 		saveLoan: (loan: Loan) => call<void>('saveLoan', loan),
 		allLoans: () => call<Loan[]>('allLoans'),
@@ -36,6 +47,11 @@ export function createDProvider(): DProvider {
 		deleteLoan: (bookId: string) => call<void>('deleteLoan', bookId),
 		saveProgress: (progress: ReadingProgress) => call<void>('saveProgress', progress),
 		findProgress: (bookId: string) => call<ReadingProgress | null>('findProgress', bookId),
-		allProgress: () => call<ReadingProgress[]>('allProgress')
+		allProgress: () => call<ReadingProgress[]>('allProgress'),
+		saveAnnotation: (annotation: Annotation) => call<void>('saveAnnotation', annotation),
+		allAnnotationsForBook: (bookId: string) => call<Annotation[]>('allAnnotationsForBook', bookId),
+		deleteAnnotation: (id: string) => call<void>('deleteAnnotation', id),
+		replaceAllAnnotations: (annotations: Annotation[]) =>
+			call<void>('replaceAllAnnotations', annotations)
 	};
 }

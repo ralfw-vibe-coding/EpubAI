@@ -10,6 +10,21 @@
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 
+	// Backend errors arrive as short machine codes (e.g. "invalid_code") -
+	// map the ones this page can produce to clear German copy so a failure
+	// reads as an actual message, not a stray technical string.
+	const AUTH_ERROR_MESSAGES: Record<string, string> = {
+		invalid_email: 'Bitte eine gültige E-Mail-Adresse eingeben.',
+		invalid_code:
+			'Code ungültig oder abgelaufen. Bitte erneut eingeben oder eine neue Anfrage stellen.',
+		email_send_failed: 'Code konnte nicht per E-Mail verschickt werden. Bitte später erneut versuchen.'
+	};
+
+	function friendlyAuthError(e: unknown, fallback: string): string {
+		const message = e instanceof Error ? e.message : '';
+		return AUTH_ERROR_MESSAGES[message] ?? fallback;
+	}
+
 	async function sendCode() {
 		if (!email || busy) return;
 		busy = true;
@@ -18,7 +33,7 @@
 			await getProcessor().requestLoginCode(email.trim());
 			step = 'code';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Konnte den Code nicht anfordern.';
+			error = friendlyAuthError(e, 'Konnte den Code nicht anfordern.');
 		} finally {
 			busy = false;
 		}
@@ -32,7 +47,7 @@
 			await getProcessor().verifyLoginCode(email.trim(), code.trim());
 			await goto('/library', { replaceState: true });
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Code ungültig.';
+			error = friendlyAuthError(e, 'Code ungültig.');
 		} finally {
 			busy = false;
 		}
@@ -47,10 +62,12 @@
 
 	{#if step === 'email'}
 		<label class="mb-2 block text-xs font-semibold tracking-wide uppercase" for="email">E-Mail</label>
+		<!-- svelte-ignore a11y_autofocus -->
 		<input
 			id="email"
 			type="email"
 			autocomplete="email"
+			autofocus
 			bind:value={email}
 			onkeydown={(e) => e.key === 'Enter' && sendCode()}
 			placeholder="du@beispiel.de"
@@ -69,6 +86,14 @@
 		</p>
 		<label class="mb-2 block text-xs font-semibold tracking-wide uppercase" for="code">Einmal-Code</label>
 		<!-- Alphanumeric, arbitrary length; deliberately NOT a numeric/6-digit field (§4.2b). -->
+		<!-- Masked (dots instead of characters) via -webkit-text-security rather than
+		     type="password": that combined with autocomplete="one-time-code" made iOS/Safari
+		     switch to a numeric-only OTP keyboard, blocking letters and >6-char entry entirely -
+		     exactly what §4.2b requires NOT to happen. This masks visually without changing
+		     type/inputmode/autocomplete behavior at all; browsers that don't support the
+		     (WebKit-only) property just show the text in the clear, which is an acceptable
+		     fallback since masking here is a convenience, not a security requirement. -->
+		<!-- svelte-ignore a11y_autofocus -->
 		<input
 			id="code"
 			type="text"
@@ -77,9 +102,11 @@
 			autocapitalize="none"
 			autocorrect="off"
 			spellcheck="false"
+			autofocus
 			bind:value={code}
 			onkeydown={(e) => e.key === 'Enter' && verify()}
 			placeholder="Code eingeben"
+			style="-webkit-text-security: disc;"
 			class="mb-4 w-full border border-[var(--color-divider)] bg-[var(--color-surface)] px-4 py-3 text-base tracking-wide outline-none focus:border-[var(--color-accent)]"
 		/>
 		<button

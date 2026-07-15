@@ -11,6 +11,9 @@ vi.mock("../../src/providers/d/bookFileRepo.js", () => ({
 vi.mock("../../src/providers/d/loanRepo.js", () => ({
   deleteByBookId: vi.fn()
 }));
+vi.mock("../../src/providers/d/annotationRepo.js", () => ({
+  deleteByBookId: vi.fn()
+}));
 vi.mock("../../src/providers/x/r2.js", () => ({
   deleteObject: vi.fn()
 }));
@@ -19,6 +22,7 @@ import { deleteBook } from "../../src/processor/deleteBook.js";
 import * as bookRepo from "../../src/providers/d/bookRepo.js";
 import * as bookFileRepo from "../../src/providers/d/bookFileRepo.js";
 import * as loanRepo from "../../src/providers/d/loanRepo.js";
+import * as annotationRepo from "../../src/providers/d/annotationRepo.js";
 import * as r2 from "../../src/providers/x/r2.js";
 import { sign } from "../../src/providers/x/jwt.js";
 import type { Book } from "../../src/domain/types.js";
@@ -68,7 +72,7 @@ describe("deleteBook reactor", () => {
     expect(r2.deleteObject).not.toHaveBeenCalled();
   });
 
-  it("deletes the R2 object, book_file row(s), loan rows, then the book, in that order, and returns 204", async () => {
+  it("deletes the R2 object, book_file row(s), loan rows, annotation rows, then the book, in that order, and returns 204", async () => {
     const token = sign({ userId: "user-1" });
     const callOrder: string[] = [];
     (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
@@ -89,6 +93,9 @@ describe("deleteBook reactor", () => {
     (loanRepo.deleteByBookId as ReturnType<typeof vi.fn>).mockImplementation(async () => {
       callOrder.push("loanRepo.deleteByBookId");
     });
+    (annotationRepo.deleteByBookId as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      callOrder.push("annotationRepo.deleteByBookId");
+    });
     (bookRepo.remove as ReturnType<typeof vi.fn>).mockImplementation(async () => {
       callOrder.push("bookRepo.remove");
     });
@@ -98,11 +105,13 @@ describe("deleteBook reactor", () => {
     expect(r2.deleteObject).toHaveBeenCalledWith("hash-1.epub");
     expect(bookFileRepo.deleteByBookId).toHaveBeenCalledWith("book-1");
     expect(loanRepo.deleteByBookId).toHaveBeenCalledWith("book-1");
+    expect(annotationRepo.deleteByBookId).toHaveBeenCalledWith("book-1");
     expect(bookRepo.remove).toHaveBeenCalledWith("book-1");
     expect(callOrder).toEqual([
       "r2.deleteObject",
       "bookFileRepo.deleteByBookId",
       "loanRepo.deleteByBookId",
+      "annotationRepo.deleteByBookId",
       "bookRepo.remove"
     ]);
     expect(result).toEqual({ status: 204, body: undefined });
@@ -148,6 +157,7 @@ describe("deleteBook reactor", () => {
     expect(r2.deleteObject).not.toHaveBeenCalled();
     expect(bookFileRepo.deleteByBookId).toHaveBeenCalledWith("book-1");
     expect(loanRepo.deleteByBookId).toHaveBeenCalledWith("book-1");
+    expect(annotationRepo.deleteByBookId).toHaveBeenCalledWith("book-1");
     expect(bookRepo.remove).toHaveBeenCalledWith("book-1");
     expect(result.status).toBe(204);
   });

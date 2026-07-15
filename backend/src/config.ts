@@ -14,7 +14,8 @@ const REQUIRED_VARS = [
   "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
   "AUTH_SESSION_SECRET",
-  "AUTH_SECRET_OTP",
+  "RESEND_API_KEY",
+  "AUTH_FROM_EMAIL",
   "JWT_TTL_SECONDS"
 ] as const;
 
@@ -37,7 +38,12 @@ function readEnv() {
     R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID!,
     R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY!,
     AUTH_SESSION_SECRET: process.env.AUTH_SESSION_SECRET!,
-    AUTH_SECRET_OTP: process.env.AUTH_SECRET_OTP!,
+    RESEND_API_KEY: process.env.RESEND_API_KEY!,
+    AUTH_FROM_EMAIL: process.env.AUTH_FROM_EMAIL!,
+    // Optional: a fixed local-dev "backdoor" code that always verifies,
+    // alongside real per-user codes - deliberately not required, so it can
+    // be left unset to disable it entirely (e.g. in a real deployment).
+    AUTH_SECRET_OTP: process.env.AUTH_SECRET_OTP || null,
     JWT_TTL_SECONDS: ttl,
     PORT: Number(process.env.PORT ?? 3000)
   };

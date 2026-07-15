@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import type { CatalogBook } from '../../domain/types';
+	import { Check } from 'lucide-svelte';
+	import type { BookDetail, CatalogBook } from '../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../portal/runtime';
 
-	let books = $state<CatalogBook[]>([]);
+	let books = $state<BookDetail[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
@@ -122,6 +123,11 @@
 			await goto('/login', { replaceState: true });
 			return;
 		}
+		// App-start sync of annotations into the local cache (best-effort: if
+		// offline, the last synced cache stays as-is so the Reader still works).
+		getProcessor()
+			.syncAnnotations()
+			.catch(() => undefined);
 		await reload();
 	});
 
@@ -348,6 +354,16 @@
 		</div>
 	{/if}
 
+	{#snippet localBadge()}
+		<span
+			class="absolute right-1 bottom-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-accent)] text-[var(--color-bg)]"
+			aria-label="Auf diesem Gerät ausgeliehen"
+			title="Auf diesem Gerät ausgeliehen"
+		>
+			<Check size={12} strokeWidth={3} />
+		</span>
+	{/snippet}
+
 	{#snippet progressDisplay(book: CatalogBook)}
 		{#if book.progress}
 			<div class="mt-1.5">
@@ -415,20 +431,25 @@
 			<div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
 				{#each filteredBooks as book (book.id)}
 					<button onclick={() => goto(`/book/${book.id}`)} class="flex flex-col text-left">
-						{#if book.coverUrl && !brokenCovers.has(book.id)}
-							<img
-								src={book.coverUrl}
-								alt=""
-								class="aspect-[2/3] w-full border border-[var(--color-divider)] object-cover"
-								onerror={() => markCoverBroken(book.id)}
-							/>
-						{:else}
-							<div
-								class="flex aspect-[2/3] w-full items-center justify-center bg-[var(--color-accent)] text-3xl font-extrabold text-[var(--color-bg)]"
-							>
-								{book.title.slice(0, 1).toUpperCase()}
-							</div>
-						{/if}
+						<div class="relative">
+							{#if book.coverUrl && !brokenCovers.has(book.id)}
+								<img
+									src={book.coverUrl}
+									alt=""
+									class="aspect-[2/3] w-full border border-[var(--color-divider)] object-cover"
+									onerror={() => markCoverBroken(book.id)}
+								/>
+							{:else}
+								<div
+									class="flex aspect-[2/3] w-full items-center justify-center bg-[var(--color-accent)] text-3xl font-extrabold text-[var(--color-bg)]"
+								>
+									{book.title.slice(0, 1).toUpperCase()}
+								</div>
+							{/if}
+							{#if book.isLocal}
+								{@render localBadge()}
+							{/if}
+						</div>
 						<p class="mt-2 truncate text-sm font-medium">{book.title}</p>
 						<p class="truncate text-xs text-[var(--color-neutral-700)]">{book.author}</p>
 						{#if book.tags.length > 0}
@@ -459,20 +480,25 @@
 							onclick={() => goto(`/book/${book.id}`)}
 							class="flex w-full items-center gap-4 border border-[var(--color-divider)] bg-[var(--color-surface)] px-4 py-1.5 text-left transition hover:border-[var(--color-accent)]"
 						>
-							{#if book.coverUrl && !brokenCovers.has(book.id)}
-								<img
-									src={book.coverUrl}
-									alt=""
-									class="aspect-[2/3] h-28 flex-none border border-[var(--color-divider)] object-cover"
-									onerror={() => markCoverBroken(book.id)}
-								/>
-							{:else}
-								<div
-									class="flex aspect-[2/3] h-28 flex-none items-center justify-center bg-[var(--color-accent)] text-lg font-extrabold text-[var(--color-bg)]"
-								>
-									{book.title.slice(0, 1).toUpperCase()}
-								</div>
-							{/if}
+							<div class="relative flex-none">
+								{#if book.coverUrl && !brokenCovers.has(book.id)}
+									<img
+										src={book.coverUrl}
+										alt=""
+										class="aspect-[2/3] h-28 border border-[var(--color-divider)] object-cover"
+										onerror={() => markCoverBroken(book.id)}
+									/>
+								{:else}
+									<div
+										class="flex aspect-[2/3] h-28 items-center justify-center bg-[var(--color-accent)] text-lg font-extrabold text-[var(--color-bg)]"
+									>
+										{book.title.slice(0, 1).toUpperCase()}
+									</div>
+								{/if}
+								{#if book.isLocal}
+									{@render localBadge()}
+								{/if}
+							</div>
 							<div class="min-w-0 flex-1">
 								<p class="truncate font-medium">{book.title}</p>
 								<p class="truncate text-sm text-[var(--color-neutral-700)]">{book.author}</p>

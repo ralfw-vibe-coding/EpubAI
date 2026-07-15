@@ -1,0 +1,323 @@
+{
+  "comments": [
+    {
+      "anchorHash": "44a2651869225e1c",
+      "comment": "Das klappt grundsätzlich. Aber ich sehe keine Farbauswahl. 6 Farben sollten zur Auswahl stehen laut Prototyp.",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T10:28:49.252Z",
+      "createdBy": "reviewer",
+      "endLine": 6,
+      "endOffset": 281,
+      "id": "fb-mrlxtk2s",
+      "prefix": "# Abnahme: Notizen & Markierungen\n\n\n## Markieren\n\n",
+      "quote": "Im Reader einen Textabschnitt auswählen (antippen und Auswahl ziehen). Es sollte eine kleine Leiste mit „Markieren\" erscheinen. Nach dem Antippen sollte der ausgewählte Text farbig hinterlegt sein (Akzentfarbe, leicht transparent).",
+      "quotePreview": "Im Reader einen Textabschnitt auswählen (antippen und Auswahl ziehen). Es sollte eine kleine Leiste ",
+      "resolution": "Umgesetzt: 6 Farben zur Auswahl beim Markieren (Rot/Akzent, Orange, Gelb, Grün, Blau, Lila) - antippen einer Farbe legt die Markierung direkt in dieser Farbe an. Die Farbe lässt sich danach im Notiz-Editor auch nachträglich ändern. Automatisiert getestet (Backend 203/203 Tests, Frontend 126/126 Tests, beide Builds sauber) und per Code-Review geprüft; wegen eines hartnäckigen Speicher-Locks in meiner Test-Sandbox konnte ich es diesmal nicht mehr selbst live durchklicken - bitte im echten Browser bestätigen.",
+      "startLine": 6,
+      "startOffset": 50,
+      "status": "approved",
+      "suffix": "\n\n## Notiz hinzufügen\n\nEine gerade erstellte Markierung antippen. Es sollte sich unten ein Editor mit Textfeld öffnen. Text eingeben und „Speichern\" antippen. D",
+      "thread": [
+        {
+          "body": "Das klappt grundsätzlich. Aber ich sehe keine Farbauswahl. 6 Farben sollten zur Auswahl stehen laut Prototyp.",
+          "createdAt": "2026-07-15T10:28:49.252Z",
+          "createdBy": "reviewer",
+          "id": "th-mrlxtk2s",
+          "type": "comment"
+        },
+        {
+          "body": "Umgesetzt: 6 Farben zur Auswahl beim Markieren (Rot/Akzent, Orange, Gelb, Grün, Blau, Lila) - antippen einer Farbe legt die Markierung direkt in dieser Farbe an. Die Farbe lässt sich danach im Notiz-Editor auch nachträglich ändern. Automatisiert getestet (Backend 203/203 Tests, Frontend 126/126 Tests, beide Builds sauber) und per Code-Review geprüft; wegen eines hartnäckigen Speicher-Locks in meiner Test-Sandbox konnte ich es diesmal nicht mehr selbst live durchklicken - bitte im echten Browser bestätigen.",
+          "createdAt": "2026-07-15T11:09:35.807Z",
+          "createdBy": "assistant",
+          "id": "th-mrlxtk2s-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T11:47:13.000Z"
+    },
+    {
+      "anchorHash": "996c1c94064bf4c0",
+      "comment": "Ja, das klappt grundsätzlich. Es klappt sogar über Zurückgeben und wieder ausleihen hinweg.\n\nAllerdings: in einem Buch waren die Markierungen dann verschoben. Beide saßen weiter oben auf der Seite.",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T10:30:54.488Z",
+      "createdBy": "reviewer",
+      "endLine": 26,
+      "endOffset": 1277,
+      "id": "fb-mrlxw8pk",
+      "prefix": ") im Reader-Header öffnet sich eine Liste aller Markierungen/Notizen zu diesem Buch. Ein Eintrag antippen sollte an die entsprechende Stelle im Buch springen.\n\n",
+      "quote": "## Persistenz beim erneuten Öffnen\n \nBuch schließen und erneut öffnen. Alle zuvor erstellten Markierungen sollten wieder sichtbar sein — sie werden lokal zwischengespeichert, dafür ist keine Internetverbindung nötig.",
+      "quotePreview": "## Persistenz beim erneuten Öffnen Buch schließen und erneut öffnen. Alle zuvor erstellten Markierun",
+      "resolution": "Ursache gefunden: epub.js/marks-pane berechnet die Bildschirmposition einer Markierung nur einmal, synchron, beim ersten Anheften an einen frisch gerenderten Abschnitt - und nie wieder danach. Wenn das passiert, bevor das Layout fertig eingerichtet ist (nur beim Neuladen der Fall, nicht bei live erstellten Markierungen), bleibt die Position dauerhaft falsch. Markierungen werden jetzt ein paar Frames nach jedem Abschnitts-Rendern automatisch neu positioniert (entfernt + neu hinzugefügt).",
+      "startLine": 24,
+      "startOffset": 1062,
+      "status": "approved",
+      "suffix": "\n\n## Sync beim App-Start\n\nBeim Start der App (Bibliotheksansicht) sollten alle Markierungen im Hintergrund mit dem Server abgeglichen werden. Am einfachsten so ",
+      "thread": [
+        {
+          "body": "Ja, das klappt grundsätzlich. Es klappt sogar über Zurückgeben und wieder ausleihen hinweg.\n\nAllerdings: in einem Buch waren die Markierungen dann verschoben. Beide saßen weiter oben auf der Seite.",
+          "createdAt": "2026-07-15T10:30:54.488Z",
+          "createdBy": "reviewer",
+          "id": "th-mrlxw8pk",
+          "type": "comment"
+        },
+        {
+          "body": "Ursache gefunden: epub.js/marks-pane berechnet die Bildschirmposition einer Markierung nur einmal, synchron, beim ersten Anheften an einen frisch gerenderten Abschnitt - und nie wieder danach. Wenn das passiert, bevor das Layout fertig eingerichtet ist (nur beim Neuladen der Fall, nicht bei live erstellten Markierungen), bleibt die Position dauerhaft falsch. Markierungen werden jetzt ein paar Frames nach jedem Abschnitts-Rendern automatisch neu positioniert (entfernt + neu hinzugefügt).",
+          "createdAt": "2026-07-15T10:58:45.446Z",
+          "createdBy": "assistant",
+          "id": "th-mrlxw8pk-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T11:49:59.688Z"
+    },
+    {
+      "anchorHash": "22e9b5e5a75054a3",
+      "comment": "Das funktioniert auch über Zurückgeben und wieder ausleihen hinweg.",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T10:32:52.325Z",
+      "createdBy": "reviewer",
+      "endLine": 10,
+      "endOffset": 499,
+      "id": "fb-mrlxyrmt",
+      "prefix": " sollte eine kleine Leiste mit „Markieren\" erscheinen. Nach dem Antippen sollte der ausgewählte Text farbig hinterlegt sein (Akzentfarbe, leicht transparent).\n\n",
+      "quote": "## Notiz hinzufügen\n \nEine gerade erstellte Markierung antippen. Es sollte sich unten ein Editor mit Textfeld öffnen. Text eingeben und „Speichern\" antippen. Die Notiz sollte danach in der Notizen-Liste sichtbar sein.",
+      "quotePreview": "## Notiz hinzufügen Eine gerade erstellte Markierung antippen. Es sollte sich unten ein Editor mit T",
+      "resolution": "Bestätigt, keine Änderung nötig.",
+      "startLine": 8,
+      "startOffset": 283,
+      "status": "approved",
+      "suffix": "\n\n## Notiz bearbeiten\n\nEine Markierung mit bestehender Notiz erneut antippen, den Text ändern und speichern. Die Änderung sollte übernommen werden.\n\n## Markieru",
+      "thread": [
+        {
+          "body": "Das funktioniert auch über Zurückgeben und wieder ausleihen hinweg.",
+          "createdAt": "2026-07-15T10:32:52.325Z",
+          "createdBy": "reviewer",
+          "id": "th-mrlxyrmt",
+          "type": "comment"
+        },
+        {
+          "body": "Bestätigt, keine Änderung nötig.",
+          "createdAt": "2026-07-15T10:58:45.446Z",
+          "createdBy": "assistant",
+          "id": "th-mrlxyrmt-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T13:10:11.607Z"
+    },
+    {
+      "anchorHash": "7d6d22a94d78b044",
+      "comment": "funktioniert",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T10:33:33.342Z",
+      "createdBy": "reviewer",
+      "endLine": 14,
+      "endOffset": 646,
+      "id": "fb-mrlxzna6",
+      "prefix": "ppen. Es sollte sich unten ein Editor mit Textfeld öffnen. Text eingeben und „Speichern\" antippen. Die Notiz sollte danach in der Notizen-Liste sichtbar sein.\n\n",
+      "quote": "## Notiz bearbeiten\n \nEine Markierung mit bestehender Notiz erneut antippen, den Text ändern und speichern. Die Änderung sollte übernommen werden.",
+      "quotePreview": "## Notiz bearbeiten Eine Markierung mit bestehender Notiz erneut antippen, den Text ändern und speic",
+      "resolution": "Bestätigt, keine Änderung nötig.",
+      "startLine": 12,
+      "startOffset": 501,
+      "status": "approved",
+      "suffix": "\n\n## Markierung löschen\n\nEine Markierung über den Notiz-Editor („Löschen\") oder direkt in der Notizen-Liste (Papierkorb-Symbol) entfernen. Die farbige Hervorheb",
+      "thread": [
+        {
+          "body": "funktioniert",
+          "createdAt": "2026-07-15T10:33:33.342Z",
+          "createdBy": "reviewer",
+          "id": "th-mrlxzna6",
+          "type": "comment"
+        },
+        {
+          "body": "Bestätigt, keine Änderung nötig.",
+          "createdAt": "2026-07-15T10:58:45.446Z",
+          "createdBy": "assistant",
+          "id": "th-mrlxzna6-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T13:10:12.439Z"
+    },
+    {
+      "anchorHash": "bb311395dcc505f4",
+      "comment": "funktioniert",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T10:34:36.020Z",
+      "createdBy": "reviewer",
+      "endLine": 18,
+      "endOffset": 845,
+      "id": "fb-mrly0zn8",
+      "prefix": "htbar sein.\n\n## Notiz bearbeiten\n\nEine Markierung mit bestehender Notiz erneut antippen, den Text ändern und speichern. Die Änderung sollte übernommen werden.\n\n",
+      "quote": "## Markierung löschen\n \nEine Markierung über den Notiz-Editor („Löschen\") oder direkt in der Notizen-Liste (Papierkorb-Symbol) entfernen. Die farbige Hervorhebung im Text sollte danach verschwinden.",
+      "quotePreview": "## Markierung löschen Eine Markierung über den Notiz-Editor („Löschen\") oder direkt in der Notizen-L",
+      "resolution": "Bestätigt, keine Änderung nötig.",
+      "startLine": 16,
+      "startOffset": 648,
+      "status": "approved",
+      "suffix": "\n\n## Notizen-Liste\n\nÜber das neue Symbol (Textmarker-Icon) im Reader-Header öffnet sich eine Liste aller Markierungen/Notizen zu diesem Buch. Ein Eintrag antipp",
+      "thread": [
+        {
+          "body": "funktioniert",
+          "createdAt": "2026-07-15T10:34:36.020Z",
+          "createdBy": "reviewer",
+          "id": "th-mrly0zn8",
+          "type": "comment"
+        },
+        {
+          "body": "Bestätigt, keine Änderung nötig.",
+          "createdAt": "2026-07-15T10:58:45.446Z",
+          "createdBy": "assistant",
+          "id": "th-mrly0zn8-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T13:10:13.234Z"
+    },
+    {
+      "anchorHash": "0e4407c5b5ed4d85",
+      "comment": "funktioniert",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T10:34:45.799Z",
+      "createdBy": "reviewer",
+      "endLine": 22,
+      "endOffset": 1060,
+      "id": "fb-mrly176v",
+      "prefix": "über den Notiz-Editor („Löschen\") oder direkt in der Notizen-Liste (Papierkorb-Symbol) entfernen. Die farbige Hervorhebung im Text sollte danach verschwinden.\n\n",
+      "quote": "## Notizen-Liste\n \nÜber das neue Symbol (Textmarker-Icon) im Reader-Header öffnet sich eine Liste aller Markierungen/Notizen zu diesem Buch. Ein Eintrag antippen sollte an die entsprechende Stelle im Buch springen.",
+      "quotePreview": "## Notizen-Liste Über das neue Symbol (Textmarker-Icon) im Reader-Header öffnet sich eine Liste alle",
+      "resolution": "Bestätigt, keine Änderung nötig.",
+      "startLine": 20,
+      "startOffset": 847,
+      "status": "approved",
+      "suffix": "\n\n## Persistenz beim erneuten Öffnen\n\nBuch schließen und erneut öffnen. Alle zuvor erstellten Markierungen sollten wieder sichtbar sein — sie werden lokal zwisc",
+      "thread": [
+        {
+          "body": "funktioniert",
+          "createdAt": "2026-07-15T10:34:45.799Z",
+          "createdBy": "reviewer",
+          "id": "th-mrly176v",
+          "type": "comment"
+        },
+        {
+          "body": "Bestätigt, keine Änderung nötig.",
+          "createdAt": "2026-07-15T10:58:45.446Z",
+          "createdBy": "assistant",
+          "id": "th-mrly176v-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T13:10:14.272Z"
+    },
+    {
+      "anchorHash": "5c4d4ff8340e47cd",
+      "comment": "wenn ich das tab schließe und mit http://localhost:5173 wieder öffne, bekomme ich diese fehlermeldung: \"Failed to execute 'createSyncAccessHandle' on 'FileSystemFileHandle': Access Handles cannot be created if there is another open Access Handle or Writable stream associated with the same file.“\n\ndas muss jetzt mal grundsätzlich gelöst werden.",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T10:36:05.661Z",
+      "createdBy": "reviewer",
+      "endLine": 30,
+      "endOffset": 1542,
+      "id": "fb-mrly2wt9",
+      "prefix": "neut öffnen. Alle zuvor erstellten Markierungen sollten wieder sichtbar sein — sie werden lokal zwischengespeichert, dafür ist keine Internetverbindung nötig.\n\n",
+      "quote": "## Sync beim App-Start\n \nBeim Start der App (Bibliotheksansicht) sollten alle Markierungen im Hintergrund mit dem Server abgeglichen werden. Am einfachsten so zu prüfen: eine Markierung anlegen, App bzw. Tab schließen, neu öffnen und nachsehen, ob sie noch da ist.",
+      "quotePreview": "## Sync beim App-Start Beim Start der App (Bibliotheksansicht) sollten alle Markierungen im Hintergr",
+      "resolution": "Grundsätzlich gelöst: der OPFS-Sperren-Fehler entsteht, weil der Browser beim Schließen eines Tabs die Datenbank-Zugriffssperre nicht immer sofort freigibt. Zwei Maßnahmen: (1) beim Schließen/Verlassen der Seite wird die Datenbank jetzt aktiv sauber geschlossen, bevor der Tab verschwindet; (2) falls die Sperre trotzdem noch kurz besteht (z.B. bei sehr schnellem Schließen+Neuöffnen), versucht die App es jetzt automatisch mehrfach mit steigender Wartezeit (bis zu ~9s) neu, statt sofort mit der rohen Fehlermeldung aufzugeben. Bitte nochmal mit Tab schließen + selbe URL neu öffnen testen.",
+      "startLine": 28,
+      "startOffset": 1279,
+      "status": "approved",
+      "suffix": "\n\n## Offline-Fall (optional)\n\nFalls gewünscht: eine Markierung anlegen, während keine Verbindung zum Server besteht (z. B. Backend kurz stoppen). Es sollte eine",
+      "thread": [
+        {
+          "body": "wenn ich das tab schließe und mit http://localhost:5173 wieder öffne, bekomme ich diese fehlermeldung: \"Failed to execute 'createSyncAccessHandle' on 'FileSystemFileHandle': Access Handles cannot be created if there is another open Access Handle or Writable stream associated with the same file.“\n\ndas muss jetzt mal grundsätzlich gelöst werden.",
+          "createdAt": "2026-07-15T10:36:05.661Z",
+          "createdBy": "reviewer",
+          "id": "th-mrly2wt9",
+          "type": "comment"
+        },
+        {
+          "body": "Grundsätzlich gelöst: der OPFS-Sperren-Fehler entsteht, weil der Browser beim Schließen eines Tabs die Datenbank-Zugriffssperre nicht immer sofort freigibt. Zwei Maßnahmen: (1) beim Schließen/Verlassen der Seite wird die Datenbank jetzt aktiv sauber geschlossen, bevor der Tab verschwindet; (2) falls die Sperre trotzdem noch kurz besteht (z.B. bei sehr schnellem Schließen+Neuöffnen), versucht die App es jetzt automatisch mehrfach mit steigender Wartezeit (bis zu ~9s) neu, statt sofort mit der rohen Fehlermeldung aufzugeben. Bitte nochmal mit Tab schließen + selbe URL neu öffnen testen.",
+          "createdAt": "2026-07-15T10:58:45.446Z",
+          "createdBy": "assistant",
+          "id": "th-mrly2wt9-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T11:50:23.696Z"
+    },
+    {
+      "anchorHash": "455e89182092ed77",
+      "comment": "in der übersicht der notizen sehe ich nicht die farbe der markierungen.",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T11:47:36.573Z",
+      "createdBy": "reviewer",
+      "endLine": 6,
+      "endOffset": 281,
+      "id": "fb-mrm0mvp9",
+      "prefix": "# Abnahme: Notizen & Markierungen\n\n\n",
+      "quote": "## Markieren\n \nIm Reader einen Textabschnitt auswählen (antippen und Auswahl ziehen). Es sollte eine kleine Leiste mit „Markieren\" erscheinen. Nach dem Antippen sollte der ausgewählte Text farbig hinterlegt sein (Akzentfarbe, leicht transparent).",
+      "quotePreview": "## Markieren Im Reader einen Textabschnitt auswählen (antippen und Auswahl ziehen). Es sollte eine k",
+      "resolution": "Jede Notiz in der Liste zeigt jetzt links einen farbigen Punkt in der Farbe ihrer Markierung.",
+      "startLine": 4,
+      "startOffset": 36,
+      "status": "approved",
+      "suffix": "\n\n## Notiz hinzufügen\n\nEine gerade erstellte Markierung antippen. Es sollte sich unten ein Editor mit Textfeld öffnen. Text eingeben und „Speichern\" antippen. D",
+      "thread": [
+        {
+          "body": "in der übersicht der notizen sehe ich nicht die farbe der markierungen.",
+          "createdAt": "2026-07-15T11:47:36.573Z",
+          "createdBy": "reviewer",
+          "id": "th-mrm0mvp9",
+          "type": "comment"
+        },
+        {
+          "body": "Jede Notiz in der Liste zeigt jetzt links einen farbigen Punkt in der Farbe ihrer Markierung.",
+          "createdAt": "2026-07-15T12:01:05.523Z",
+          "createdBy": "assistant",
+          "id": "th-mrm0mvp9-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T12:56:53.698Z"
+    },
+    {
+      "anchorHash": "7d6d22a94d78b044",
+      "comment": "ich kann die farbe der notiz nicht verändern. ich sehe zwar die palette, aber darin ist die aktuelle farbe nur schwach markiert. auf eine andere kann ich nicht klicken, um die farbe zu ändern.",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T11:49:25.600Z",
+      "createdBy": "reviewer",
+      "endLine": 14,
+      "endOffset": 646,
+      "id": "fb-mrm0p7ts",
+      "prefix": "ppen. Es sollte sich unten ein Editor mit Textfeld öffnen. Text eingeben und „Speichern\" antippen. Die Notiz sollte danach in der Notizen-Liste sichtbar sein.\n\n",
+      "quote": "## Notiz bearbeiten\n \nEine Markierung mit bestehender Notiz erneut antippen, den Text ändern und speichern. Die Änderung sollte übernommen werden.",
+      "quotePreview": "## Notiz bearbeiten Eine Markierung mit bestehender Notiz erneut antippen, den Text ändern und speic",
+      "resolution": "Die Markierung der aktuell gewählten Farbe war zu unauffällig (nur ein dünner Rahmen) - dadurch war schwer zu erkennen, dass ein Klick überhaupt etwas verändert. Auswahl-Anzeige jetzt deutlich sichtbar gemacht: dicker Ring um das ausgewählte Farbfeld plus Häkchen-Symbol darin, unabhängig von der Farbe gut erkennbar. Die zugrundeliegende Logik zum Farbwechsel selbst war beim Code-Review korrekt - konnte den Klick-Vorgang in dieser Sitzung aber nicht mehr live nachstellen (Testbibliothek war leer, Buch-Upload lässt sich hier nicht automatisieren). Bitte nach dem Update kurz prüfen, ob das Antippen einer anderen Farbe jetzt sowohl in der Palette als auch an der Markierung im Text sichtbar wirkt.",
+      "startLine": 12,
+      "startOffset": 501,
+      "status": "approved",
+      "suffix": "\n\n## Markierung löschen\n\nEine Markierung über den Notiz-Editor („Löschen\") oder direkt in der Notizen-Liste (Papierkorb-Symbol) entfernen. Die farbige Hervorheb",
+      "thread": [
+        {
+          "body": "ich kann die farbe der notiz nicht verändern. ich sehe zwar die palette, aber darin ist die aktuelle farbe nur schwach markiert. auf eine andere kann ich nicht klicken, um die farbe zu ändern.",
+          "createdAt": "2026-07-15T11:49:25.600Z",
+          "createdBy": "reviewer",
+          "id": "th-mrm0p7ts",
+          "type": "comment"
+        },
+        {
+          "body": "Die Markierung der aktuell gewählten Farbe war zu unauffällig (nur ein dünner Rahmen) - dadurch war schwer zu erkennen, dass ein Klick überhaupt etwas verändert. Auswahl-Anzeige jetzt deutlich sichtbar gemacht: dicker Ring um das ausgewählte Farbfeld plus Häkchen-Symbol darin, unabhängig von der Farbe gut erkennbar. Die zugrundeliegende Logik zum Farbwechsel selbst war beim Code-Review korrekt - konnte den Klick-Vorgang in dieser Sitzung aber nicht mehr live nachstellen (Testbibliothek war leer, Buch-Upload lässt sich hier nicht automatisieren). Bitte nach dem Update kurz prüfen, ob das Antippen einer anderen Farbe jetzt sowohl in der Palette als auch an der Markierung im Text sichtbar wirkt.",
+          "createdAt": "2026-07-15T12:01:05.523Z",
+          "createdBy": "assistant",
+          "id": "th-mrm0p7ts-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T12:57:58.101Z"
+    }
+  ],
+  "file": "Review-Notizen-Markierungen.md",
+  "sourcePath": "/Users/ralfw/Repositories/08 Vibe Coding/EpubAI/requirements/Review-Notizen-Markierungen.md",
+  "updatedAt": "2026-07-15T13:10:14.272Z",
+  "version": 1
+}

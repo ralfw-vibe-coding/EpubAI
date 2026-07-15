@@ -50,3 +50,29 @@ export interface ReadingProgress {
 export interface BookDetail extends CatalogBook {
 	isLocal: boolean;
 }
+
+/**
+ * The 6 selectable highlight colors (matches the backend's `AnnotationColor`
+ * slug exactly). `"accent"` is the default — it matches the app's original
+ * single hardcoded highlight color, so old/no-color annotations keep looking
+ * the same. The actual hex values are a frontend-only rendering concern (see
+ * `routes/read/[id]/colors.ts`); the wire format is just this slug string.
+ */
+export type AnnotationColor = 'accent' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
+
+/**
+ * A highlight/annotation on a span of book text, optionally carrying a note.
+ * Local rows use the same `id` as the backend row (Requirements: sidesteps
+ * ID reconciliation). `cfiRange`/`excerpt` are immutable — they identify *what*
+ * was highlighted; only `note` and `color` are ever edited after creation.
+ */
+export interface Annotation {
+	id: string;
+	bookId: string;
+	cfiRange: string;
+	excerpt: string;
+	note: string | null;
+	color: AnnotationColor;
+	createdAt: string;
+	updatedAt: string;
+}

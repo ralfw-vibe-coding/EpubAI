@@ -1,4 +1,4 @@
-import type { BookDetail, CatalogBook, Loan, ReadingProgress } from '../domain/types';
+import type { Annotation, AnnotationColor, BookDetail, CatalogBook, Loan, ReadingProgress } from '../domain/types';
 import type { ReactorDeps } from './deps';
 import type {
 	BookMetadataPatch,
@@ -8,7 +8,10 @@ import type {
 } from './ports';
 import { borrowBook } from './reactors/borrowBook';
 import { confirmAddBook } from './reactors/confirmAddBook';
+import { createAnnotation } from './reactors/createAnnotation';
+import { deleteAnnotation } from './reactors/deleteAnnotation';
 import { deleteBook } from './reactors/deleteBook';
+import { loadAnnotations } from './reactors/loadAnnotations';
 import { loadCatalog } from './reactors/loadCatalog';
 import { openBookDetail } from './reactors/openBookDetail';
 import { openBookForReading, type OpenForReadingResult } from './reactors/openBookForReading';
@@ -16,6 +19,9 @@ import { requestLoginCode } from './reactors/requestLoginCode';
 import { returnLoan } from './reactors/returnLoan';
 import { saveReadingProgress } from './reactors/saveReadingProgress';
 import { signOut } from './reactors/signOut';
+import { syncAnnotations } from './reactors/syncAnnotations';
+import { updateAnnotationColor } from './reactors/updateAnnotationColor';
+import { updateAnnotationNote } from './reactors/updateAnnotationNote';
 import { updateBookMetadata } from './reactors/updateBookMetadata';
 import { uploadEpub } from './reactors/uploadEpub';
 import { verifyLoginCode } from './reactors/verifyLoginCode';
@@ -32,7 +38,7 @@ export function createProcessor(deps: ReactorDeps) {
 		verifyLoginCode: (email: string, code: string): Promise<Session> =>
 			verifyLoginCode(deps, email, code),
 		signOut: (): Promise<void> => signOut(deps),
-		loadCatalog: (): Promise<CatalogBook[]> => loadCatalog(deps),
+		loadCatalog: (): Promise<BookDetail[]> => loadCatalog(deps),
 		openBookDetail: (bookId: string): Promise<BookDetail> => openBookDetail(deps, bookId),
 		borrowBook: (bookId: string, title: string): Promise<Loan> =>
 			borrowBook(deps, bookId, title),
@@ -61,7 +67,21 @@ export function createProcessor(deps: ReactorDeps) {
 		): Promise<CatalogBook> => confirmAddBook(deps, title, author, fileHash, coverKey, tags),
 		updateBookMetadata: (bookId: string, patch: BookMetadataPatch): Promise<CatalogBook> =>
 			updateBookMetadata(deps, bookId, patch),
-		deleteBook: (bookId: string): Promise<void> => deleteBook(deps, bookId)
+		deleteBook: (bookId: string): Promise<void> => deleteBook(deps, bookId),
+		syncAnnotations: (): Promise<Annotation[]> => syncAnnotations(deps),
+		loadAnnotations: (bookId: string): Promise<Annotation[]> => loadAnnotations(deps, bookId),
+		createAnnotation: (
+			bookId: string,
+			cfiRange: string,
+			excerpt: string,
+			note?: string,
+			color?: AnnotationColor
+		): Promise<Annotation> => createAnnotation(deps, bookId, cfiRange, excerpt, note, color),
+		updateAnnotationNote: (annotation: Annotation, note: string | null): Promise<Annotation> =>
+			updateAnnotationNote(deps, annotation, note),
+		updateAnnotationColor: (annotation: Annotation, color: AnnotationColor): Promise<Annotation> =>
+			updateAnnotationColor(deps, annotation, color),
+		deleteAnnotation: (id: string): Promise<void> => deleteAnnotation(deps, id)
 	};
 }
 

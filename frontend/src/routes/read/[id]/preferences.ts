@@ -32,8 +32,14 @@ export const DEFAULT_PREFS: ReaderPrefs = { fontIndex: 2, margin: 'normal', them
 
 export const STORAGE_KEY = 'epubai:reader-prefs';
 
-// Inline padding (left/right) applied to the readable area per margin preset.
-const MARGIN_PADDING: Record<ReaderMargin, string> = {
+// Padding (left/right) applied to the reader's own container per margin
+// preset - not to the EPUB content itself. epub.js sets its own inline
+// `!important` padding on <body> for its column layout on every section
+// render, which always wins over any padding we inject through
+// rendition.themes (a stylesheet rule, lower specificity than an inline
+// style). Shrinking our own container instead makes epub.js compute a
+// narrower column width to begin with, giving a real per-page margin.
+export const MARGIN_PADDING: Record<ReaderMargin, string> = {
 	schmal: '8px',
 	normal: '24px',
 	breit: '48px'
@@ -65,16 +71,14 @@ function isTheme(value: unknown): value is ReaderTheme {
 }
 
 // A rules object for rendition.themes.default(). !important is needed so the
-// preset wins over the EPUB's own body styles.
-export function readerThemeStyles(theme: ReaderTheme, margin: ReaderMargin): object {
+// preset wins over the EPUB's own body styles. Margins are handled
+// separately (see MARGIN_PADDING above) - this only covers colors.
+export function readerThemeStyles(theme: ReaderTheme): object {
 	const c = THEME_COLORS[theme];
-	const pad = MARGIN_PADDING[margin];
 	return {
 		body: {
 			background: `${c.bg} !important`,
-			color: `${c.fg} !important`,
-			'padding-left': `${pad} !important`,
-			'padding-right': `${pad} !important`
+			color: `${c.fg} !important`
 		},
 		'p, li, blockquote, td, th, figcaption, div, span': { color: `${c.fg} !important` },
 		'h1, h2, h3, h4, h5, h6': { color: `${c.fg} !important` },

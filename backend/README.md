@@ -17,10 +17,12 @@ Four layers, per Requirements §4.7:
 - **Providers**:
   - **dProvider** (`src/providers/d/`) — Neon Postgres, the only persistence the Domain concept
     is ever expressed through (`db.ts`, `userRepo.ts`, `bookRepo.ts`, `bookFileRepo.ts`, `loanRepo.ts`).
-  - **xProvider** (`src/providers/x/`) — everything else external: `emailPlaceholder.ts` (OTP
-    "send", console.log only), `otpCheck.ts` (compares against `AUTH_SECRET_OTP`), `jwt.ts`
-    (sign/verify), `r2.ts` (Cloudflare R2 / S3, incl. presigned GET URLs), `epubParser.ts` (zip +
-    OPF/XML metadata extraction incl. cover image, zip-bomb and XXE guarded).
+  - **xProvider** (`src/providers/x/`) — everything else external: `resend.ts` (real OTP email
+    delivery via Resend), `otpCheck.ts` (generates real per-user codes, hashes them, and verifies
+    with expiry + attempt-limit; also checks the optional `AUTH_SECRET_OTP` local-dev backdoor -
+    see below), `jwt.ts` (sign/verify), `r2.ts` (Cloudflare R2 / S3, incl.
+    presigned GET URLs), `epubParser.ts` (zip + OPF/XML metadata extraction incl. cover image,
+    zip-bomb and XXE guarded).
 
 ## Setup
 
@@ -32,10 +34,13 @@ npm run migrate   # applies db/schema.sql to DATABASE_URL from ../.env (idempote
 
 `.env` lives at the repo root (`../.env` from `backend/`) and must define: `DATABASE_URL`,
 `R2_BUCKET`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `AUTH_SESSION_SECRET`,
-`AUTH_SECRET_OTP`, `JWT_TTL_SECONDS`. `config.ts` fails fast (naming only the missing variable
-names, never values) if any are absent. `RESEND_API_KEY`/`AUTH_FROM_EMAIL` exist in `.env` for
-later but are intentionally unused by this walking skeleton (see 4.2b) — the OTP "send" step is
-a `console.log` placeholder only.
+`RESEND_API_KEY`, `AUTH_FROM_EMAIL`, `JWT_TTL_SECONDS`. `config.ts` fails fast (naming only the
+missing variable names, never values) if any are absent.
+
+`AUTH_SECRET_OTP` is optional: if set, `POST /auth/login/verify` accepts it as a fixed login code
+for *any* email, with no expiry or attempt-limit - a deliberate local-dev shortcut so testing
+doesn't require fetching a real code from an inbox/log each time. Leave it unset to disable the
+shortcut entirely (e.g. for a real deployment); real per-user codes work either way.
 
 ## Run
 
@@ -53,9 +58,9 @@ npm run coverage    # vitest run --coverage
 ```
 
 Domain, Reactors, and the provider wrappers that don't need a real network connection
-(`jwt.ts`, `otpCheck.ts`, `emailPlaceholder.ts`, `epubParser.ts`) are unit-tested with fakes/doubles
-and are held to an 80%+ coverage bar (currently **93.8% statements/lines, 89.9% branches, 100%
-functions**, 115 tests — see `vitest.config.ts`). `epubParser.ts` in particular has a dedicated test
+(`jwt.ts`, `otpCheck.ts`, `epubParser.ts`) are unit-tested with fakes/doubles
+and are held to an 80%+ coverage bar (currently **94.2% statements/lines, 91.0% branches, 100%
+functions**, 208 tests — see `vitest.config.ts`). `epubParser.ts` in particular has a dedicated test
 (`test/providers/epubParser.test.ts`) that builds an in-memory zip-bomb-shaped fixture (tiny
 compressed size, large decompressed size) and asserts the parser aborts mid-stream once the
 ~25 MB unpacked budget is exceeded — the actual zip-bomb defense, not just a config value — plus
@@ -64,8 +69,9 @@ the EPUB2 `<meta name="cover">` fallback (`test/providers/epubFixtures.ts`), inc
 proves the byte budget is enforced while reading the cover entry too, not just the OPF/container.
 
 Excluded from the coverage gate, per Requirements §4.7 ("schwer testbare Provider"): Portal
-(pure routing), `providers/d/**` (real Neon connection) and `providers/x/r2.ts` (real R2/S3
-connection) — these are only exercised by the manual smoke test below.
+(pure routing), `providers/d/**` (real Neon connection), `providers/x/r2.ts` (real R2/S3
+connection), and `providers/x/resend.ts` (real Resend API) — these are only exercised by the
+manual smoke test below.
 
 ## Database
 
@@ -82,16 +88,20 @@ Full flow exercised against the real test EPUB
 2.3 MB) with the server running locally on port 3000:
 
 ```bash
-# 1. Request a login code (server logs "would send OTP..." — no real email is sent)
+# 1. Request a login code - sends a real email via Resend AND logs the code
+# server-side (`[auth] login code for you@example.com: <code> ...`), so it
+# can be read straight off the server console for local testing without
+# needing mailbox access.
 curl -s -X POST http://localhost:3000/auth/login/request \
   -H "Content-Type: application/json" \
   -d '{"email":"you@example.com"}'
 # -> {"ok":true}
 
-# 2. Verify with the fixed AUTH_SECRET_OTP value from .env
+# 2. Verify with the code from the email or the server log (valid 10 minutes,
+# max 5 wrong attempts before it's invalidated - request a fresh one if it locks)
 curl -s -X POST http://localhost:3000/auth/login/verify \
   -H "Content-Type: application/json" \
-  -d '{"email":"you@example.com","code":"<AUTH_SECRET_OTP>"}'
+  -d '{"email":"you@example.com","code":"<code from step 1>"}'
 # -> {"token":"<jwt>","userId":"<uuid>"}
 
 TOKEN="<jwt from above>"

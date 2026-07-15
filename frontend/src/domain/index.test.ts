@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fakeDProvider } from '../testing/fakes';
 import { createReaderDomain } from './index';
-import type { CatalogBook } from './types';
+import type { Annotation, CatalogBook } from './types';
 
 const book: CatalogBook = {
 	id: 'b1',
@@ -30,6 +30,31 @@ describe('createReaderDomain', () => {
 		expect((await domain.detailFor(book)).isLocal).toBe(false);
 		await domain.recordLoan('b1', 'h1', 'dev1', 'T', 'now');
 		expect((await domain.detailFor(book)).isLocal).toBe(true);
+	});
+
+	describe('detailsFor', () => {
+		const book2: CatalogBook = { ...book, id: 'b2' };
+
+		it('enriches a batch of books with local-loan status and progress', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			await domain.recordLoan('b1', 'h1', 'dev1', 'T', 'now');
+			await domain.saveProgress('b2', 'epubcfi(/6/4)', 33, 4, 40, 'ts');
+
+			const details = await domain.detailsFor([book, book2]);
+
+			expect(details).toHaveLength(2);
+			expect(details[0]).toMatchObject({ id: 'b1', isLocal: true, progress: null });
+			expect(details[1]).toMatchObject({
+				id: 'b2',
+				isLocal: false,
+				progress: { percent: 33, page: 4, totalPages: 40 }
+			});
+		});
+
+		it('returns an empty array for an empty catalog', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			expect(await domain.detailsFor([])).toEqual([]);
+		});
 	});
 
 	describe('renameLoanIfPresent', () => {
@@ -88,5 +113,78 @@ describe('createReaderDomain', () => {
 		const all = await domain.allProgress();
 		expect(all).toHaveLength(2);
 		expect(all.map((p) => p.bookId).sort()).toEqual(['b1', 'b2']);
+	});
+
+	describe('annotations', () => {
+		const ann: Annotation = {
+			id: 'a1',
+			bookId: 'b1',
+			cfiRange: 'epubcfi(/6/2!/4,/1:0,/1:9)',
+			excerpt: 'markiert',
+			note: null,
+			color: 'accent',
+			createdAt: 'c1',
+			updatedAt: 'c1'
+		};
+
+		it('saves an annotation and reads it back for its book', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			expect(await domain.annotationsFor('b1')).toEqual([]);
+			await domain.saveAnnotation(ann);
+			expect(await domain.annotationsFor('b1')).toEqual([ann]);
+			expect(await domain.annotationsFor('b2')).toEqual([]);
+		});
+
+		it('edits only the note (and updatedAt), leaving cfiRange/excerpt/createdAt intact', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			await domain.saveAnnotation(ann);
+			const updated = await domain.editAnnotationNote(ann, 'Eine Notiz', 'c2');
+			expect(updated).toEqual({ ...ann, note: 'Eine Notiz', updatedAt: 'c2' });
+			expect(await domain.annotationsFor('b1')).toEqual([updated]);
+		});
+
+		it('collapses an empty note to null when editing', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			await domain.saveAnnotation({ ...ann, note: 'alt' });
+			const updated = await domain.editAnnotationNote(ann, '   ', 'c2');
+			expect(updated.note).toBeNull();
+		});
+
+		it('edits only the color (and updatedAt), leaving cfiRange/excerpt/note/createdAt intact', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			await domain.saveAnnotation(ann);
+			const updated = await domain.editAnnotationColor(ann, 'blue', 'c2');
+			expect(updated).toEqual({ ...ann, color: 'blue', updatedAt: 'c2' });
+			expect(await domain.annotationsFor('b1')).toEqual([updated]);
+		});
+
+		it('editAnnotationColor and editAnnotationNote are independently callable', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			await domain.saveAnnotation(ann);
+			await domain.editAnnotationNote(ann, 'Eine Notiz', 'c2');
+			const recolored = await domain.editAnnotationColor(
+				{ ...ann, note: 'Eine Notiz', updatedAt: 'c2' },
+				'green',
+				'c3'
+			);
+			expect(recolored.note).toBe('Eine Notiz');
+			expect(recolored.color).toBe('green');
+		});
+
+		it('removes an annotation by id', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			await domain.saveAnnotation(ann);
+			await domain.removeAnnotation('a1');
+			expect(await domain.annotationsFor('b1')).toEqual([]);
+		});
+
+		it('recordAnnotationSync replaces the whole local cache', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			await domain.saveAnnotation(ann);
+			const fresh: Annotation = { ...ann, id: 'a2', excerpt: 'anders' };
+			await domain.recordAnnotationSync([fresh]);
+			const all = await domain.annotationsFor('b1');
+			expect(all).toEqual([fresh]);
+		});
 	});
 });

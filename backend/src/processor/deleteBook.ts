@@ -2,6 +2,7 @@ import { authorizeBookAccess } from "../domain/bookRpu.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
 import * as bookFileRepo from "../providers/d/bookFileRepo.js";
 import * as loanRepo from "../providers/d/loanRepo.js";
+import * as annotationRepo from "../providers/d/annotationRepo.js";
 import * as r2 from "../providers/x/r2.js";
 import { requireUserId, AuthError } from "./shared/requireUserId.js";
 import { ok, type ReactorResult } from "./shared/result.js";
@@ -10,9 +11,10 @@ export type DeleteBookBody = undefined | { error: string };
 
 /**
  * Reactor for DELETE /books/:id.
- * `book_file.book_id` and `loan.book_id` reference book(id) with no
- * ON DELETE CASCADE, so cleanup happens in explicit order: R2 object(s) +
- * book_file row(s), then loan rows, then the book row itself.
+ * `book_file.book_id`, `loan.book_id` and `annotation.book_id` reference
+ * book(id) with no ON DELETE CASCADE, so cleanup happens in explicit order:
+ * R2 object(s) + book_file row(s), then loan rows, then annotation rows,
+ * then the book row itself.
  */
 export async function deleteBook(
   authorizationHeader: string | undefined,
@@ -41,6 +43,8 @@ export async function deleteBook(
   await bookFileRepo.deleteByBookId(bookId);
 
   await loanRepo.deleteByBookId(bookId);
+
+  await annotationRepo.deleteByBookId(bookId);
 
   await bookRepo.remove(bookId);
 

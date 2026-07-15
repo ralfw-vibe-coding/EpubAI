@@ -1,14 +1,17 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import ePub, { type Book, type NavItem, type Rendition } from 'epubjs';
-	import { List, Settings, X, Minus, Plus } from 'lucide-svelte';
+	import { List, Settings, X, Minus, Plus, Highlighter, Trash2, Check } from 'lucide-svelte';
+	import type { Annotation, AnnotationColor } from '../../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../../portal/runtime';
+	import { colorHex, HIGHLIGHT_COLORS, highlightStyles } from './colors';
 	import {
 		DEFAULT_PREFS,
 		FONT_SIZES,
 		MARGIN_OPTIONS,
+		MARGIN_PADDING,
 		THEME_COLORS,
 		THEME_OPTIONS,
 		clampFontIndex,
@@ -42,6 +45,97 @@
 	let settingsOpen = $state(false);
 	let prefs = $state<ReaderPrefs>({ ...DEFAULT_PREFS });
 
+	// Notizen & Markierungen: loaded from the local cache on open, kept in sync
+	// with epub.js highlights. `selection` drives the floating color-swatch bar
+	// shown after a text selection; `editing` drives the note-editor bottom sheet.
+	let annotations = $state<Annotation[]>([]);
+	let notesOpen = $state(false);
+	let selection = $state<{ cfiRange: string; excerpt: string } | null>(null);
+	let editing = $state<Annotation | null>(null);
+	let noteDraft = $state('');
+	let annotationError = $state<string | null>(null);
+	let annotationErrorTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function showAnnotationError(message: string) {
+		annotationError = message;
+		if (annotationErrorTimer) clearTimeout(annotationErrorTimer);
+		annotationErrorTimer = setTimeout(() => (annotationError = null), 4000);
+	}
+
+	/** Render one stored annotation as an epub.js highlight (click opens its note editor). */
+	function applyHighlight(a: Annotation) {
+		rendition?.annotations.add(
+			'highlight',
+			a.cfiRange,
+			{},
+			() => onHighlightClick(a.cfiRange),
+			'epubai-highlight',
+			highlightStyles(a.color)
+		);
+	}
+
+	function onHighlightClick(cfiRange: string) {
+		const a = annotations.find((x) => x.cfiRange === cfiRange);
+		if (a) openNoteEditor(a);
+	}
+
+	/** Tapping a color swatch on the selection bar creates the highlight directly in that color. */
+	async function createHighlight(color: AnnotationColor) {
+		if (!selection) return;
+		const sel = selection;
+		selection = null;
+		try {
+			const created = await getProcessor().createAnnotation(
+				bookId,
+				sel.cfiRange,
+				sel.excerpt,
+				undefined,
+				color
+			);
+			annotations = [...annotations, created];
+			applyHighlight(created);
+		} catch {
+			showAnnotationError('Markierung konnte nicht gespeichert werden — keine Verbindung.');
+		}
+	}
+
+	function openNoteEditor(a: Annotation) {
+		editing = a;
+		noteDraft = a.note ?? '';
+	}
+
+	async function saveNote() {
+		if (!editing) return;
+		const a = editing;
+		const note = noteDraft.trim() ? noteDraft.trim() : null;
+		const updated = await getProcessor().updateAnnotationNote(a, note);
+		annotations = annotations.map((x) => (x.id === updated.id ? updated : x));
+		editing = null;
+	}
+
+	/** Tapping a color swatch on the note editor changes an existing highlight's color immediately. */
+	async function changeHighlightColor(color: AnnotationColor) {
+		if (!editing) return;
+		const a = editing;
+		const updated = await getProcessor().updateAnnotationColor(a, color);
+		annotations = annotations.map((x) => (x.id === updated.id ? updated : x));
+		editing = updated;
+		rendition?.annotations.remove(a.cfiRange, 'highlight');
+		applyHighlight(updated);
+	}
+
+	async function deleteHighlight(a: Annotation) {
+		await getProcessor().deleteAnnotation(a.id);
+		annotations = annotations.filter((x) => x.id !== a.id);
+		rendition?.annotations.remove(a.cfiRange, 'highlight');
+		if (editing?.id === a.id) editing = null;
+	}
+
+	function jumpToAnnotation(a: Annotation) {
+		void rendition?.display(a.cfiRange);
+		notesOpen = false;
+	}
+
 	onMount(async () => {
 		if (!isAuthenticated()) {
 			await goto('/login', { replaceState: true });
@@ -73,7 +167,11 @@
 			});
 
 			// Apply the stored device preferences before the first paint so a
-			// returning reader sees their last settings right away.
+			// returning reader sees their last settings right away. The margin
+			// is handled by our own container's padding (set reactively in the
+			// template from `prefs`, already applied by now), which epub.js
+			// measures itself on its first render - no explicit resize() needed
+			// here (and rendition.manager doesn't exist yet to call it on).
 			applyPrefs();
 
 			// Clear the loading overlay as soon as the first content is rendered
@@ -81,6 +179,45 @@
 			rendition.on('rendered', () => {
 				loading = false;
 			});
+
+			// A highlight's on-screen position is computed once, synchronously,
+			// the moment epub.js first attaches it to a freshly rendered section
+			// (node_modules/epubjs/src/annotations.js's inject/attach, backed by
+			// marks-pane's Mark.render - it never recomputes on its own). If that
+			// happens before the section's layout has fully settled, the position
+			// is baked in wrong and stays wrong; this only affects highlights
+			// re-applied on mount, not ones made live while already reading and
+			// settled. Re-apply (remove + re-add) every stored highlight a couple
+			// of frames after each section renders, forcing a fresh, now-correct
+			// position. Safe to call for sections that haven't rendered (yet) too
+			// - remove()/add() just re-arm epub.js's own lazy per-section attach.
+			rendition.on('rendered', () => {
+				requestAnimationFrame(() => {
+					requestAnimationFrame(() => {
+						for (const a of annotations) {
+							rendition?.annotations.remove(a.cfiRange, 'highlight');
+							applyHighlight(a);
+						}
+					});
+				});
+			});
+
+			// Text selection inside the rendered EPUB → offer the "Markieren" action.
+			rendition.on('selected', (cfiRange: string, contents: { window: Window }) => {
+				const text = contents.window.getSelection()?.toString().trim() ?? '';
+				if (!text) return;
+				selection = { cfiRange, excerpt: text };
+			});
+
+			// Re-apply this book's stored highlights from the LOCAL cache (never a
+			// network call here — offline-first Reader). Added before display() so
+			// they attach as each section renders.
+			try {
+				annotations = await getProcessor().loadAnnotations(bookId);
+				for (const a of annotations) applyHighlight(a);
+			} catch {
+				// Highlights are a non-critical enhancement; ignore load failures.
+			}
 
 			// Chapter list for the table-of-contents drawer.
 			book.loaded.navigation
@@ -178,10 +315,34 @@
 		else prev();
 	}
 
+	/**
+	 * Click-to-turn-page for mouse users. Only fires for a click landing
+	 * directly on the reading pane's own margin (its background, not a
+	 * descendant) - the book content lives in a separate iframe document,
+	 * whose clicks never bubble out to this handler, so this can't block
+	 * text-selection drags inside the text. Deliberately margin-only: the
+	 * book content spans multiple "pages" within one wide iframe, so a
+	 * click's position inside it can't be mapped to a page-relative edge.
+	 */
+	function onMarginClick(e: MouseEvent) {
+		if (e.target !== e.currentTarget) return;
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const ratio = (e.clientX - rect.left) / rect.width;
+		if (ratio < 0.5) prev();
+		else next();
+	}
+
 	function applyPrefs() {
 		if (!rendition) return;
 		rendition.themes.fontSize(fontSizePx(prefs.fontIndex));
-		rendition.themes.default(readerThemeStyles(prefs.theme, prefs.margin));
+		rendition.themes.default(readerThemeStyles(prefs.theme));
+	}
+
+	// epub.js's resize() re-measures its container when called with no
+	// arguments at runtime, but its bundled types incorrectly require
+	// width/height - cast away just that mismatch.
+	function forceResize() {
+		(rendition as unknown as { resize(): void } | null)?.resize();
 	}
 
 	function persistPrefs() {
@@ -198,10 +359,14 @@
 		persistPrefs();
 	}
 
-	function setMargin(margin: ReaderMargin) {
+	// The margin shrinks our own container (see MARGIN_PADDING in
+	// preferences.ts); epub.js only re-measures it on an explicit resize(),
+	// and not before the padding change has actually reached the DOM.
+	async function setMargin(margin: ReaderMargin) {
 		prefs = { ...prefs, margin };
-		applyPrefs();
 		persistPrefs();
+		await tick();
+		forceResize();
 	}
 
 	function setTheme(theme: ReaderTheme) {
@@ -217,6 +382,7 @@
 
 	onDestroy(() => {
 		document.removeEventListener('visibilitychange', onVisibility);
+		if (annotationErrorTimer) clearTimeout(annotationErrorTimer);
 		void save();
 		rendition?.destroy();
 		book?.destroy();
@@ -241,6 +407,13 @@
 				<List size={20} />
 			</button>
 			<button
+				onclick={() => (notesOpen = true)}
+				aria-label="Notizen & Markierungen"
+				class="p-1.5 text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
+			>
+				<Highlighter size={20} />
+			</button>
+			<button
 				onclick={() => (settingsOpen = true)}
 				aria-label="Einstellungen"
 				class="p-1.5 text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
@@ -255,11 +428,15 @@
 	{/if}
 
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="relative flex-1 overflow-hidden"
-		style="background: {THEME_COLORS[prefs.theme].bg}"
+		style="background: {THEME_COLORS[prefs.theme].bg}; padding: 0 {MARGIN_PADDING[
+			prefs.margin
+		]}"
 		ontouchstart={onTouchStart}
 		ontouchend={onTouchEnd}
+		onclick={onMarginClick}
 	>
 		<div bind:this={viewer} class="h-full w-full"></div>
 
@@ -269,17 +446,35 @@
 			</div>
 		{/if}
 
-		<!-- Tap/click fallbacks for page turning on non-touch devices. -->
-		<button
-			aria-label="Vorherige Seite"
-			onclick={prev}
-			class="absolute inset-y-0 left-0 w-1/5 opacity-0"
-		></button>
-		<button
-			aria-label="Nächste Seite"
-			onclick={next}
-			class="absolute inset-y-0 right-0 w-1/5 opacity-0"
-		></button>
+		{#if selection}
+			<div class="absolute inset-x-0 bottom-4 z-40 flex justify-center">
+				<div class="flex items-center gap-1.5 border-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-2 py-1.5 shadow">
+					{#each HIGHLIGHT_COLORS as color (color.value)}
+						<button
+							onclick={() => createHighlight(color.value)}
+							aria-label={color.label}
+							class="h-8 w-8 flex-none rounded-full border border-[var(--color-divider)]"
+							style="background-color: {color.hex}"
+						></button>
+					{/each}
+					<button
+						onclick={() => (selection = null)}
+						aria-label="Abbrechen"
+						class="ml-1 flex-none border-l-2 border-[var(--color-divider)] py-2 pl-2 text-[var(--color-neutral-700)]"
+					>
+						<X size={16} />
+					</button>
+				</div>
+			</div>
+		{/if}
+
+		{#if annotationError}
+			<div class="absolute inset-x-0 bottom-4 z-40 flex justify-center px-4">
+				<p class="bg-[var(--color-accent-100)] px-3 py-2 text-center text-sm text-[var(--color-accent-800)]">
+					{annotationError}
+				</p>
+			</div>
+		{/if}
 	</div>
 
 	<div
@@ -406,6 +601,115 @@
 						</button>
 					{/each}
 				</div>
+			</div>
+		</section>
+	{/if}
+
+	{#if notesOpen}
+		<button
+			aria-label="Notizen schließen"
+			onclick={() => (notesOpen = false)}
+			class="absolute inset-0 z-20 bg-black/40"
+		></button>
+		<aside
+			class="absolute inset-y-0 right-0 z-30 flex w-4/5 max-w-[340px] flex-col border-l-2 border-[var(--color-divider)] bg-[var(--color-bg)]"
+		>
+			<div class="flex items-center justify-between border-b-2 border-[var(--color-divider)] px-4 py-3">
+				<span class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">
+					Notizen & Markierungen
+				</span>
+				<button onclick={() => (notesOpen = false)} aria-label="Schließen" class="text-[var(--color-accent-700)]">
+					<X size={20} />
+				</button>
+			</div>
+			<div class="flex-1 overflow-y-auto py-1">
+				{#if annotations.length === 0}
+					<p class="px-4 py-3 text-sm text-[var(--color-neutral-700)]">
+						Noch keine Markierungen. Text markieren, um eine anzulegen.
+					</p>
+				{:else}
+					{#each annotations as a (a.id)}
+						<div class="flex items-start gap-2 border-b border-[var(--color-divider)] px-4 py-3">
+							<span
+								aria-hidden="true"
+								class="mt-1.5 h-3 w-3 flex-none rounded-full"
+								style="background-color: {colorHex(a.color)}"
+							></span>
+							<button onclick={() => jumpToAnnotation(a)} class="min-w-0 flex-1 text-left">
+								<p class="line-clamp-2 text-sm text-[var(--color-text)]">„{a.excerpt}“</p>
+								{#if a.note}
+									<p class="mt-1 line-clamp-2 text-xs text-[var(--color-neutral-700)]">{a.note}</p>
+								{/if}
+							</button>
+							<button
+								onclick={() => deleteHighlight(a)}
+								aria-label="Markierung löschen"
+								class="flex-none p-1 text-[var(--color-accent-700)]"
+							>
+								<Trash2 size={16} />
+							</button>
+						</div>
+					{/each}
+				{/if}
+			</div>
+		</aside>
+	{/if}
+
+	{#if editing}
+		<button
+			aria-label="Notiz schließen"
+			onclick={() => (editing = null)}
+			class="absolute inset-0 z-20 bg-black/40"
+		></button>
+		<section
+			class="absolute inset-x-0 bottom-0 z-30 border-t-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+		>
+			<div class="mb-3 flex items-center justify-between">
+				<span class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">Notiz</span>
+				<button onclick={() => (editing = null)} aria-label="Schließen" class="text-[var(--color-accent-700)]">
+					<X size={20} />
+				</button>
+			</div>
+			<p class="mb-2 line-clamp-3 text-sm text-[var(--color-neutral-700)]">„{editing.excerpt}“</p>
+			<div class="mb-3 flex items-center gap-2.5">
+				{#each HIGHLIGHT_COLORS as color (color.value)}
+					<button
+						onclick={() => changeHighlightColor(color.value)}
+						aria-label={color.label}
+						aria-pressed={editing.color === color.value}
+						class="relative h-9 w-9 flex-none rounded-full transition {editing.color === color.value
+							? 'ring-2 ring-offset-2 ring-[var(--color-text)] ring-offset-[var(--color-bg)]'
+							: ''}"
+						style="background-color: {color.hex}"
+					>
+						{#if editing.color === color.value}
+							<span class="absolute inset-0 flex items-center justify-center rounded-full bg-black/20">
+								<Check size={18} color="white" strokeWidth={3} />
+							</span>
+						{/if}
+					</button>
+				{/each}
+			</div>
+			<textarea
+				bind:value={noteDraft}
+				rows="4"
+				placeholder="Notiz hinzufügen…"
+				class="w-full resize-none border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)]"
+			></textarea>
+			<div class="mt-3 flex items-center gap-2">
+				<button
+					onclick={saveNote}
+					class="flex-1 bg-[var(--color-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--color-bg)]"
+				>
+					Speichern
+				</button>
+				<button
+					onclick={() => editing && deleteHighlight(editing)}
+					aria-label="Markierung löschen"
+					class="flex items-center gap-1.5 border border-[var(--color-divider)] px-4 py-2.5 text-sm text-[var(--color-accent-700)]"
+				>
+					<Trash2 size={16} /> Löschen
+				</button>
 			</div>
 		</section>
 	{/if}

@@ -338,4 +338,129 @@ describe('createHttpClient', () => {
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
 		await expect(http.deleteBook('missing')).rejects.toBeInstanceOf(HttpError);
 	});
+
+	const annotation = {
+		id: 'a1',
+		bookId: 'b1',
+		cfiRange: 'epubcfi(/6/2!/4,/1:0,/1:8)',
+		excerpt: 'markiert',
+		note: null,
+		color: 'accent',
+		createdAt: 't',
+		updatedAt: 't'
+	};
+
+	it('unwraps the annotations array from GET /annotations', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ annotations: [annotation] }));
+		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u' }), fetchMock);
+		expect(await http.getAllAnnotations()).toEqual([annotation]);
+		expect(fetchMock.mock.calls[0][0]).toBe('http://api/annotations');
+	});
+
+	it('throws on a failed getAllAnnotations', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'unauthorized' }, { ok: false, status: 401 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.getAllAnnotations()).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('creates an annotation with cfiRange and excerpt in the URL-scoped book', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(annotation, { status: 201 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.createAnnotation('b/1', annotation.cfiRange, 'markiert');
+
+		expect(res).toEqual(annotation);
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b%2F1/annotations');
+		expect(opts.method).toBe('POST');
+		expect(JSON.parse(opts.body)).toEqual({ cfiRange: annotation.cfiRange, excerpt: 'markiert' });
+	});
+
+	it('includes the note in the create body only when provided', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(annotation, { status: 201 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.createAnnotation('b1', 'cfi', 'text', 'meine Notiz');
+		expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+			cfiRange: 'cfi',
+			excerpt: 'text',
+			note: 'meine Notiz'
+		});
+	});
+
+	it('includes the color in the create body only when provided', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(annotation, { status: 201 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.createAnnotation('b1', 'cfi', 'text', undefined, 'blue');
+		expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+			cfiRange: 'cfi',
+			excerpt: 'text',
+			color: 'blue'
+		});
+	});
+
+	it('throws on a failed createAnnotation', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.createAnnotation('b1', 'cfi', 'text')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('patches an annotation note (including clearing it to null)', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ...annotation, note: null }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.updateAnnotationNote('a/1', null);
+
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/annotations/a%2F1');
+		expect(opts.method).toBe('PATCH');
+		expect(JSON.parse(opts.body)).toEqual({ note: null });
+	});
+
+	it('throws on a failed updateAnnotationNote', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.updateAnnotationNote('a1', 'x')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('patches an annotation color', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ...annotation, color: 'green' }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.updateAnnotationColor('a/1', 'green');
+
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/annotations/a%2F1');
+		expect(opts.method).toBe('PATCH');
+		expect(JSON.parse(opts.body)).toEqual({ color: 'green' });
+	});
+
+	it('throws on a failed updateAnnotationColor', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.updateAnnotationColor('a1', 'blue')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('deletes an annotation by id', async () => {
+		const res = { ok: true, status: 204, statusText: 'No Content', json: async () => null } as unknown as Response;
+		const fetchMock = vi.fn().mockResolvedValue(res);
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.deleteAnnotation('a1');
+
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/annotations/a1');
+		expect(opts.method).toBe('DELETE');
+	});
+
+	it('throws on a failed deleteAnnotation', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.deleteAnnotation('missing')).rejects.toBeInstanceOf(HttpError);
+	});
 });

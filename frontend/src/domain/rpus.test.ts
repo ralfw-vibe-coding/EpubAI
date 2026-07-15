@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isBookLocal, makeLoan, makeProgress, toBookDetail } from './rpus';
-import type { CatalogBook, Loan, ReadingProgress } from './types';
+import { isBookLocal, makeLoan, makeProgress, toBookDetail, withEditedColor } from './rpus';
+import type { Annotation, CatalogBook, Loan, ReadingProgress } from './types';
 
 describe('makeLoan', () => {
 	it('builds a loan record from its parts', () => {
@@ -47,6 +47,31 @@ describe('isBookLocal', () => {
 	it('is false when no loan exists', () => {
 		expect(isBookLocal(loans, 'b2')).toBe(false);
 		expect(isBookLocal([], 'b1')).toBe(false);
+	});
+});
+
+describe('withEditedColor', () => {
+	const ann: Annotation = {
+		id: 'a1',
+		bookId: 'b1',
+		cfiRange: 'epubcfi(/6/2!/4,/1:0,/1:9)',
+		excerpt: 'markiert',
+		note: 'eine Notiz',
+		color: 'accent',
+		createdAt: 'c1',
+		updatedAt: 'c1'
+	};
+
+	it('changes only the color and re-stamps updatedAt', () => {
+		expect(withEditedColor(ann, 'purple', 'c2')).toEqual({ ...ann, color: 'purple', updatedAt: 'c2' });
+	});
+
+	it('leaves cfiRange/excerpt/note/createdAt untouched', () => {
+		const updated = withEditedColor(ann, 'green', 'c2');
+		expect(updated.cfiRange).toBe(ann.cfiRange);
+		expect(updated.excerpt).toBe(ann.excerpt);
+		expect(updated.note).toBe(ann.note);
+		expect(updated.createdAt).toBe(ann.createdAt);
 	});
 });
 

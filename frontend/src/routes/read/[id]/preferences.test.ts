@@ -4,6 +4,7 @@ import {
 	DEFAULT_PREFS,
 	fontSizePx,
 	FONT_SIZES,
+	MARGIN_PADDING,
 	parsePrefs,
 	readerThemeStyles,
 	THEME_COLORS
@@ -39,17 +40,16 @@ describe('fontSizePx', () => {
 
 describe('readerThemeStyles', () => {
 	it('uses the theme colors and !important for the reading surface', () => {
-		const styles = readerThemeStyles('dunkel', 'normal') as Record<
-			string,
-			Record<string, string>
-		>;
+		const styles = readerThemeStyles('dunkel') as Record<string, Record<string, string>>;
 		expect(styles.body.background).toBe(`${THEME_COLORS.dunkel.bg} !important`);
 		expect(styles.body.color).toBe(`${THEME_COLORS.dunkel.fg} !important`);
 	});
-	it('maps margin presets to different padding', () => {
-		const schmal = readerThemeStyles('hell', 'schmal') as Record<string, Record<string, string>>;
-		const breit = readerThemeStyles('hell', 'breit') as Record<string, Record<string, string>>;
-		expect(schmal.body['padding-left']).not.toBe(breit.body['padding-left']);
+});
+
+describe('MARGIN_PADDING', () => {
+	it('maps each margin preset to a distinct px value', () => {
+		const values = new Set(Object.values(MARGIN_PADDING));
+		expect(values.size).toBe(3);
 	});
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidEmail, normalizeEmail } from "../../src/domain/userRpu.js";
+import { isValidEmail, normalizeEmail, normalizeOtpCode } from "../../src/domain/userRpu.js";
 
 describe("normalizeEmail", () => {
   it("trims whitespace and lowercases", () => {
@@ -31,5 +31,16 @@ describe("isValidEmail", () => {
 
   it("rejects strings with whitespace inside", () => {
     expect(isValidEmail("some one@example.com")).toBe(false);
+  });
+});
+
+describe("normalizeOtpCode", () => {
+  it("trims whitespace and uppercases", () => {
+    expect(normalizeOtpCode("  ab3dxy9k  ")).toBe("AB3DXY9K");
+  });
+
+  it("is idempotent", () => {
+    const once = normalizeOtpCode("Ab3dXy9k");
+    expect(normalizeOtpCode(once)).toBe(once);
   });
 });

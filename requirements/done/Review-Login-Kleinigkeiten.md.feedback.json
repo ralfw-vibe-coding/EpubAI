@@ -1,0 +1,85 @@
+{
+  "comments": [
+    {
+      "anchorHash": "d5b7f8ea56632cf1",
+      "comment": "ja, das passt.\n\nallerdings wird das secret OTP nicht mehr erkannt. das sind buchstaben und auch mehr als 6.",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T11:18:45.079Z",
+      "createdBy": "reviewer",
+      "endLine": 3,
+      "endOffset": 55,
+      "id": "fb-mrlzlro7",
+      "prefix": "# Abnahme: Login-Kleinigkeiten\n\n",
+      "quote": "## OTP-Eingabe maskiert",
+      "quotePreview": "## OTP-Eingabe maskiert",
+      "resolution": "Ursache gefunden: type=\"password\" hat zusammen mit autocomplete=\"one-time-code\" auf iOS/Safari eine rein numerische OTP-Tastatur erzwungen - Buchstaben und Codes über 6 Zeichen waren dadurch gar nicht eingebbar, genau das, was §4.2b explizit ausschließt. Jetzt maskiert über -webkit-text-security (nur optisch, ändert nichts an Tastatur/Eingabeverhalten). Live getestet: ein 8-stelliger Buchstaben+Zahlen-Code lässt sich wieder normal eingeben und wird als Punkte angezeigt.\n\nNachtrag: Missverständnis geklärt - AUTH_SECRET_OTP (\"hibiskus\") war nie deprecated, sondern ist eine bewusste, dauerhafte Testing-Hintertür und war versehentlich beim Bau von \"Echter Login\" mit entfernt worden. Jetzt wieder eingebaut: der feste Code funktioniert wieder für jede E-Mail-Adresse, ohne Ablauf oder Versuchslimit, parallel zu den echten individuellen Codes. Live gegen den Server getestet (curl mit \"hibiskus\" -> 200, Token ausgestellt).",
+      "startLine": 3,
+      "startOffset": 32,
+      "status": "edited",
+      "suffix": "\n\nDas Code-Eingabefeld beim Anmelden zeigt die Zeichen jetzt wie ein Passwortfeld verdeckt an (Punkte statt Klartext). Bitte einmal im Login-Flow prüfen, ob das",
+      "thread": [
+        {
+          "body": "ja, das passt.\n\nallerdings wird das secret OTP nicht mehr erkannt. das sind buchstaben und auch mehr als 6.",
+          "createdAt": "2026-07-15T11:18:45.079Z",
+          "createdBy": "reviewer",
+          "id": "th-mrlzlro7",
+          "type": "comment"
+        },
+        {
+          "id": "th-mrlzlro7-r1",
+          "type": "redaction",
+          "createdBy": "assistant",
+          "createdAt": "2026-07-15T11:28:47.877Z",
+          "body": "Ursache gefunden: type=\"password\" hat zusammen mit autocomplete=\"one-time-code\" auf iOS/Safari eine rein numerische OTP-Tastatur erzwungen - Buchstaben und Codes über 6 Zeichen waren dadurch gar nicht eingebbar, genau das, was §4.2b explizit ausschließt. Jetzt maskiert über -webkit-text-security (nur optisch, ändert nichts an Tastatur/Eingabeverhalten). Live getestet: ein 8-stelliger Buchstaben+Zahlen-Code lässt sich wieder normal eingeben und wird als Punkte angezeigt."
+        },
+        {
+          "id": "th-mrlzlro7-r2",
+          "type": "redaction",
+          "createdBy": "assistant",
+          "createdAt": "2026-07-15T11:43:37.913Z",
+          "body": "Nachtrag: Missverständnis geklärt - AUTH_SECRET_OTP (\"hibiskus\") war nie deprecated, sondern ist eine bewusste, dauerhafte Testing-Hintertür und war versehentlich beim Bau von \"Echter Login\" mit entfernt worden. Jetzt wieder eingebaut: der feste Code funktioniert wieder für jede E-Mail-Adresse, ohne Ablauf oder Versuchslimit, parallel zu den echten individuellen Codes. Live gegen den Server getestet (curl mit \"hibiskus\" -> 200, Token ausgestellt)."
+        }
+      ],
+      "updatedAt": "2026-07-15T11:43:37.913Z"
+    },
+    {
+      "anchorHash": "7a0654fb70fe76c0",
+      "comment": "das sieht gut aus!",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T11:19:00.727Z",
+      "createdBy": "reviewer",
+      "endLine": 7,
+      "endOffset": 375,
+      "id": "fb-mrlzm3qv",
+      "prefix": "ogin-Flow prüfen, ob das so gewünscht war — insbesondere, ob das Fehlen von sichtbarem Text beim Tippen eines längeren, unbekannten Codes stört oder nicht.\n\n## ",
+      "quote": "OTP-E-Mail: neues Layout",
+      "quotePreview": "OTP-E-Mail: neues Layout",
+      "resolution": "Bestätigt, keine Änderung nötig.",
+      "startLine": 7,
+      "startOffset": 351,
+      "status": "edited",
+      "suffix": "\n\nDie Anmeldecode-E-Mail hat jetzt ein HTML-Layout: EpubAI-Kopfzeile, mittig ein großer, deutlich hervorgehobener Code in Monospace-Schrift mit Rahmen, darunter",
+      "thread": [
+        {
+          "body": "das sieht gut aus!",
+          "createdAt": "2026-07-15T11:19:00.727Z",
+          "createdBy": "reviewer",
+          "id": "th-mrlzm3qv",
+          "type": "comment"
+        },
+        {
+          "id": "th-mrlzm3qv-r1",
+          "type": "redaction",
+          "createdBy": "assistant",
+          "createdAt": "2026-07-15T11:28:47.877Z",
+          "body": "Bestätigt, keine Änderung nötig."
+        }
+      ],
+      "updatedAt": "2026-07-15T11:28:47.877Z"
+    }
+  ],
+  "file": "Review-Login-Kleinigkeiten.md",
+  "sourcePath": "/Users/ralfw/Repositories/08 Vibe Coding/EpubAI/requirements/Review-Login-Kleinigkeiten.md",
+  "updatedAt": "2026-07-15T11:43:37.913Z",
+  "version": 1
+}
