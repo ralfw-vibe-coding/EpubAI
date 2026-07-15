@@ -9,7 +9,9 @@ export interface AuthVerifyCodeInput {
   code: unknown;
 }
 
-export type AuthVerifyCodeBody = { token: string; userId: string } | { error: string };
+export type AuthVerifyCodeBody =
+  | { token: string; userId: string; translationLanguage: string }
+  | { error: string };
 
 /**
  * Reactor for POST /auth/login/verify.
@@ -32,7 +34,7 @@ export async function authVerifyCode(input: AuthVerifyCodeInput): Promise<Reacto
   if (otpCheck.isBackdoorCode(normalizedCode)) {
     const user = await userRepo.findOrCreateByEmail(email);
     const token = jwtProvider.sign({ userId: user.id });
-    return ok(200, { token, userId: user.id });
+    return ok(200, { token, userId: user.id, translationLanguage: user.translationLanguage });
   }
 
   const user = await userRepo.findByEmail(email);
@@ -49,5 +51,5 @@ export async function authVerifyCode(input: AuthVerifyCodeInput): Promise<Reacto
   await userRepo.clearOtp(user.id);
   const token = jwtProvider.sign({ userId: user.id });
 
-  return ok(200, { token, userId: user.id });
+  return ok(200, { token, userId: user.id, translationLanguage: user.translationLanguage });
 }

@@ -85,7 +85,8 @@ export function createHttpClient(
 				body: JSON.stringify({ email, code })
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
-			return (await res.json()) as Session;
+			const body = (await res.json()) as { token: string; userId: string; translationLanguage: string };
+			return { token: body.token, userId: body.userId, translationLanguage: body.translationLanguage };
 		},
 
 		async getBooks(): Promise<CatalogBook[]> {
@@ -286,6 +287,39 @@ export function createHttpClient(
 				headers: authHeaders()
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
+		},
+
+		async translateSelection(text: string, lang: string): Promise<string> {
+			const res = await fetchImpl(`${base}/ai/translate`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({ text, lang })
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			const body = (await res.json()) as { text: string };
+			return body.text;
+		},
+
+		async lookupSelection(text: string, lang: string): Promise<string> {
+			const res = await fetchImpl(`${base}/ai/lookup`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({ text, lang })
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			const body = (await res.json()) as { text: string };
+			return body.text;
+		},
+
+		async updateAccountSettings(translationLanguage: string): Promise<string> {
+			const res = await fetchImpl(`${base}/account`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({ translationLanguage })
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			const body = (await res.json()) as { translationLanguage: string };
+			return body.translationLanguage;
 		}
 	};
 }

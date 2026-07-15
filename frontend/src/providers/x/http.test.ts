@@ -51,21 +51,27 @@ describe('createHttpClient', () => {
 	});
 
 	it('verifies a code and returns the session', async () => {
-		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ token: 't', userId: 'u' }));
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ token: 't', userId: 'u', translationLanguage: 'de' }));
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
-		expect(await http.verifyLoginCode('a@b.de', 'hibiskus')).toEqual({ token: 't', userId: 'u' });
+		expect(await http.verifyLoginCode('a@b.de', 'hibiskus')).toEqual({
+			token: 't',
+			userId: 'u',
+			translationLanguage: 'de'
+		});
 	});
 
 	it('strips a trailing slash from the base URL', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ books: [] }));
-		const http = createHttpClient('http://api/', fakeAuthStore({ token: 't', userId: 'u' }), fetchMock);
+		const http = createHttpClient('http://api/', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }), fetchMock);
 		await http.getBooks();
 		expect(fetchMock.mock.calls[0][0]).toBe('http://api/books');
 	});
 
 	it('attaches the bearer token when authenticated', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ books: [] }));
-		const http = createHttpClient('http://api', fakeAuthStore({ token: 'abc', userId: 'u' }), fetchMock);
+		const http = createHttpClient('http://api', fakeAuthStore({ token: 'abc', userId: 'u', translationLanguage: 'de' }), fetchMock);
 		await http.getBooks();
 		expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer abc');
 	});
@@ -95,7 +101,7 @@ describe('createHttpClient', () => {
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValue(jsonResponse({ id: 'l1', bookId: 'b1', fileHash: 'h', borrowedAt: 't' }));
-		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u' }), fetchMock);
+		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }), fetchMock);
 		await http.createLoan('b1', 'dev1');
 		const [url, opts] = fetchMock.mock.calls[0];
 		expect(url).toBe('http://api/loans');
@@ -105,7 +111,7 @@ describe('createHttpClient', () => {
 	it('ends a loan with bookId in the URL and deviceId in the body', async () => {
 		const res = { ok: true, status: 204, statusText: 'No Content', json: async () => null } as unknown as Response;
 		const fetchMock = vi.fn().mockResolvedValue(res);
-		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u' }), fetchMock);
+		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }), fetchMock);
 		await http.returnLoan('b1', 'dev1');
 
 		const [url, opts] = fetchMock.mock.calls[0];
@@ -163,7 +169,7 @@ describe('createHttpClient', () => {
 		});
 		const http = createHttpClient(
 			'http://api',
-			fakeAuthStore({ token: 't', userId: 'u' }),
+			fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }),
 			fetch,
 			() => instance
 		);
@@ -352,7 +358,7 @@ describe('createHttpClient', () => {
 
 	it('unwraps the annotations array from GET /annotations', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ annotations: [annotation] }));
-		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u' }), fetchMock);
+		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }), fetchMock);
 		expect(await http.getAllAnnotations()).toEqual([annotation]);
 		expect(fetchMock.mock.calls[0][0]).toBe('http://api/annotations');
 	});
@@ -462,5 +468,65 @@ describe('createHttpClient', () => {
 			.mockResolvedValue(jsonResponse({ error: 'not found' }, { ok: false, status: 404 }));
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
 		await expect(http.deleteAnnotation('missing')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('translates a selection', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ text: 'Hello world' }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.translateSelection('Hallo Welt', 'en');
+
+		expect(res).toBe('Hello world');
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/ai/translate');
+		expect(opts.method).toBe('POST');
+		expect(JSON.parse(opts.body)).toEqual({ text: 'Hallo Welt', lang: 'en' });
+	});
+
+	it('throws on a failed translateSelection', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'translate_failed' }, { ok: false, status: 502 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.translateSelection('Hallo', 'en')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('looks up a selection', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ text: 'Erklärung' }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.lookupSelection('Begriff', 'de');
+
+		expect(res).toBe('Erklärung');
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/ai/lookup');
+		expect(opts.method).toBe('POST');
+		expect(JSON.parse(opts.body)).toEqual({ text: 'Begriff', lang: 'de' });
+	});
+
+	it('throws on a failed lookupSelection', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'lookup_failed' }, { ok: false, status: 502 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.lookupSelection('Begriff', 'de')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('updates the account translation language', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ translationLanguage: 'fr' }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.updateAccountSettings('fr');
+
+		expect(res).toBe('fr');
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/account');
+		expect(opts.method).toBe('PATCH');
+		expect(JSON.parse(opts.body)).toEqual({ translationLanguage: 'fr' });
+	});
+
+	it('throws on a failed updateAccountSettings', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'invalid_input' }, { ok: false, status: 400 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.updateAccountSettings('xx')).rejects.toBeInstanceOf(HttpError);
 	});
 });

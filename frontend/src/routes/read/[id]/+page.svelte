@@ -3,10 +3,24 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import ePub, { type Book, type NavItem, type Rendition } from 'epubjs';
-	import { List, Settings, X, Minus, Plus, Highlighter, Trash2, Check } from 'lucide-svelte';
+	import { marked } from 'marked';
+	import DOMPurify from 'dompurify';
+	import {
+		List,
+		Settings,
+		X,
+		Minus,
+		Plus,
+		Highlighter,
+		Trash2,
+		Check,
+		Languages,
+		BookOpenText
+	} from 'lucide-svelte';
 	import type { Annotation, AnnotationColor } from '../../../domain/types';
-	import { getProcessor, isAuthenticated } from '../../../portal/runtime';
+	import { getProcessor, getSession, isAuthenticated } from '../../../portal/runtime';
 	import { colorHex, HIGHLIGHT_COLORS, highlightStyles } from './colors';
+	import { AVAILABLE_LANGUAGES } from './languages';
 	import {
 		DEFAULT_PREFS,
 		FONT_SIZES,
@@ -60,6 +74,70 @@
 		annotationError = message;
 		if (annotationErrorTimer) clearTimeout(annotationErrorTimer);
 		annotationErrorTimer = setTimeout(() => (annotationError = null), 4000);
+	}
+
+	// AI assist (§4.6): "Übersetzen"/"Nachschlagen" on the selection bar, and the
+	// translation target language picked in Settings. `aiResult` drives the
+	// bottom sheet showing the (loading/error/finished) result of either call.
+	let translationLanguage = $state('de');
+	let aiResult = $state<{
+		kind: 'translate' | 'lookup';
+		loading: boolean;
+		text: string | null;
+		error: string | null;
+	} | null>(null);
+	// Claude's translate/lookup responses are often Markdown (headers, bold,
+	// lists - see §4.6 prompts in backend/src/providers/x/claude.ts) - render
+	// it properly rather than showing the raw syntax. Sanitized because the
+	// source text driving the prompt is the book's own content, not something
+	// we authored ourselves.
+	let aiResultHtml = $derived(
+		aiResult?.text ? DOMPurify.sanitize(marked.parse(aiResult.text, { async: false })) : ''
+	);
+
+	async function translateExcerpt() {
+		if (!selection) return;
+		const excerpt = selection.excerpt;
+		aiResult = { kind: 'translate', loading: true, text: null, error: null };
+		try {
+			const text = await getProcessor().translateSelection(excerpt, translationLanguage);
+			aiResult = { kind: 'translate', loading: false, text, error: null };
+		} catch {
+			aiResult = {
+				kind: 'translate',
+				loading: false,
+				text: null,
+				error: 'Übersetzung fehlgeschlagen — keine Verbindung.'
+			};
+		}
+	}
+
+	async function lookupExcerpt() {
+		if (!selection) return;
+		const excerpt = selection.excerpt;
+		aiResult = { kind: 'lookup', loading: true, text: null, error: null };
+		try {
+			const text = await getProcessor().lookupSelection(excerpt, translationLanguage);
+			aiResult = { kind: 'lookup', loading: false, text, error: null };
+		} catch {
+			aiResult = {
+				kind: 'lookup',
+				loading: false,
+				text: null,
+				error: 'Nachschlagen fehlgeschlagen — keine Verbindung.'
+			};
+		}
+	}
+
+	async function setLanguage(lang: string) {
+		const previous = translationLanguage;
+		translationLanguage = lang;
+		try {
+			await getProcessor().setTranslationLanguage(lang);
+		} catch {
+			translationLanguage = previous;
+			showAnnotationError('Sprache konnte nicht gespeichert werden — keine Verbindung.');
+		}
 	}
 
 	/** Render one stored annotation as an epub.js highlight (click opens its note editor). */
@@ -142,6 +220,7 @@
 			return;
 		}
 		prefs = parsePrefs(localStorage.getItem(STORAGE_KEY));
+		translationLanguage = getSession()?.translationLanguage ?? 'de';
 		try {
 			const { data, progress, title } = await getProcessor().openBookForReading(bookId);
 
@@ -207,6 +286,15 @@
 				const text = contents.window.getSelection()?.toString().trim() ?? '';
 				if (!text) return;
 				selection = { cfiRange, excerpt: text };
+			});
+
+			// epub.js only ever emits 'selected' for a *non-empty* selection - tapping
+			// elsewhere to deselect (collapsing the range) fires no event of its own,
+			// so the action bar would otherwise stay stuck. 'click' is forwarded for
+			// every tap regardless, so use it to notice the selection is now gone.
+			rendition.on('click', (_event: MouseEvent, contents: { window: Window }) => {
+				const text = contents.window.getSelection()?.toString().trim() ?? '';
+				if (!text) selection = null;
 			});
 
 			// Re-apply this book's stored highlights from the LOCAL cache (never a
@@ -446,7 +534,7 @@
 			</div>
 		{/if}
 
-		{#if selection}
+		{#if selection && !aiResult}
 			<div class="absolute inset-x-0 bottom-4 z-40 flex justify-center">
 				<div class="flex items-center gap-1.5 border-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-2 py-1.5 shadow">
 					{#each HIGHLIGHT_COLORS as color (color.value)}
@@ -457,6 +545,20 @@
 							style="background-color: {color.hex}"
 						></button>
 					{/each}
+					<button
+						onclick={translateExcerpt}
+						aria-label="Übersetzen"
+						class="ml-1 flex flex-none items-center gap-1 border-l-2 border-[var(--color-divider)] py-2 pl-2 text-sm text-[var(--color-accent-700)]"
+					>
+						<Languages size={16} /> Übersetzen
+					</button>
+					<button
+						onclick={lookupExcerpt}
+						aria-label="Nachschlagen"
+						class="flex flex-none items-center gap-1 py-2 text-sm text-[var(--color-accent-700)]"
+					>
+						<BookOpenText size={16} /> Nachschlagen
+					</button>
 					<button
 						onclick={() => (selection = null)}
 						aria-label="Abbrechen"
@@ -602,6 +704,25 @@
 					{/each}
 				</div>
 			</div>
+
+			<div class="mt-2 border-t-2 border-[var(--color-divider)] py-3">
+				<span class="text-sm text-[var(--color-neutral-700)]">Übersetzungssprache</span>
+				<p class="mt-0.5 text-xs text-[var(--color-neutral-700)]">
+					Die Sprache gilt für das Konto, d.h. alle Bücher und Geräte.
+				</p>
+				<div class="mt-2 flex flex-wrap gap-2">
+					{#each AVAILABLE_LANGUAGES as option (option.value)}
+						<button
+							onclick={() => setLanguage(option.value)}
+							class="border px-3 py-2 text-sm {translationLanguage === option.value
+								? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-[var(--color-bg)]'
+								: 'border-[var(--color-divider)] text-[var(--color-text)]'}"
+						>
+							{option.label}
+						</button>
+					{/each}
+				</div>
+			</div>
 		</section>
 	{/if}
 
@@ -711,6 +832,39 @@
 					<Trash2 size={16} /> Löschen
 				</button>
 			</div>
+		</section>
+	{/if}
+
+	{#if aiResult}
+		<button
+			aria-label="Schließen"
+			onclick={() => (aiResult = null)}
+			class="absolute inset-0 z-20 bg-black/40"
+		></button>
+		<section
+			class="absolute inset-x-0 bottom-0 z-30 border-t-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+		>
+			<div class="mb-3 flex items-center justify-between">
+				<span class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">
+					{aiResult.kind === 'translate' ? 'Übersetzung' : 'Worterklärung'}
+				</span>
+				<button onclick={() => (aiResult = null)} aria-label="Schließen" class="text-[var(--color-accent-700)]">
+					<X size={20} />
+				</button>
+			</div>
+			{#if aiResult.loading}
+				<p class="py-4 text-center text-sm text-[var(--color-neutral-700)]">Einen Moment…</p>
+			{:else if aiResult.error}
+				<p class="bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
+					{aiResult.error}
+				</p>
+			{:else}
+				<div
+					class="max-h-[40vh] overflow-y-auto text-sm text-[var(--color-text)] [&_h1]:mt-2 [&_h1]:mb-1 [&_h1]:text-base [&_h1]:font-bold [&_h2]:mt-2 [&_h2]:mb-1 [&_h2]:text-base [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:mb-1 [&_h3]:font-semibold [&_p]:mb-2 [&_strong]:font-semibold [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-0.5"
+				>
+					{@html aiResultHtml}
+				</div>
+			{/if}
 		</section>
 	{/if}
 </div>

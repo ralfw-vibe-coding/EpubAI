@@ -18,6 +18,10 @@ alter table "user" add column if not exists otp_code_hash text;
 alter table "user" add column if not exists otp_expires_at timestamptz;
 alter table "user" add column if not exists otp_attempts integer not null default 0;
 
+-- Account setting: language used by the translate AI feature, geräteübergreifend
+-- (Requirements 4.5 "Account-Einstellungen"). 'de' matches the app's own UI language.
+alter table "user" add column if not exists translation_language text not null default 'de';
+
 create table if not exists book (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references "user"(id),

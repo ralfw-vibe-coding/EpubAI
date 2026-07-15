@@ -15,6 +15,7 @@ export interface LoginRequestResult {
 export interface Session {
 	token: string;
 	userId: string;
+	translationLanguage: string;
 }
 
 export interface LoanResponse {
@@ -89,6 +90,12 @@ export interface HttpClient {
 	updateAnnotationColor(id: string, color: string): Promise<Annotation>;
 	/** Delete an annotation by id. */
 	deleteAnnotation(id: string): Promise<void>;
+	/** Translate a selected excerpt into the given target language (AI, §4.6). */
+	translateSelection(text: string, lang: string): Promise<string>;
+	/** Explain/look up a selected word or phrase (AI, §4.6). */
+	lookupSelection(text: string, lang: string): Promise<string>;
+	/** Persist the user's preferred translation target language; returns the confirmed value. */
+	updateAccountSettings(translationLanguage: string): Promise<string>;
 }
 
 /** Stores the auth session (token + userId) and the backend auth header. */

@@ -140,7 +140,7 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 
 	const impl: HttpClient = {
 		requestLoginCode: record('requestLoginCode', { ok: true }),
-		verifyLoginCode: record('verifyLoginCode', { token: 'tok', userId: 'u1' }),
+		verifyLoginCode: record('verifyLoginCode', { token: 'tok', userId: 'u1', translationLanguage: 'de' }),
 		getBooks: record('getBooks', [defaultBook]),
 		getBook: record('getBook', defaultBook),
 		createLoan: record('createLoan', defaultLoan),
@@ -155,6 +155,9 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		updateAnnotationNote: record('updateAnnotationNote', defaultAnnotation),
 		updateAnnotationColor: record('updateAnnotationColor', defaultAnnotation),
 		deleteAnnotation: record('deleteAnnotation', undefined as void),
+		translateSelection: record('translateSelection', 'Übersetzter Text'),
+		lookupSelection: record('lookupSelection', 'Erklärung des Begriffs'),
+		updateAccountSettings: record('updateAccountSettings', 'de'),
 		...overrides
 	};
 	return { impl, calls };

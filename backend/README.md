@@ -11,18 +11,20 @@ Four layers, per Requirements §4.7:
 - **Portal** (`src/portal/`) — Fastify routes. Pure HTTP-to-Reactor translation, no business logic.
 - **Processor** (`src/processor/`) — one Reactor per endpoint (`authRequestCode`, `authVerifyCode`,
   `listBooks`, `getBook`, `uploadEpub`, `createBook`, `updateBook`, `deleteBook`, `borrowBook`,
-  `getBookFile`). Composition only.
+  `getBookFile`, `listAnnotations`, `createAnnotation`, `updateAnnotation`, `deleteAnnotation`,
+  `translateText`, `lookupText`, `updateAccountSettings`). Composition only.
 - **Domain** (`src/domain/`) — RPUs (nearly-pure functions) + shared types. Knows nothing about
-  Postgres, R2, JWT, etc.
+  Postgres, R2, JWT, Claude, etc.
 - **Providers**:
   - **dProvider** (`src/providers/d/`) — Neon Postgres, the only persistence the Domain concept
-    is ever expressed through (`db.ts`, `userRepo.ts`, `bookRepo.ts`, `bookFileRepo.ts`, `loanRepo.ts`).
+    is ever expressed through (`db.ts`, `userRepo.ts`, `bookRepo.ts`, `bookFileRepo.ts`, `loanRepo.ts`,
+    `annotationRepo.ts`).
   - **xProvider** (`src/providers/x/`) — everything else external: `resend.ts` (real OTP email
     delivery via Resend), `otpCheck.ts` (generates real per-user codes, hashes them, and verifies
     with expiry + attempt-limit; also checks the optional `AUTH_SECRET_OTP` local-dev backdoor -
     see below), `jwt.ts` (sign/verify), `r2.ts` (Cloudflare R2 / S3, incl.
     presigned GET URLs), `epubParser.ts` (zip + OPF/XML metadata extraction incl. cover image,
-    zip-bomb and XXE guarded).
+    zip-bomb and XXE guarded), `claude.ts` (Claude API client for translate/lookup, see below).
 
 ## Setup
 
@@ -34,8 +36,8 @@ npm run migrate   # applies db/schema.sql to DATABASE_URL from ../.env (idempote
 
 `.env` lives at the repo root (`../.env` from `backend/`) and must define: `DATABASE_URL`,
 `R2_BUCKET`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `AUTH_SESSION_SECRET`,
-`RESEND_API_KEY`, `AUTH_FROM_EMAIL`, `JWT_TTL_SECONDS`. `config.ts` fails fast (naming only the
-missing variable names, never values) if any are absent.
+`RESEND_API_KEY`, `AUTH_FROM_EMAIL`, `JWT_TTL_SECONDS`, `CLAUDE_API_KEY`. `config.ts` fails fast
+(naming only the missing variable names, never values) if any are absent.
 
 `AUTH_SECRET_OTP` is optional: if set, `POST /auth/login/verify` accepts it as a fixed login code
 for *any* email, with no expiry or attempt-limit - a deliberate local-dev shortcut so testing
@@ -59,8 +61,8 @@ npm run coverage    # vitest run --coverage
 
 Domain, Reactors, and the provider wrappers that don't need a real network connection
 (`jwt.ts`, `otpCheck.ts`, `epubParser.ts`) are unit-tested with fakes/doubles
-and are held to an 80%+ coverage bar (currently **94.2% statements/lines, 91.0% branches, 100%
-functions**, 208 tests — see `vitest.config.ts`). `epubParser.ts` in particular has a dedicated test
+and are held to an 80%+ coverage bar (currently **93.9% statements/lines, 90.8% branches, 100%
+functions**, 223 tests — see `vitest.config.ts`). `epubParser.ts` in particular has a dedicated test
 (`test/providers/epubParser.test.ts`) that builds an in-memory zip-bomb-shaped fixture (tiny
 compressed size, large decompressed size) and asserts the parser aborts mid-stream once the
 ~25 MB unpacked budget is exceeded — the actual zip-bomb defense, not just a config value — plus
@@ -70,8 +72,8 @@ proves the byte budget is enforced while reading the cover entry too, not just t
 
 Excluded from the coverage gate, per Requirements §4.7 ("schwer testbare Provider"): Portal
 (pure routing), `providers/d/**` (real Neon connection), `providers/x/r2.ts` (real R2/S3
-connection), and `providers/x/resend.ts` (real Resend API) — these are only exercised by the
-manual smoke test below.
+connection), `providers/x/resend.ts` (real Resend API), and `providers/x/claude.ts` (real
+Claude API) — these are only exercised by the manual smoke test below.
 
 ## Database
 
@@ -304,7 +306,31 @@ back to `"WHEN_REQUIRED"` (the pre-3.729 SDK default) in the `S3Client` construc
 
 ## What's not built (out of scope for this walking skeleton)
 
-Everything beyond the 8 listed endpoints plus the catalog maintenance above: signout, reading
-progress, annotations sync, archive export, chat/translate/lookup (Claude API), account settings,
-and the async text-extraction queue (§4.6) — `processingStatus` is set to `"ready"` immediately at
-`POST /books` since no background pipeline exists yet to move it there later.
+Everything beyond the 8 listed endpoints plus the catalog maintenance, annotations, and AI
+endpoints above: signout, reading progress, archive export, chat/Q&A per book (Claude API with
+prompt caching), and the async text-extraction queue (§4.6) — `processingStatus` is set to
+`"ready"` immediately at `POST /books` since no background pipeline exists yet to move it there
+later.
+
+## AI endpoints (translate / lookup) and account settings
+
+`POST /ai/translate` and `POST /ai/lookup` (Requirements §3.4/§4.6, Interface-Durchstich #21/#22)
+are stateless Claude API calls with no dependency on a book's stored text - each is a standalone
+Claude request built from the marked selection alone, unlike the (not yet built) per-book chat,
+which will use prompt caching over the full book text.
+
+- `POST /ai/translate` — body `{ text, lang }`. `lang` is a plain language code/name (`"de"`,
+  `"en"`, `"fr"`, ...) interpolated directly into the prompt. Returns `{ text: <translation> }`.
+- `POST /ai/lookup` — body `{ text }`. Explains the marked word/phrase/concept concisely; the
+  explanation is always in German (the app's own UI language) regardless of the book's language
+  or the caller's `translationLanguage` setting - those are unrelated. Returns `{ text: <explanation> }`.
+- Both require a bearer token (`401 {"error":"unauthorized"}` otherwise), validate their string
+  inputs (`400 {"error":"invalid_input"}`), and turn a Claude API failure into
+  `502 {"error":"translate_failed"}` / `502 {"error":"lookup_failed"}`.
+
+`PATCH /account` (Interface-Durchstich #23) updates the caller's `translationLanguage` account
+setting (geräteübergreifend, i.e. not per-device) - body `{ translationLanguage }`, returns
+`{ translationLanguage }` on success, same `400`/`401` shape as above. `User.translationLanguage`
+(`translation_language` column, default `'de'`) is also now returned as part of a successful
+`POST /auth/login/verify` (`{ token, userId, translationLanguage }`), so the frontend always has
+the current setting right after login without a separate round trip.

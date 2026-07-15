@@ -11,3 +11,4 @@ process.env.RESEND_API_KEY = "test-resend-api-key-not-real";
 process.env.AUTH_FROM_EMAIL = "login@epubai.test";
 process.env.AUTH_SECRET_OTP = "TESTOTP123";
 process.env.JWT_TTL_SECONDS = "604800";
+process.env.CLAUDE_API_KEY = "test-claude-api-key-not-real";

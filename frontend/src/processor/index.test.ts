@@ -40,12 +40,14 @@ describe('processor reactors', () => {
 	it('verifyLoginCode stores the session', async () => {
 		const { deps, auth } = makeDeps();
 		const session = await createProcessor(deps).verifyLoginCode('a@b.de', 'hibiskus');
-		expect(session).toEqual({ token: 'tok', userId: 'u1' });
+		expect(session).toEqual({ token: 'tok', userId: 'u1', translationLanguage: 'de' });
 		expect(auth.get()).toEqual(session);
 	});
 
 	it('signOut clears the session', async () => {
-		const { deps, auth } = makeDeps({ auth: fakeAuthStore({ token: 't', userId: 'u' }) });
+		const { deps, auth } = makeDeps({
+			auth: fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' })
+		});
 		await createProcessor(deps).signOut();
 		expect(auth.get()).toBeNull();
 	});
@@ -423,6 +425,73 @@ describe('processor reactors', () => {
 
 			expect(res).toEqual([created]);
 			expect(http.calls.map((c) => c.method)).not.toContain('getAllAnnotations');
+		});
+	});
+
+	describe('AI assist', () => {
+		it('translateSelection delegates to http with the excerpt and target language', async () => {
+			const { deps, http } = makeDeps();
+			const res = await createProcessor(deps).translateSelection('Hallo Welt', 'en');
+
+			expect(res).toBe('Übersetzter Text');
+			const call = http.calls.find((c) => c.method === 'translateSelection');
+			expect(call?.args).toEqual(['Hallo Welt', 'en']);
+		});
+
+		it('translateSelection throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				translateSelection: async () => {
+					throw new Error('translate_failed');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).translateSelection('Hallo', 'en')).rejects.toThrow(
+				'translate_failed'
+			);
+		});
+
+		it('lookupSelection delegates to http with the excerpt and language', async () => {
+			const { deps, http } = makeDeps();
+			const res = await createProcessor(deps).lookupSelection('Begriff', 'de');
+
+			expect(res).toBe('Erklärung des Begriffs');
+			const call = http.calls.find((c) => c.method === 'lookupSelection');
+			expect(call?.args).toEqual(['Begriff', 'de']);
+		});
+
+		it('lookupSelection throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				lookupSelection: async () => {
+					throw new Error('lookup_failed');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).lookupSelection('Begriff', 'de')).rejects.toThrow(
+				'lookup_failed'
+			);
+		});
+
+		it('setTranslationLanguage delegates to http.updateAccountSettings with the chosen language', async () => {
+			const { deps, http } = makeDeps();
+			await createProcessor(deps).setTranslationLanguage('fr');
+			const call = http.calls.find((c) => c.method === 'updateAccountSettings');
+			expect(call?.args).toEqual(['fr']);
+		});
+
+		it('setTranslationLanguage updates the cached session with the confirmed value', async () => {
+			const http = fakeHttp({ updateAccountSettings: async () => 'fr' });
+			const auth = fakeAuthStore({ token: 't', userId: 'u1', translationLanguage: 'de' });
+			const { deps } = makeDeps({ http: http.impl, auth });
+			await createProcessor(deps).setTranslationLanguage('fr');
+
+			expect(auth.get()).toEqual({ token: 't', userId: 'u1', translationLanguage: 'fr' });
+		});
+
+		it('setTranslationLanguage does nothing to the session when unauthenticated', async () => {
+			const auth = fakeAuthStore(null);
+			const { deps } = makeDeps({ auth });
+			await createProcessor(deps).setTranslationLanguage('fr');
+			expect(auth.get()).toBeNull();
 		});
 	});
 });

@@ -13,13 +13,16 @@ import { deleteAnnotation } from './reactors/deleteAnnotation';
 import { deleteBook } from './reactors/deleteBook';
 import { loadAnnotations } from './reactors/loadAnnotations';
 import { loadCatalog } from './reactors/loadCatalog';
+import { lookupSelection } from './reactors/lookupSelection';
 import { openBookDetail } from './reactors/openBookDetail';
 import { openBookForReading, type OpenForReadingResult } from './reactors/openBookForReading';
 import { requestLoginCode } from './reactors/requestLoginCode';
 import { returnLoan } from './reactors/returnLoan';
 import { saveReadingProgress } from './reactors/saveReadingProgress';
+import { setTranslationLanguage } from './reactors/setTranslationLanguage';
 import { signOut } from './reactors/signOut';
 import { syncAnnotations } from './reactors/syncAnnotations';
+import { translateSelection } from './reactors/translateSelection';
 import { updateAnnotationColor } from './reactors/updateAnnotationColor';
 import { updateAnnotationNote } from './reactors/updateAnnotationNote';
 import { updateBookMetadata } from './reactors/updateBookMetadata';
@@ -81,7 +84,11 @@ export function createProcessor(deps: ReactorDeps) {
 			updateAnnotationNote(deps, annotation, note),
 		updateAnnotationColor: (annotation: Annotation, color: AnnotationColor): Promise<Annotation> =>
 			updateAnnotationColor(deps, annotation, color),
-		deleteAnnotation: (id: string): Promise<void> => deleteAnnotation(deps, id)
+		deleteAnnotation: (id: string): Promise<void> => deleteAnnotation(deps, id),
+		translateSelection: (text: string, lang: string): Promise<string> =>
+			translateSelection(deps, text, lang),
+		lookupSelection: (text: string, lang: string): Promise<string> => lookupSelection(deps, text, lang),
+		setTranslationLanguage: (lang: string): Promise<void> => setTranslationLanguage(deps, lang)
 	};
 }
 

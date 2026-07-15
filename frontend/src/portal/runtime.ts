@@ -7,6 +7,7 @@ import { createClock } from '../providers/x/clock';
 import { createDeviceProvider } from '../providers/x/device';
 import { createHttpClient } from '../providers/x/http';
 import { createFileStore } from '../providers/x/opfs-files';
+import type { Session } from '../processor/ports';
 
 /**
  * Portal composition root: wires the real providers, the Domain and the
@@ -45,4 +46,9 @@ export function getProcessor(): Processor {
 /** Synchronous check used by the Portal to decide login vs. library at startup. */
 export function isAuthenticated(): boolean {
 	return auth.get() !== null;
+}
+
+/** The current session (token/userId/translationLanguage), or null when signed out. */
+export function getSession(): Session | null {
+	return auth.get();
 }

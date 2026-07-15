@@ -1,0 +1,113 @@
+{
+  "comments": [
+    {
+      "anchorHash": "a7b9213a494bca41",
+      "comment": "funktioniert. aber: wenn ich die übersetzung schließe, dann ist die selektion grau und ich sehe keine weiteren möglichkeiten, damit etwas zu machen. ich kann nur deselektieren.\n\nes soll aber weiterhin die auswahl mit den farben und übersetzung/nachschlagen zu sehen sein. vllt möchte ich jetzt nachschlagen oder markieren.\n\naußerdem: die übersetzung darf etwas ausführlicher sein. bisher bekomme ich nur genau 1 wort. beser wäre eine übersetzung, wie sie im wörterbuch steht.",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T16:28:50.391Z",
+      "createdBy": "reviewer",
+      "endLine": 5,
+      "endOffset": 295,
+      "id": "fb-mrmaojmf",
+      "prefix": "# Abnahme: Übersetzung & Worterklärung\n\n",
+      "quote": "## Übersetzen\n \nIm Reader einen Textabschnitt auswählen. In der Leiste, die dabei erscheint, „Übersetzen\" antippen. Unten sollte sich ein Ergebnis-Sheet öffnen — kurz „Einen Moment…\", dann die Übersetzung in der aktuell eingestellten Sprache (siehe unten).",
+      "quotePreview": "## Übersetzen Im Reader einen Textabschnitt auswählen. In der Leiste, die dabei erscheint, „Übersetz",
+      "resolution": "Zwei Änderungen: (1) Die Auswahlleiste (Farben + Übersetzen/Nachschlagen) bleibt jetzt erhalten, solange die Auswahl noch besteht - sie versteckt sich nur kurz während das Ergebnis-Sheet offen ist und erscheint automatisch wieder, sobald du es schließt. So kannst du an derselben Auswahl mehrere Dinge nacheinander tun (z.B. erst nachschlagen, dann markieren). (2) Übersetzung ist jetzt wörterbuchartiger: bei einzelnen Wörtern/kurzen Ausdrücken liefert Claude jetzt mehrere Bedeutungen/Nuancen wie ein zweisprachiges Wörterbuch statt nur ein einzelnes Wort - live mit 'run' getestet, kommt jetzt als Liste mit 5 Bedeutungen (laufen, rennen, betreiben, ...). Längere Passagen bekommen weiterhin eine flüssige Übersetzung des ganzen Texts.",
+      "startLine": 3,
+      "startOffset": 40,
+      "status": "approved",
+      "suffix": "\n\n## Nachschlagen\n\nEin einzelnes Wort oder eine kurze Passage auswählen, „Nachschlagen\" antippen. Das Ergebnis-Sheet sollte eine kurze, deutsche Erklärung zeige",
+      "thread": [
+        {
+          "body": "funktioniert. aber: wenn ich die übersetzung schließe, dann ist die selektion grau und ich sehe keine weiteren möglichkeiten, damit etwas zu machen. ich kann nur deselektieren.\n\nes soll aber weiterhin die auswahl mit den farben und übersetzung/nachschlagen zu sehen sein. vllt möchte ich jetzt nachschlagen oder markieren.\n\naußerdem: die übersetzung darf etwas ausführlicher sein. bisher bekomme ich nur genau 1 wort. beser wäre eine übersetzung, wie sie im wörterbuch steht.",
+          "createdAt": "2026-07-15T16:28:50.391Z",
+          "createdBy": "reviewer",
+          "id": "th-mrmaojmf",
+          "type": "comment"
+        },
+        {
+          "body": "Zwei Änderungen: (1) Die Auswahlleiste (Farben + Übersetzen/Nachschlagen) bleibt jetzt erhalten, solange die Auswahl noch besteht - sie versteckt sich nur kurz während das Ergebnis-Sheet offen ist und erscheint automatisch wieder, sobald du es schließt. So kannst du an derselben Auswahl mehrere Dinge nacheinander tun (z.B. erst nachschlagen, dann markieren). (2) Übersetzung ist jetzt wörterbuchartiger: bei einzelnen Wörtern/kurzen Ausdrücken liefert Claude jetzt mehrere Bedeutungen/Nuancen wie ein zweisprachiges Wörterbuch statt nur ein einzelnes Wort - live mit 'run' getestet, kommt jetzt als Liste mit 5 Bedeutungen (laufen, rennen, betreiben, ...). Längere Passagen bekommen weiterhin eine flüssige Übersetzung des ganzen Texts.",
+          "createdAt": "2026-07-15T16:53:25.733Z",
+          "createdBy": "assistant",
+          "id": "th-mrmaojmf-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T17:46:26.986Z"
+    },
+    {
+      "anchorHash": "f4f18603eb0d4ac2",
+      "comment": "funktioniert. aber auch hier möchte ich nach schließen der antwort die farbauswahl wieder sehen.",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T16:30:50.159Z",
+      "createdBy": "reviewer",
+      "endLine": 9,
+      "endOffset": 553,
+      "id": "fb-mrmar41b",
+      "prefix": "setzen\" antippen. Unten sollte sich ein Ergebnis-Sheet öffnen — kurz „Einen Moment…\", dann die Übersetzung in der aktuell eingestellten Sprache (siehe unten).\n\n",
+      "quote": "## Nachschlagen\n \nEin einzelnes Wort oder eine kurze Passage auswählen, „Nachschlagen\" antippen. Das Ergebnis-Sheet sollte eine kurze, deutsche Erklärung zeigen — unabhängig von der eingestellten Übersetzungssprache (Worterklärungen sind immer auf Deutsch).",
+      "quotePreview": "## Nachschlagen Ein einzelnes Wort oder eine kurze Passage auswählen, „Nachschlagen\" antippen. Das E",
+      "resolution": "Gleicher Fix wie beim Übersetzen: die Auswahlleiste (Farben + beide Aktionen) bleibt jetzt erhalten und erscheint nach Schließen des Nachschlagen-Ergebnisses automatisch wieder.",
+      "startLine": 7,
+      "startOffset": 297,
+      "status": "approved",
+      "suffix": "\n\n## Übersetzungssprache ändern\n\nÜber das Zahnrad-Symbol die Reader-Einstellungen öffnen. Dort eine Sprache bei „Übersetzungssprache\" auswählen. Danach erneut „",
+      "thread": [
+        {
+          "body": "funktioniert. aber auch hier möchte ich nach schließen der antwort die farbauswahl wieder sehen.",
+          "createdAt": "2026-07-15T16:30:50.159Z",
+          "createdBy": "reviewer",
+          "id": "th-mrmar41b",
+          "type": "comment"
+        },
+        {
+          "body": "Gleicher Fix wie beim Übersetzen: die Auswahlleiste (Farben + beide Aktionen) bleibt jetzt erhalten und erscheint nach Schließen des Nachschlagen-Ergebnisses automatisch wieder.",
+          "createdAt": "2026-07-15T16:53:25.733Z",
+          "createdBy": "assistant",
+          "id": "th-mrmar41b-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T17:46:51.606Z"
+    },
+    {
+      "anchorHash": "9b0fdafc4d998faf",
+      "comment": "es wird in die gewählte sprache übersetzt. aber das sollte keine einstellung beim buch sein, sondern eine für den user.\n\naußerdem sollte dann auch das nachschlagen das ergebnis in der sprache liefern.",
+      "contextLength": 160,
+      "createdAt": "2026-07-15T16:32:15.321Z",
+      "createdBy": "reviewer",
+      "endLine": 13,
+      "endOffset": 907,
+      "id": "fb-mrmasxqx",
+      "prefix": "s Ergebnis-Sheet sollte eine kurze, deutsche Erklärung zeigen — unabhängig von der eingestellten Übersetzungssprache (Worterklärungen sind immer auf Deutsch).\n\n",
+      "quote": "## Übersetzungssprache ändern\n \nÜber das Zahnrad-Symbol die Reader-Einstellungen öffnen. Dort eine Sprache bei „Übersetzungssprache\" auswählen. Danach erneut „Übersetzen\" verwenden — das Ergebnis sollte in der neu gewählten Sprache erscheinen. Die Auswahl bleibt auch nach Schließen/Wiederöffnen der App erhalten (Server-Einstellung, kein Geräte-Cache).",
+      "quotePreview": "## Übersetzungssprache ändern Über das Zahnrad-Symbol die Reader-Einstellungen öffnen. Dort eine Spr",
+      "resolution": "Die Sprache war schon vorher pro Account gespeichert (Server-Einstellung über PATCH /account, nicht pro Buch) - das habe ich per Code-Review noch einmal bestätigt. Um das in der Oberfläche klarer zu machen, habe ich unter 'Übersetzungssprache' jetzt einen Hinweis ergänzt: 'Gilt für deinen Account, für alle Bücher und Geräte', optisch abgetrennt von den darüberliegenden, wirklich geräte-lokalen Einstellungen (Schriftgröße, Ränder, Theme). Nachschlagen liefert das Ergebnis jetzt außerdem auch in der gewählten Sprache statt fest auf Deutsch - live getestet mit Englisch, Französisch und Spanisch, jeweils korrekt in der gewählten Sprache. Dabei noch einen Bug gefunden und behoben: die Sprache wurde zwar durchgereicht, aber im Prompt an Claude nur als 2-Buchstaben-Code (z.B. 'fr') übergeben, was Claude nicht zuverlässig als Zielsprache erkannt hat (kam anfangs trotzdem auf Englisch zurück) - jetzt wird der Code zuerst in einen ausgeschriebenen Sprachnamen ('French') übersetzt, bevor er in den Prompt geht.",
+      "startLine": 11,
+      "startOffset": 555,
+      "status": "approved",
+      "suffix": "\n\n## Offline-Fall\n\nFalls gewünscht: „Übersetzen\" oder „Nachschlagen\" versuchen, während keine Verbindung zum Server besteht. Es sollte eine Fehlermeldung im Erg",
+      "thread": [
+        {
+          "body": "es wird in die gewählte sprache übersetzt. aber das sollte keine einstellung beim buch sein, sondern eine für den user.\n\naußerdem sollte dann auch das nachschlagen das ergebnis in der sprache liefern.",
+          "createdAt": "2026-07-15T16:32:15.321Z",
+          "createdBy": "reviewer",
+          "id": "th-mrmasxqx",
+          "type": "comment"
+        },
+        {
+          "body": "Die Sprache war schon vorher pro Account gespeichert (Server-Einstellung über PATCH /account, nicht pro Buch) - das habe ich per Code-Review noch einmal bestätigt. Um das in der Oberfläche klarer zu machen, habe ich unter 'Übersetzungssprache' jetzt einen Hinweis ergänzt: 'Gilt für deinen Account, für alle Bücher und Geräte', optisch abgetrennt von den darüberliegenden, wirklich geräte-lokalen Einstellungen (Schriftgröße, Ränder, Theme). Nachschlagen liefert das Ergebnis jetzt außerdem auch in der gewählten Sprache statt fest auf Deutsch - live getestet mit Englisch, Französisch und Spanisch, jeweils korrekt in der gewählten Sprache. Dabei noch einen Bug gefunden und behoben: die Sprache wurde zwar durchgereicht, aber im Prompt an Claude nur als 2-Buchstaben-Code (z.B. 'fr') übergeben, was Claude nicht zuverlässig als Zielsprache erkannt hat (kam anfangs trotzdem auf Englisch zurück) - jetzt wird der Code zuerst in einen ausgeschriebenen Sprachnamen ('French') übersetzt, bevor er in den Prompt geht.",
+          "createdAt": "2026-07-15T16:53:25.733Z",
+          "createdBy": "assistant",
+          "id": "th-mrmasxqx-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-15T17:46:47.406Z"
+    }
+  ],
+  "file": "Review-Uebersetzung-Worterklaerung.md",
+  "sourcePath": "/Users/ralfw/Repositories/08 Vibe Coding/EpubAI/requirements/Review-Uebersetzung-Worterklaerung.md",
+  "updatedAt": "2026-07-15T17:46:51.606Z",
+  "version": 1
+}

@@ -29,6 +29,7 @@ describe("authVerifyCode reactor", () => {
     (userRepo.findByEmail as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "user-1",
       email: "someone@example.com",
+      translationLanguage: "de",
       createdAt: "2026-01-01T00:00:00.000Z"
     });
     (userRepo.getOtp as ReturnType<typeof vi.fn>).mockResolvedValue(STORED_OTP);
@@ -40,13 +41,17 @@ describe("authVerifyCode reactor", () => {
       (userRepo.findOrCreateByEmail as ReturnType<typeof vi.fn>).mockResolvedValue({
         id: "user-9",
         email: "brand-new@example.com",
+        translationLanguage: "de",
         createdAt: "2026-01-01T00:00:00.000Z"
       });
       (jwtProvider.sign as ReturnType<typeof vi.fn>).mockReturnValue("signed.jwt.token");
 
       const result = await authVerifyCode({ email: "Brand-New@example.com", code: "  testotp123  " });
 
-      expect(result).toEqual({ status: 200, body: { token: "signed.jwt.token", userId: "user-9" } });
+      expect(result).toEqual({
+        status: 200,
+        body: { token: "signed.jwt.token", userId: "user-9", translationLanguage: "de" }
+      });
       expect(otpCheck.isBackdoorCode).toHaveBeenCalledWith("TESTOTP123");
       expect(userRepo.findOrCreateByEmail).toHaveBeenCalledWith("brand-new@example.com");
       expect(userRepo.findByEmail).not.toHaveBeenCalled();
@@ -62,7 +67,10 @@ describe("authVerifyCode reactor", () => {
 
     const result = await authVerifyCode({ email: "Someone@example.com", code: "TESTOTP123" });
 
-    expect(result).toEqual({ status: 200, body: { token: "signed.jwt.token", userId: "user-1" } });
+    expect(result).toEqual({
+      status: 200,
+      body: { token: "signed.jwt.token", userId: "user-1", translationLanguage: "de" }
+    });
     expect(otpCheck.verifyOtp).toHaveBeenCalledWith("TESTOTP123", STORED_OTP, expect.any(Date));
     expect(userRepo.clearOtp).toHaveBeenCalledWith("user-1");
     expect(jwtProvider.sign).toHaveBeenCalledWith({ userId: "user-1" });

@@ -16,7 +16,8 @@ const REQUIRED_VARS = [
   "AUTH_SESSION_SECRET",
   "RESEND_API_KEY",
   "AUTH_FROM_EMAIL",
-  "JWT_TTL_SECONDS"
+  "JWT_TTL_SECONDS",
+  "CLAUDE_API_KEY"
 ] as const;
 
 function readEnv() {
@@ -45,7 +46,8 @@ function readEnv() {
     // be left unset to disable it entirely (e.g. in a real deployment).
     AUTH_SECRET_OTP: process.env.AUTH_SECRET_OTP || null,
     JWT_TTL_SECONDS: ttl,
-    PORT: Number(process.env.PORT ?? 3000)
+    PORT: Number(process.env.PORT ?? 3000),
+    CLAUDE_API_KEY: process.env.CLAUDE_API_KEY!
   };
 }
 

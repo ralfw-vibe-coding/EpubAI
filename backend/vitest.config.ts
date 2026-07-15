@@ -19,6 +19,7 @@ export default defineConfig({
         "src/providers/d/**",
         "src/providers/x/r2.ts",
         "src/providers/x/resend.ts",
+        "src/providers/x/claude.ts",
         "src/server.ts",
         "src/index.ts",
         "src/config.ts",

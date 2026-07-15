@@ -13,6 +13,7 @@ export type AnnotationColor = "accent" | "orange" | "yellow" | "green" | "blue" 
 export interface User {
   id: string;
   email: string;
+  translationLanguage: string;
   createdAt: string;
 }
 
