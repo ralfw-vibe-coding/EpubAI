@@ -34,6 +34,15 @@ export async function deleteBook(
   }
 
   const bookFile = await bookFileRepo.findByBookId(bookId);
+
+  // Two complementary R2 cleanups so nothing is left orphaned:
+  //  1. Everything under this book's per-user prefix (`<userId>/<fileHash>`) -
+  //     catches the epub AND the cover (any extension) even when book.coverUrl
+  //     is null or out of sync with the cover that uploadEpub physically
+  //     uploaded, which was the cause of covers being left behind on delete.
+  //  2. The explicitly-recorded keys, for objects that predate per-user
+  //     prefixing and still live at the bucket root (harmless no-ops otherwise).
+  await r2.deleteObjectsByPrefix(`${userId}/${book.currentFileHash}`);
   if (bookFile) {
     await r2.deleteObject(bookFile.storageKey);
   }

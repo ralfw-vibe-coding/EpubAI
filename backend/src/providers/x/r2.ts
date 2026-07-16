@@ -1,4 +1,12 @@
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Readable } from "node:stream";
 import { env } from "../../config.js";
@@ -46,6 +54,32 @@ export async function getObjectStream(key: string): Promise<Readable> {
 
 export async function deleteObject(key: string): Promise<void> {
   await client.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: key }));
+}
+
+/**
+ * Deletes every object whose key starts with `prefix`. Used by deleteBook to
+ * clear a book's whole per-user storage prefix (`<userId>/<fileHash>`) in one
+ * shot - robust against a stored cover key being null or out of sync with the
+ * cover that was physically uploaded during uploadEpub, which was otherwise
+ * leaving covers orphaned on delete. Paginates the listing and deletes in
+ * batches (DeleteObjects caps at 1000 keys per call).
+ */
+export async function deleteObjectsByPrefix(prefix: string): Promise<void> {
+  let continuationToken: string | undefined;
+  do {
+    const listed = await client.send(
+      new ListObjectsV2Command({ Bucket: env.R2_BUCKET, Prefix: prefix, ContinuationToken: continuationToken })
+    );
+    const keys = (listed.Contents ?? [])
+      .map((object) => object.Key)
+      .filter((key): key is string => Boolean(key));
+    if (keys.length > 0) {
+      await client.send(
+        new DeleteObjectsCommand({ Bucket: env.R2_BUCKET, Delete: { Objects: keys.map((Key) => ({ Key })) } })
+      );
+    }
+    continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (continuationToken);
 }
 
 /**

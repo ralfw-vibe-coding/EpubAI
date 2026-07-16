@@ -2,9 +2,11 @@ import type { ReactorDeps } from '../deps';
 import type { UploadEpubResult } from '../ports';
 
 /**
- * Reactor: upload an EPUB file to the backend for OPF metadata detection and
- * duplicate-hash checking. Does not add the book to the catalog yet — that is
- * a separate, explicit confirmation step (see `confirmAddBook`).
+ * Reactor: upload an EPUB file. The backend detects metadata, stores the EPUB
+ * and cover, and creates the catalog entry in one step — success resolves to
+ * the created book, a duplicate resolves to the existing book's id. The user
+ * edits or deletes the book afterwards from the book detail page; there is no
+ * separate confirm-details step.
  */
 export async function uploadEpub(
 	deps: Pick<ReactorDeps, 'http'>,

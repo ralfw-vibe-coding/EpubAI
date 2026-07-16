@@ -15,7 +15,8 @@ vi.mock("../../src/providers/d/annotationRepo.js", () => ({
   deleteByBookId: vi.fn()
 }));
 vi.mock("../../src/providers/x/r2.js", () => ({
-  deleteObject: vi.fn()
+  deleteObject: vi.fn(),
+  deleteObjectsByPrefix: vi.fn()
 }));
 
 import { deleteBook } from "../../src/processor/deleteBook.js";
@@ -70,19 +71,23 @@ describe("deleteBook reactor", () => {
     expect(result).toEqual({ status: 404, body: { error: "not_found" } });
     expect(bookRepo.remove).not.toHaveBeenCalled();
     expect(r2.deleteObject).not.toHaveBeenCalled();
+    expect(r2.deleteObjectsByPrefix).not.toHaveBeenCalled();
   });
 
-  it("deletes the R2 object, book_file row(s), loan rows, annotation rows, then the book, in that order, and returns 204", async () => {
+  it("clears the R2 storage prefix, book_file row(s), loan rows, annotation rows, then the book, in that order, and returns 204", async () => {
     const token = sign({ userId: "user-1" });
     const callOrder: string[] = [];
     (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
     (bookFileRepo.findByBookId as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "file-1",
       bookId: "book-1",
-      storageKey: "hash-1.epub",
+      storageKey: "user-1/hash-1.epub",
       fileHash: "hash-1",
       sizeBytes: 2048,
       uploadedAt: "2026-01-01T00:00:00.000Z"
+    });
+    (r2.deleteObjectsByPrefix as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      callOrder.push("r2.deleteObjectsByPrefix");
     });
     (r2.deleteObject as ReturnType<typeof vi.fn>).mockImplementation(async () => {
       callOrder.push("r2.deleteObject");
@@ -102,12 +107,14 @@ describe("deleteBook reactor", () => {
 
     const result = await deleteBook(`Bearer ${token}`, "book-1");
 
-    expect(r2.deleteObject).toHaveBeenCalledWith("hash-1.epub");
+    expect(r2.deleteObjectsByPrefix).toHaveBeenCalledWith("user-1/hash-1");
+    expect(r2.deleteObject).toHaveBeenCalledWith("user-1/hash-1.epub");
     expect(bookFileRepo.deleteByBookId).toHaveBeenCalledWith("book-1");
     expect(loanRepo.deleteByBookId).toHaveBeenCalledWith("book-1");
     expect(annotationRepo.deleteByBookId).toHaveBeenCalledWith("book-1");
     expect(bookRepo.remove).toHaveBeenCalledWith("book-1");
     expect(callOrder).toEqual([
+      "r2.deleteObjectsByPrefix",
       "r2.deleteObject",
       "bookFileRepo.deleteByBookId",
       "loanRepo.deleteByBookId",
@@ -117,7 +124,23 @@ describe("deleteBook reactor", () => {
     expect(result).toEqual({ status: 204, body: undefined });
   });
 
-  it("also deletes the cover R2 object when the book has one", async () => {
+  it("clears the cover via the storage prefix even when cover_url is null (the orphaned-cover fix)", async () => {
+    // The exact bug: uploadEpub always uploads the cover to R2, but if the
+    // book's cover_url is null/mismatched the old code left that cover behind
+    // on delete. The prefix sweep must remove it regardless of cover_url.
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      makeBook({ coverUrl: null, currentFileHash: "hash-x" })
+    );
+    (bookFileRepo.findByBookId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const result = await deleteBook(`Bearer ${token}`, "book-1");
+
+    expect(r2.deleteObjectsByPrefix).toHaveBeenCalledWith("user-1/hash-x");
+    expect(result.status).toBe(204);
+  });
+
+  it("also deletes the explicitly-recorded cover key (backward-compat for root-level objects)", async () => {
     const token = sign({ userId: "user-1" });
     (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook({ coverUrl: "hash-1-cover.jpg" }));
     (bookFileRepo.findByBookId as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -131,29 +154,20 @@ describe("deleteBook reactor", () => {
 
     const result = await deleteBook(`Bearer ${token}`, "book-1");
 
+    expect(r2.deleteObjectsByPrefix).toHaveBeenCalledWith("user-1/hash-1");
     expect(r2.deleteObject).toHaveBeenCalledWith("hash-1.epub");
     expect(r2.deleteObject).toHaveBeenCalledWith("hash-1-cover.jpg");
-    expect(r2.deleteObject).toHaveBeenCalledTimes(2);
     expect(result.status).toBe(204);
   });
 
-  it("skips the cover R2 delete when the book has no cover", async () => {
-    const token = sign({ userId: "user-1" });
-    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook({ coverUrl: null }));
-    (bookFileRepo.findByBookId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-
-    await deleteBook(`Bearer ${token}`, "book-1");
-
-    expect(r2.deleteObject).not.toHaveBeenCalled();
-  });
-
-  it("skips the R2 delete when there is no book_file row, but still cleans up the rest", async () => {
+  it("still sweeps the prefix and cleans up the DB when there is no book_file row", async () => {
     const token = sign({ userId: "user-1" });
     (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
     (bookFileRepo.findByBookId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
     const result = await deleteBook(`Bearer ${token}`, "book-1");
 
+    expect(r2.deleteObjectsByPrefix).toHaveBeenCalledWith("user-1/hash-1");
     expect(r2.deleteObject).not.toHaveBeenCalled();
     expect(bookFileRepo.deleteByBookId).toHaveBeenCalledWith("book-1");
     expect(loanRepo.deleteByBookId).toHaveBeenCalledWith("book-1");

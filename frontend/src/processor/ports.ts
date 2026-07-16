@@ -25,24 +25,12 @@ export interface LoanResponse {
 	borrowedAt: string;
 }
 
-/** Metadata the backend auto-detects from an uploaded EPUB's OPF file. */
-export interface DetectedMeta {
-	title: string;
-	author: string;
-	language?: string;
-}
-
-/** Result of an EPUB upload: either freshly detected metadata, or a duplicate hit. */
-export type UploadEpubResult =
-	| {
-			detectedMeta: DetectedMeta;
-			fileHash: string;
-			/** Opaque key identifying the extracted cover, if any; pass through unchanged to createBook. */
-			coverKey?: string;
-			/** Ready-to-use preview image URL for the cover, shown only during the edit step. */
-			coverPreviewUrl?: string;
-	  }
-	| { duplicate: true; existingBookId: string };
+/**
+ * Result of an EPUB upload. The upload creates the catalog entry in one step
+ * (detected metadata as-is, editable afterwards), so success returns the newly
+ * created book; a duplicate returns the existing book's id instead.
+ */
+export type UploadEpubResult = CatalogBook | { duplicate: true; existingBookId: string };
 
 /** Editable subset of a catalog book's metadata. */
 export interface BookMetadataPatch {
@@ -65,13 +53,6 @@ export interface HttpClient {
 		filename: string,
 		onProgress?: (percent: number) => void
 	): Promise<UploadEpubResult>;
-	createBook(
-		title: string,
-		author: string,
-		fileHash: string,
-		coverKey?: string,
-		tags?: string[]
-	): Promise<CatalogBook>;
 	updateBookMetadata(bookId: string, patch: BookMetadataPatch): Promise<CatalogBook>;
 	deleteBook(bookId: string): Promise<void>;
 	/** ALL of the user's annotations across every book — the bulk sync-at-startup call. */

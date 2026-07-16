@@ -2,9 +2,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { Pencil } from 'lucide-svelte';
+	import { Pencil, Trash2 } from 'lucide-svelte';
 	import type { BookDetail } from '../../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../../portal/runtime';
+	import BookMetaFields from '$lib/BookMetaFields.svelte';
 
 	const bookId = $derived($page.params.id ?? '');
 
@@ -14,24 +15,37 @@
 	let borrowing = $state(false);
 	let returning = $state(false);
 
-	// Edit flow: view -> edit (title/author/tags) -> save.
+	// Edit flow: view -> edit (title/author/tags) -> save. The editable fields
+	// (incl. the tag autocomplete) live in the shared BookMetaFields component.
 	let editing = $state(false);
 	let saving = $state(false);
 	let titleDraft = $state('');
 	let authorDraft = $state('');
 	let tagsDraft = $state<string[]>([]);
-	let tagInput = $state('');
-	let tagInputFocused = $state(false);
 
-	// Tag suggestions: distinct tags across the whole catalog, loaded once
-	// (lazily, on first edit / first tag-field focus) and then filtered
-	// client-side as the user types.
-	let knownTags = $state<string[]>([]);
-	let knownTagsLoaded = false;
-
-	// Delete flow: two-step confirmation.
+	// Delete flow: the trash icon itself morphs into a "?" confirm button on
+	// first click; clicking it again actually deletes, clicking anywhere else
+	// reverts it back to the trash icon (no separate confirm row/dialog).
 	let confirmingDelete = $state(false);
 	let deleting = $state(false);
+	let deleteButtonEl = $state<HTMLButtonElement | undefined>(undefined);
+
+	$effect(() => {
+		if (!confirmingDelete) return;
+		function onWindowClick(e: MouseEvent) {
+			if (deleteButtonEl && !deleteButtonEl.contains(e.target as Node)) {
+				confirmingDelete = false;
+			}
+		}
+		// Deferred by a tick so the very click that just set confirmingDelete
+		// (the initial trash-icon click, still bubbling to window) can't
+		// immediately revert it again.
+		const timer = setTimeout(() => window.addEventListener('click', onWindowClick));
+		return () => {
+			clearTimeout(timer);
+			window.removeEventListener('click', onWindowClick);
+		};
+	});
 
 	// The cover image falls back to the color-swatch display if it fails to
 	// load (broken/expired URL) instead of showing a broken-image icon.
@@ -58,6 +72,13 @@
 		}
 	}
 
+	// Backend errors arrive as short machine codes - map the ones borrow()
+	// can produce to clear German copy so a failure reads as an actual
+	// message, not a stray technical string (matches routes/login/+page.svelte).
+	const BORROW_ERROR_MESSAGES: Record<string, string> = {
+		file_missing: 'Die Buchdatei fehlt im Speicher und kann nicht geladen werden. Bitte das Buch neu hochladen.'
+	};
+
 	async function borrow() {
 		if (borrowing || !detail) return;
 		borrowing = true;
@@ -66,7 +87,8 @@
 			await getProcessor().borrowBook(bookId, detail.title);
 			await load();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Ausleihen fehlgeschlagen.';
+			const code = e instanceof Error ? e.message : '';
+			error = BORROW_ERROR_MESSAGES[code] ?? 'Ausleihen fehlgeschlagen.';
 		} finally {
 			borrowing = false;
 		}
@@ -91,77 +113,13 @@
 		titleDraft = detail.title;
 		authorDraft = detail.author;
 		tagsDraft = [...detail.tags];
-		tagInput = '';
 		error = null;
 		editing = true;
-		loadKnownTags();
 	}
 
 	function cancelEdit() {
 		editing = false;
-		tagInput = '';
 	}
-
-	// Distinct tags used anywhere in the user's own catalog, for the
-	// autocomplete suggestions below the tag input. Loaded at most once per
-	// page visit (idempotent — safe to call again from the input's focus
-	// handler).
-	async function loadKnownTags() {
-		if (knownTagsLoaded) return;
-		knownTagsLoaded = true;
-		try {
-			const catalog = await getProcessor().loadCatalog();
-			const distinct = new Set<string>();
-			for (const book of catalog) {
-				for (const tag of book.tags) distinct.add(tag);
-			}
-			knownTags = [...distinct];
-		} catch {
-			// Suggestions are a convenience only; silently skip on failure.
-		}
-	}
-
-	function addTag(tag: string) {
-		const trimmed = tag.trim();
-		if (trimmed && !tagsDraft.includes(trimmed)) {
-			tagsDraft = [...tagsDraft, trimmed];
-		}
-		tagInput = '';
-	}
-
-	function removeTag(tag: string) {
-		tagsDraft = tagsDraft.filter((t) => t !== tag);
-	}
-
-	function onTagKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') {
-			e.preventDefault();
-			addTag(tagInput);
-		}
-	}
-
-	function onTagInputFocus() {
-		tagInputFocused = true;
-		loadKnownTags();
-	}
-
-	function onTagInputBlur() {
-		// Delay hiding so a click on a suggestion chip registers before the
-		// list disappears (blur fires before the chip's click otherwise).
-		setTimeout(() => {
-			tagInputFocused = false;
-		}, 150);
-	}
-
-	// Empty query -> the full list of not-yet-assigned known tags (so focusing
-	// the field shows everything available); typing narrows it down. No cap -
-	// the wrapping container scrolls if the list is long (see markup below).
-	const tagSuggestions = $derived.by(() => {
-		const query = tagInput.trim().toLowerCase();
-		return knownTags.filter(
-			(tag) => tag.toLowerCase().includes(query) && !tagsDraft.includes(tag)
-		);
-	});
 
 	async function save() {
 		if (saving) return;
@@ -187,8 +145,12 @@
 		error = null;
 	}
 
-	function cancelDelete() {
-		confirmingDelete = false;
+	function onDeleteIconClick(e: MouseEvent) {
+		// Stop this click from reaching the window listener above, which would
+		// otherwise immediately revert the just-armed "?" back to the trash icon.
+		e.stopPropagation();
+		if (confirmingDelete) void confirmDelete();
+		else askDelete();
 	}
 
 	async function confirmDelete() {
@@ -234,66 +196,11 @@
 			<div class="min-w-0 flex-1">
 				{#if editing}
 					<div class="flex flex-col gap-3">
-						<label class="flex flex-col gap-1 text-sm">
-							<span class="text-[var(--color-neutral-700)]">Titel</span>
-							<input
-								bind:value={titleDraft}
-								class="border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2"
-							/>
-						</label>
-						<label class="flex flex-col gap-1 text-sm">
-							<span class="text-[var(--color-neutral-700)]">Autor</span>
-							<input
-								bind:value={authorDraft}
-								class="border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2"
-							/>
-						</label>
-						<div class="flex flex-col gap-1 text-sm">
-							<span class="text-[var(--color-neutral-700)]">Tags</span>
-							<div class="flex flex-wrap gap-2">
-								{#each tagsDraft as tag (tag)}
-									<span
-										class="flex items-center gap-1 border border-[var(--color-divider)] bg-[var(--color-bg)] px-2 py-1 text-xs"
-									>
-										{tag}
-										<button
-											onclick={() => removeTag(tag)}
-											aria-label={`Tag ${tag} entfernen`}
-											class="text-[var(--color-accent-700)]"
-										>
-											×
-										</button>
-									</span>
-								{/each}
-							</div>
-							<input
-								bind:value={tagInput}
-								onkeydown={onTagKeydown}
-								onfocus={onTagInputFocus}
-								onblur={onTagInputBlur}
-								placeholder="Tag eingeben, Enter zum Hinzufügen"
-								class="border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2"
-							/>
-							{#if tagInputFocused}
-								{#if tagSuggestions.length > 0}
-									<div class="flex max-h-32 flex-wrap gap-2 overflow-y-auto">
-										{#each tagSuggestions as suggestion (suggestion)}
-											<button
-												type="button"
-												onclick={() => addTag(suggestion)}
-												class="border border-[var(--color-divider)] bg-[var(--color-surface)] px-2 py-1 text-xs transition hover:border-[var(--color-accent)]"
-											>
-												{suggestion}
-											</button>
-										{/each}
-									</div>
-								{:else if tagInput.trim()}
-									<p class="text-xs text-[var(--color-neutral-700)]">
-										kein Treffer — Enter zum Anlegen von „{tagInput.trim()}“
-									</p>
-								{/if}
-							{/if}
-						</div>
+						<BookMetaFields
+							bind:title={titleDraft}
+							bind:author={authorDraft}
+							bind:tags={tagsDraft}
+						/>
 					</div>
 				{:else}
 					<div class="flex items-center gap-2">
@@ -304,6 +211,21 @@
 							class="text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
 						>
 							<Pencil size={18} />
+						</button>
+						<button
+							bind:this={deleteButtonEl}
+							onclick={onDeleteIconClick}
+							disabled={deleting}
+							aria-label={confirmingDelete
+								? 'Wirklich löschen? Antippen zum Bestätigen'
+								: 'Buch löschen'}
+							class="flex h-[18px] w-[18px] flex-none items-center justify-center text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)] disabled:opacity-45"
+						>
+							{#if confirmingDelete}
+								<span class="text-sm leading-none font-bold">?</span>
+							{:else}
+								<Trash2 size={18} />
+							{/if}
 						</button>
 					</div>
 					<p class="mt-1 text-[var(--color-neutral-700)]">{detail.author}</p>
@@ -387,31 +309,5 @@
 		{#if error}
 			<p class="mt-4 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">{error}</p>
 		{/if}
-
-		<div class="mt-12 border-t border-[var(--color-divider)] pt-6">
-			{#if confirmingDelete}
-				<div class="flex items-center gap-3">
-					<p class="text-sm font-semibold text-[var(--color-accent-800)]">Wirklich entfernen?</p>
-					<button
-						onclick={confirmDelete}
-						disabled={deleting}
-						class="bg-[var(--color-accent)] px-3 py-1.5 text-sm font-semibold text-[var(--color-bg)] disabled:opacity-45"
-					>
-						{deleting ? 'Wird entfernt…' : 'Ja, entfernen'}
-					</button>
-					<button
-						onclick={cancelDelete}
-						disabled={deleting}
-						class="border border-[var(--color-divider)] px-3 py-1.5 text-sm font-semibold"
-					>
-						Abbrechen
-					</button>
-				</div>
-			{:else}
-				<button onclick={askDelete} class="text-sm text-[var(--color-accent-700)] underline">
-					Aus Katalog entfernen…
-				</button>
-			{/if}
-		</div>
 	{/if}
 </main>

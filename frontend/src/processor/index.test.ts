@@ -178,14 +178,11 @@ describe('processor reactors', () => {
 		expect(progress.totalPages).toBe(30);
 	});
 
-	it('uploadEpub delegates to http with the file and filename', async () => {
+	it('uploadEpub delegates to http and returns the created book', async () => {
 		const { deps, http } = makeDeps();
 		const file = new Blob(['epub bytes']);
 		const res = await createProcessor(deps).uploadEpub(file, 'buch.epub');
-		expect(res).toEqual({
-			detectedMeta: { title: 'Erkannter Titel', author: 'Erkannter Autor' },
-			fileHash: 'h2'
-		});
+		expect(res).toMatchObject({ id: 'b1' });
 		const call = http.calls.find((c) => c.method === 'uploadEpub');
 		expect(call?.args[0]).toBe(file);
 		expect(call?.args[1]).toBe('buch.epub');
@@ -199,26 +196,13 @@ describe('processor reactors', () => {
 		expect(call?.args[2]).toBe(onProgress);
 	});
 
-	it('confirmAddBook delegates to http.createBook', async () => {
-		const { deps, http } = makeDeps();
-		const book = await createProcessor(deps).confirmAddBook('Titel', 'Autor', 'hash1');
-		expect(book.id).toBe('b1');
-		const call = http.calls.find((c) => c.method === 'createBook');
-		expect(call?.args).toEqual(['Titel', 'Autor', 'hash1', undefined, undefined]);
-	});
-
-	it('confirmAddBook forwards an optional coverKey to http.createBook', async () => {
-		const { deps, http } = makeDeps();
-		await createProcessor(deps).confirmAddBook('Titel', 'Autor', 'hash1', 'cover-key-1');
-		const call = http.calls.find((c) => c.method === 'createBook');
-		expect(call?.args).toEqual(['Titel', 'Autor', 'hash1', 'cover-key-1', undefined]);
-	});
-
-	it('confirmAddBook forwards optional tags to http.createBook', async () => {
-		const { deps, http } = makeDeps();
-		await createProcessor(deps).confirmAddBook('Titel', 'Autor', 'hash1', 'cover-key-1', ['sci-fi']);
-		const call = http.calls.find((c) => c.method === 'createBook');
-		expect(call?.args).toEqual(['Titel', 'Autor', 'hash1', 'cover-key-1', ['sci-fi']]);
+	it('uploadEpub surfaces a duplicate result from http', async () => {
+		const http = fakeHttp({
+			uploadEpub: async () => ({ duplicate: true as const, existingBookId: 'existing-1' })
+		});
+		const { deps } = makeDeps({ http: http.impl });
+		const res = await createProcessor(deps).uploadEpub(new Blob(['x']), 'buch.epub');
+		expect(res).toEqual({ duplicate: true, existingBookId: 'existing-1' });
 	});
 
 	it('updateBookMetadata delegates to http.updateBookMetadata', async () => {

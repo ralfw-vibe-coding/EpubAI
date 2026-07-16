@@ -123,10 +123,7 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		fileHash: 'h1',
 		borrowedAt: '2026-07-13T00:00:00.000Z'
 	};
-	const defaultUpload: UploadEpubResult = {
-		detectedMeta: { title: 'Erkannter Titel', author: 'Erkannter Autor' },
-		fileHash: 'h2'
-	};
+	const defaultUpload: UploadEpubResult = defaultBook;
 	const defaultAnnotation: Annotation = {
 		id: 'a1',
 		bookId: 'b1',
@@ -147,7 +144,6 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		returnLoan: record('returnLoan', undefined as void),
 		getBookFile: record('getBookFile', new ArrayBuffer(8)),
 		uploadEpub: record('uploadEpub', defaultUpload),
-		createBook: record('createBook', defaultBook),
 		updateBookMetadata: record('updateBookMetadata', defaultBook),
 		deleteBook: record('deleteBook', undefined as void),
 		getAllAnnotations: record('getAllAnnotations', [defaultAnnotation]),

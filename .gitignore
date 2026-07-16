@@ -8,3 +8,5 @@ coverage/
 *.log
 .DS_Store
 example books/
+test-books/*
+!test-books/README.md

@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/providers/d/bookRepo.js", () => ({
-  findByUserAndHash: vi.fn()
+  findByUserAndHash: vi.fn(),
+  insert: vi.fn()
+}));
+vi.mock("../../src/providers/d/bookFileRepo.js", () => ({
+  insert: vi.fn()
 }));
 vi.mock("../../src/providers/x/r2.js", () => ({
   uploadObject: vi.fn(),
@@ -16,6 +20,7 @@ vi.mock("../../src/providers/x/epubParser.js", async () => {
 
 import { uploadEpub } from "../../src/processor/uploadEpub.js";
 import * as bookRepo from "../../src/providers/d/bookRepo.js";
+import * as bookFileRepo from "../../src/providers/d/bookFileRepo.js";
 import * as r2 from "../../src/providers/x/r2.js";
 import * as epubParser from "../../src/providers/x/epubParser.js";
 import { EpubTooLargeError, EpubParseError } from "../../src/providers/x/epubParser.js";
@@ -42,6 +47,8 @@ const buf = Buffer.from("fake epub bytes");
 describe("uploadEpub reactor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (bookRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
+    (bookFileRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue({});
   });
 
   it("returns 401 without a token", async () => {
@@ -49,7 +56,7 @@ describe("uploadEpub reactor", () => {
     expect(result.status).toBe(401);
   });
 
-  it("returns 409 duplicate when the user already has a book with this fileHash, without touching R2 or the parser", async () => {
+  it("returns 409 duplicate when the user already has a book with this fileHash, without touching R2, the parser or the DB", async () => {
     const token = sign({ userId: "user-1" });
     (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook({ id: "existing-book" }));
 
@@ -59,9 +66,10 @@ describe("uploadEpub reactor", () => {
     expect(result.body).toMatchObject({ error: "duplicate", existingBookId: "existing-book" });
     expect(epubParser.parseEpub).not.toHaveBeenCalled();
     expect(r2.uploadObject).not.toHaveBeenCalled();
+    expect(bookRepo.insert).not.toHaveBeenCalled();
   });
 
-  it("parses metadata and uploads to R2 when there is no duplicate", async () => {
+  it("uploads the EPUB, creates the catalog entry, and returns the created book (201)", async () => {
     const token = sign({ userId: "user-1" });
     (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -69,44 +77,55 @@ describe("uploadEpub reactor", () => {
       author: "Carlo Rovelli",
       language: "en"
     });
+    (bookRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue(
+      makeBook({ id: "new-book", title: "Helgoland", author: "Carlo Rovelli" })
+    );
 
     const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "helgoland.epub" });
 
+    // One R2 upload (the epub, no cover in this fixture).
     expect(r2.uploadObject).toHaveBeenCalledTimes(1);
-    expect(result.status).toBe(200);
-    expect(result.body).toMatchObject({
-      detectedMeta: { title: "Helgoland", author: "Carlo Rovelli", language: "en" }
-    });
-    expect((result.body as { fileHash: string }).fileHash).toMatch(/^[0-9a-f]{64}$/);
+    const [epubKey] = (r2.uploadObject as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(epubKey).toMatch(/^user-1\/[0-9a-f]{64}\.epub$/);
+
+    // Book created with the detected metadata, no tags, no cover.
+    expect(bookRepo.insert).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ title: "Helgoland", author: "Carlo Rovelli", tags: [], coverKey: null })
+    );
+    expect(bookFileRepo.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ bookId: "new-book", sizeBytes: buf.length })
+    );
+    expect(result.status).toBe(201);
+    expect(result.body).toMatchObject({ id: "new-book", title: "Helgoland", coverUrl: null });
   });
 
-  it("uploads the cover to R2 and returns coverKey/coverPreviewUrl when the EPUB has a cover", async () => {
+  it("uploads the cover and stores its key on the book when the EPUB has one", async () => {
     const token = sign({ userId: "user-1" });
     (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({
       title: "Helgoland",
       author: "Carlo Rovelli",
-      language: "en",
       cover: { data: Buffer.from("fake jpg bytes"), mediaType: "image/jpeg", href: "images/cover.jpg" }
     });
+    (bookRepo.insert as ReturnType<typeof vi.fn>).mockImplementation(async (_userId, draft) =>
+      makeBook({ id: "new-book", coverUrl: draft.coverKey })
+    );
     (r2.getPresignedUrl as ReturnType<typeof vi.fn>).mockResolvedValue("https://example.com/presigned-cover");
 
     const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "helgoland.epub" });
 
-    const fileHash = (result.body as { fileHash: string }).fileHash;
     expect(r2.uploadObject).toHaveBeenCalledTimes(2);
-    expect(r2.uploadObject).toHaveBeenNthCalledWith(1, `${fileHash}.epub`, buf);
-    expect(r2.uploadObject).toHaveBeenNthCalledWith(
-      2,
-      `${fileHash}-cover.jpg`,
-      Buffer.from("fake jpg bytes"),
-      "image/jpeg"
+    const [coverKey, coverData, coverType] = (r2.uploadObject as ReturnType<typeof vi.fn>).mock.calls[1];
+    expect(coverKey).toMatch(/^user-1\/[0-9a-f]{64}-cover\.jpg$/);
+    expect(coverData).toEqual(Buffer.from("fake jpg bytes"));
+    expect(coverType).toBe("image/jpeg");
+
+    expect(bookRepo.insert).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ coverKey: expect.stringMatching(/^user-1\/[0-9a-f]{64}-cover\.jpg$/) })
     );
-    expect(r2.getPresignedUrl).toHaveBeenCalledWith(`${fileHash}-cover.jpg`);
-    expect(result.body).toMatchObject({
-      coverKey: `${fileHash}-cover.jpg`,
-      coverPreviewUrl: "https://example.com/presigned-cover"
-    });
+    expect((result.body as { coverUrl: string }).coverUrl).toBe("https://example.com/presigned-cover");
   });
 
   it("derives the cover extension from the href when the media type is unknown", async () => {
@@ -117,15 +136,18 @@ describe("uploadEpub reactor", () => {
       author: "A",
       cover: { data: Buffer.from("x"), mediaType: "application/octet-stream", href: "images/cover.webp" }
     });
+    (bookRepo.insert as ReturnType<typeof vi.fn>).mockImplementation(async (_userId, draft) =>
+      makeBook({ coverUrl: draft.coverKey })
+    );
     (r2.getPresignedUrl as ReturnType<typeof vi.fn>).mockResolvedValue("https://example.com/presigned-cover");
 
-    const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "book.epub" });
+    await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "book.epub" });
 
-    const fileHash = (result.body as { fileHash: string }).fileHash;
-    expect(result.body).toMatchObject({ coverKey: `${fileHash}-cover.webp` });
+    const [coverKey] = (r2.uploadObject as ReturnType<typeof vi.fn>).mock.calls[1];
+    expect(coverKey).toMatch(/-cover\.webp$/);
   });
 
-  it("omits coverKey/coverPreviewUrl entirely when the EPUB has no cover", async () => {
+  it("creates a book with no cover (single R2 upload) when the EPUB has none", async () => {
     const token = sign({ userId: "user-1" });
     (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({ title: "T", author: "A" });
@@ -134,18 +156,38 @@ describe("uploadEpub reactor", () => {
 
     expect(r2.uploadObject).toHaveBeenCalledTimes(1);
     expect(r2.getPresignedUrl).not.toHaveBeenCalled();
-    expect(result.body).not.toHaveProperty("coverKey");
-    expect(result.body).not.toHaveProperty("coverPreviewUrl");
+    expect(bookRepo.insert).toHaveBeenCalledWith("user-1", expect.objectContaining({ coverKey: null }));
+    expect((result.body as { coverUrl: string | null }).coverUrl).toBeNull();
   });
 
-  it("falls back to the filename when no title was detected", async () => {
+  it("falls back to the filename as the title when none was detected", async () => {
     const token = sign({ userId: "user-1" });
     (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
-    const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "My Book.epub" });
+    await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "My Book.epub" });
 
-    expect(result.body).toMatchObject({ detectedMeta: { title: "My Book", author: "Unknown" } });
+    expect(bookRepo.insert).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ title: "My Book", author: "Unknown" })
+    );
+  });
+
+  it("returns 409 duplicate when a concurrent upload trips the unique index", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null) // initial duplicate check: clear
+      .mockResolvedValueOnce(makeBook({ id: "race-winner" })); // re-read after the unique violation
+    (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({ title: "T", author: "A" });
+    (bookRepo.insert as ReturnType<typeof vi.fn>).mockRejectedValue(
+      Object.assign(new Error("duplicate key"), { code: "23505" })
+    );
+
+    const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "book.epub" });
+
+    expect(result.status).toBe(409);
+    expect(result.body).toMatchObject({ error: "duplicate", existingBookId: "race-winner" });
+    expect(bookFileRepo.insert).not.toHaveBeenCalled();
   });
 
   it("returns 400 epub_too_large when the parser rejects an oversized epub", async () => {
@@ -157,6 +199,7 @@ describe("uploadEpub reactor", () => {
 
     expect(result).toEqual({ status: 400, body: { error: "epub_too_large" } });
     expect(r2.uploadObject).not.toHaveBeenCalled();
+    expect(bookRepo.insert).not.toHaveBeenCalled();
   });
 
   it("returns 400 invalid_epub when the file cannot be parsed", async () => {

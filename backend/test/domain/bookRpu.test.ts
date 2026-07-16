@@ -5,7 +5,6 @@ import {
   buildDetectedMeta,
   computeFileHash,
   detectDuplicate,
-  resolveCoverKey,
   toBookSummary,
   updateBookMetadata
 } from "../../src/domain/bookRpu.js";
@@ -89,27 +88,6 @@ describe("buildBookDraft", () => {
   it("carries through an already-resolved coverKey", () => {
     const draft = buildBookDraft({ title: "T", author: "A", fileHash: "hash1", coverKey: "hash1-cover.jpg" });
     expect(draft.coverKey).toBe("hash1-cover.jpg");
-  });
-});
-
-describe("resolveCoverKey", () => {
-  it("accepts a coverKey that starts with the expected <fileHash>-cover. prefix", () => {
-    expect(resolveCoverKey("hash1-cover.jpg", "hash1")).toBe("hash1-cover.jpg");
-    expect(resolveCoverKey("hash1-cover.png", "hash1")).toBe("hash1-cover.png");
-  });
-
-  it("rejects a coverKey belonging to a different fileHash", () => {
-    expect(resolveCoverKey("other-hash-cover.jpg", "hash1")).toBeNull();
-  });
-
-  it("rejects a coverKey without the -cover. marker even if it starts with the hash", () => {
-    expect(resolveCoverKey("hash1.epub", "hash1")).toBeNull();
-  });
-
-  it("rejects a non-string coverKey", () => {
-    expect(resolveCoverKey(undefined, "hash1")).toBeNull();
-    expect(resolveCoverKey(42, "hash1")).toBeNull();
-    expect(resolveCoverKey(null, "hash1")).toBeNull();
   });
 });
 

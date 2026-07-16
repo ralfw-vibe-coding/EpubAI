@@ -162,11 +162,9 @@ describe('createHttpClient', () => {
 		await expect(http.getBooks()).rejects.toBeInstanceOf(HttpError);
 	});
 
-	it('uploads an EPUB as multipart form data and returns detected metadata', async () => {
-		const { instance, headers, getCall, getSentBody } = fakeXhr(200, {
-			detectedMeta: { title: 'T', author: 'A' },
-			fileHash: 'h1'
-		});
+	it('uploads an EPUB as multipart form data and returns the created book', async () => {
+		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: [], coverUrl: null };
+		const { instance, headers, getCall, getSentBody } = fakeXhr(201, book);
 		const http = createHttpClient(
 			'http://api',
 			fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }),
@@ -176,7 +174,7 @@ describe('createHttpClient', () => {
 		const file = new Blob(['epub bytes']);
 		const res = await http.uploadEpub(file, 'buch.epub');
 
-		expect(res).toEqual({ detectedMeta: { title: 'T', author: 'A' }, fileHash: 'h1' });
+		expect(res).toEqual(book);
 		expect(getCall()).toEqual({ method: 'POST', url: 'http://api/books/upload' });
 		expect(headers.Authorization).toBe('Bearer t');
 		expect(headers['ngrok-skip-browser-warning']).toBe('true');
@@ -185,7 +183,8 @@ describe('createHttpClient', () => {
 	});
 
 	it('reports upload progress', async () => {
-		const { instance } = fakeXhr(200, { detectedMeta: { title: 'T', author: 'A' }, fileHash: 'h1' });
+		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: [], coverUrl: null };
+		const { instance } = fakeXhr(201, book);
 		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
 		const progressUpdates: number[] = [];
 
@@ -198,31 +197,11 @@ describe('createHttpClient', () => {
 	});
 
 	it('accepts an ArrayBuffer for uploadEpub', async () => {
-		const { instance, getSentBody } = fakeXhr(200, {
-			detectedMeta: { title: 'T', author: 'A' },
-			fileHash: 'h1'
-		});
+		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: [], coverUrl: null };
+		const { instance, getSentBody } = fakeXhr(201, book);
 		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
 		await http.uploadEpub(new ArrayBuffer(4), 'buch.epub');
 		expect((getSentBody() as FormData).get('file')).toBeInstanceOf(Blob);
-	});
-
-	it('passes through coverKey and coverPreviewUrl when the server detected a cover', async () => {
-		const { instance } = fakeXhr(200, {
-			detectedMeta: { title: 'T', author: 'A' },
-			fileHash: 'h1',
-			coverKey: 'cover-key-1',
-			coverPreviewUrl: 'https://covers.example/preview.jpg'
-		});
-		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
-		const res = await http.uploadEpub(new Blob(['x']), 'buch.epub');
-
-		expect(res).toEqual({
-			detectedMeta: { title: 'T', author: 'A' },
-			fileHash: 'h1',
-			coverKey: 'cover-key-1',
-			coverPreviewUrl: 'https://covers.example/preview.jpg'
-		});
 	});
 
 	it('returns a duplicate result on 409 instead of throwing', async () => {
@@ -247,62 +226,6 @@ describe('createHttpClient', () => {
 		instance.send = () => instance.onerror?.();
 		const http = createHttpClient('http://api', fakeAuthStore(), fetch, () => instance);
 		await expect(http.uploadEpub(new Blob(['x']), 'buch.epub')).rejects.toBeInstanceOf(HttpError);
-	});
-
-	it('creates a book with title, author and fileHash', async () => {
-		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: [] };
-		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(book));
-		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
-		const res = await http.createBook('T', 'A', 'h1');
-
-		expect(res).toEqual(book);
-		const [url, opts] = fetchMock.mock.calls[0];
-		expect(url).toBe('http://api/books');
-		expect(opts.method).toBe('POST');
-		expect(JSON.parse(opts.body)).toEqual({ title: 'T', author: 'A', fileHash: 'h1' });
-	});
-
-	it('includes coverKey in the body when provided', async () => {
-		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: [], coverUrl: null };
-		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(book));
-		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
-		await http.createBook('T', 'A', 'h1', 'cover-key-1');
-
-		const [, opts] = fetchMock.mock.calls[0];
-		expect(JSON.parse(opts.body)).toEqual({ title: 'T', author: 'A', fileHash: 'h1', coverKey: 'cover-key-1' });
-	});
-
-	it('omits coverKey from the body when not provided', async () => {
-		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: [], coverUrl: null };
-		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(book));
-		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
-		await http.createBook('T', 'A', 'h1');
-
-		const [, opts] = fetchMock.mock.calls[0];
-		expect(JSON.parse(opts.body)).toEqual({ title: 'T', author: 'A', fileHash: 'h1' });
-	});
-
-	it('includes tags in the body when provided', async () => {
-		const book = { id: 'b1', title: 'T', author: 'A', fileHash: 'h1', processingStatus: 'ready', tags: ['sci-fi'], coverUrl: null };
-		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(book));
-		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
-		await http.createBook('T', 'A', 'h1', undefined, ['sci-fi', 'favorit']);
-
-		const [, opts] = fetchMock.mock.calls[0];
-		expect(JSON.parse(opts.body)).toEqual({
-			title: 'T',
-			author: 'A',
-			fileHash: 'h1',
-			tags: ['sci-fi', 'favorit']
-		});
-	});
-
-	it('throws on a failed createBook', async () => {
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValue(jsonResponse({ error: 'invalid' }, { ok: false, status: 400 }));
-		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
-		await expect(http.createBook('T', 'A', 'h1')).rejects.toBeInstanceOf(HttpError);
 	});
 
 	it('patches book metadata', async () => {

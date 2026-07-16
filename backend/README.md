@@ -10,7 +10,7 @@ Four layers, per Requirements §4.7:
 
 - **Portal** (`src/portal/`) — Fastify routes. Pure HTTP-to-Reactor translation, no business logic.
 - **Processor** (`src/processor/`) — one Reactor per endpoint (`authRequestCode`, `authVerifyCode`,
-  `listBooks`, `getBook`, `uploadEpub`, `createBook`, `updateBook`, `deleteBook`, `borrowBook`,
+  `listBooks`, `getBook`, `uploadEpub`, `updateBook`, `deleteBook`, `borrowBook`,
   `getBookFile`, `listAnnotations`, `createAnnotation`, `updateAnnotation`, `deleteAnnotation`,
   `translateText`, `lookupText`, `updateAccountSettings`). Composition only.
 - **Domain** (`src/domain/`) — RPUs (nearly-pure functions) + shared types. Knows nothing about
@@ -108,24 +108,20 @@ curl -s -X POST http://localhost:3000/auth/login/verify \
 
 TOKEN="<jwt from above>"
 
-# 3. Upload the EPUB (metadata extraction + duplicate check, no catalog entry yet)
+# 3. Upload the EPUB. This stores the EPUB + cover and creates the catalog
+#    entry in one step, using the detected metadata as-is (edit it afterwards
+#    via PATCH /books/:id). Returns the created book.
 curl -s -X POST http://localhost:3000/books/upload \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@/path/to/Helgoland.epub;type=application/epub+zip"
-# -> {"detectedMeta":{"title":"Helgoland","author":"Carlo Rovelli","language":"en"},"fileHash":"<sha256>"}
+# -> {"id":"<uuid>","title":"Helgoland","author":"Carlo Rovelli","fileHash":"<sha256>","processingStatus":"ready", ...}
 
-# Re-uploading the same file now returns 409:
+# Re-uploading the same file returns 409 (no second entry, no re-upload):
 # -> {"error":"duplicate","existingBookId":"<uuid>"}
-
-# 4. Confirm the catalog entry with the (possibly edited) metadata
-curl -s -X POST http://localhost:3000/books \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"title":"Helgoland","author":"Carlo Rovelli","fileHash":"<sha256 from step 3>"}'
-# -> {"id":"<uuid>","title":"Helgoland","author":"Carlo Rovelli","fileHash":"<sha256>","processingStatus":"ready"}
 
 BOOK_ID="<uuid from above>"
 
-# 5. List / get the catalog entry
+# 4. List / get the catalog entry
 curl -s http://localhost:3000/books -H "Authorization: Bearer $TOKEN"
 curl -s http://localhost:3000/books/$BOOK_ID -H "Authorization: Bearer $TOKEN"
 
@@ -169,22 +165,22 @@ in `.env`:
    `[email-placeholder] would send OTP login email to ...` (no real send, `RESEND_API_KEY` untouched).
 2. `POST /auth/login/verify` with the real `AUTH_SECRET_OTP` → `200` with a JWT + `userId`.
    A wrong code correctly returned `401 {"error":"invalid_code"}`.
-3. `POST /books/upload` with the real 2.3 MB EPUB → `200` with correctly detected
-   `{"title":"Helgoland","author":"Carlo Rovelli","language":"en"}` and a 64-char sha256 `fileHash`.
-   Re-uploading the identical file returned `409 {"error":"duplicate","existingBookId":...}` as required.
-4. `POST /books` → `201` with the catalog entry (`processingStatus: "ready"` — there is no
-   background text-extraction pipeline in this walking skeleton, so books are marked ready
-   immediately rather than getting stuck in `pending`).
-5. `GET /books` and `GET /books/:id` → `200`, correctly scoped to the logged-in user.
-6. `POST /loans` → `201` with a loan row referencing the book's current `fileHash`.
-7. `GET /books/:id/file` → `200`, streamed 2,303,894 bytes whose sha256 matched the original
+3. `POST /books/upload` with the real 2.3 MB EPUB → `201` with the created catalog entry
+   (detected `{"title":"Helgoland","author":"Carlo Rovelli"}`, `processingStatus: "ready"` — there
+   is no background text-extraction pipeline in this walking skeleton, so books are marked ready
+   immediately). The EPUB, its cover and the catalog row are created in one step; there is no
+   separate confirm-details request. Re-uploading the identical file returned
+   `409 {"error":"duplicate","existingBookId":...}` as required (no second entry, no re-upload).
+4. `GET /books` and `GET /books/:id` → `200`, correctly scoped to the logged-in user.
+5. `POST /loans` → `201` with a loan row referencing the book's current `fileHash`.
+6. `GET /books/:id/file` → `200`, streamed 2,303,894 bytes whose sha256 matched the original
    file's hash exactly (byte-for-byte round trip via R2).
-8. `PATCH /books/:id` with `{"title":"Helgoland (Edited)","tags":["physics","quantum"]}` → `200`
+7. `PATCH /books/:id` with `{"title":"Helgoland (Edited)","tags":["physics","quantum"]}` → `200`
    with the updated summary (`author` left untouched since it wasn't in the patch); a follow-up
    `GET /books/:id` confirmed the change persisted. `{"title":"   "}` → `400
    {"error":"invalid_request"}`, and `{"tags":["ok",5]}` → `400 {"error":"invalid_request"}`,
    neither one touching the row.
-9. `DELETE /books/:id` → `204` with an empty body. Verified `headObject` on the book's R2 key
+8. `DELETE /books/:id` → `204` with an empty body. Verified `headObject` on the book's R2 key
    returned a real object (`{"sizeBytes":2303894}`) immediately before the delete and `null`
    immediately after — the R2 object is actually removed, not just the catalog row. A second
    `GET /books/:id` afterward → `404 {"error":"not_found"}`, and a second `DELETE` on the same

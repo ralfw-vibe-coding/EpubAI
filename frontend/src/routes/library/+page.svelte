@@ -9,83 +9,18 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
-	// Upload flow, one phase at a time:
-	//   idle -> uploading (progress bar) -> edit (editable title/author, confirm)
+	// Upload flow, one phase at a time. Selecting a file uploads AND creates the
+	// book in one step (metadata as-is, edited later on the book detail page) -
+	// there is no intermediate "confirm details" step:
+	//   idle -> uploading (progress bar) -> back to idle once the catalog reloads
 	//                                     -> duplicate (link to existing book)
 	//                                     -> error
-	type UploadPhase = 'idle' | 'uploading' | 'edit' | 'duplicate' | 'error';
+	type UploadPhase = 'idle' | 'uploading' | 'duplicate' | 'error';
 	let phase = $state<UploadPhase>('idle');
 	let progress = $state(0);
 	let uploadError = $state<string | null>(null);
-	let editTitle = $state('');
-	let editAuthor = $state('');
-	let fileHash = $state('');
-	let coverKey = $state<string | undefined>(undefined);
-	let coverPreviewUrl = $state<string | undefined>(undefined);
-	let coverPreviewBroken = $state(false);
 	let duplicateBookId = $state<string | null>(null);
-	let adding = $state(false);
 	let fileInput = $state<HTMLInputElement | null>(null);
-
-	// Tags for the book being added, same autocomplete pattern as the book-detail
-	// edit screen: full list of already-used tags on focus, narrowed while typing.
-	let editTagsDraft = $state<string[]>([]);
-	let editTagInput = $state('');
-	let editTagInputFocused = $state(false);
-	let editKnownTags = $state<string[]>([]);
-	let editKnownTagsLoaded = false;
-
-	async function loadEditKnownTags() {
-		if (editKnownTagsLoaded) return;
-		editKnownTagsLoaded = true;
-		try {
-			const catalog = await getProcessor().loadCatalog();
-			const distinct = new Set<string>();
-			for (const b of catalog) {
-				for (const tag of b.tags) distinct.add(tag);
-			}
-			editKnownTags = [...distinct];
-		} catch {
-			// Suggestions are a convenience only; silently skip on failure.
-		}
-	}
-
-	function addEditTag(tag: string) {
-		const trimmed = tag.trim();
-		if (trimmed && !editTagsDraft.includes(trimmed)) {
-			editTagsDraft = [...editTagsDraft, trimmed];
-		}
-		editTagInput = '';
-	}
-
-	function removeEditTag(tag: string) {
-		editTagsDraft = editTagsDraft.filter((t) => t !== tag);
-	}
-
-	function onEditTagKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') {
-			e.preventDefault();
-			addEditTag(editTagInput);
-		}
-	}
-
-	function onEditTagInputFocus() {
-		editTagInputFocused = true;
-		loadEditKnownTags();
-	}
-
-	function onEditTagInputBlur() {
-		setTimeout(() => {
-			editTagInputFocused = false;
-		}, 150);
-	}
-
-	const editTagSuggestions = $derived.by(() => {
-		const query = editTagInput.trim().toLowerCase();
-		return editKnownTags.filter(
-			(tag) => tag.toLowerCase().includes(query) && !editTagsDraft.includes(tag)
-		);
-	});
 
 	// Book covers that failed to load fall back to the color-swatch display
 	// instead of a broken-image icon (Aufgabe 7).
@@ -159,19 +94,13 @@
 		phase = 'idle';
 		progress = 0;
 		uploadError = null;
-		editTitle = '';
-		editAuthor = '';
-		fileHash = '';
-		coverKey = undefined;
-		coverPreviewUrl = undefined;
-		coverPreviewBroken = false;
 		duplicateBookId = null;
-		editTagsDraft = [];
-		editTagInput = '';
 		if (fileInput) fileInput.value = '';
 	}
 
-	// Step 2/3: a file was chosen -> upload it with a real progress readout.
+	// A file was chosen -> upload it (which also creates the catalog entry) with
+	// a real progress readout, then reload the catalog. A duplicate links to the
+	// existing entry; any other failure shows an error.
 	async function onFileChosen(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
@@ -187,37 +116,12 @@
 				duplicateBookId = res.existingBookId;
 				phase = 'duplicate';
 			} else {
-				editTitle = res.detectedMeta.title;
-				editAuthor = res.detectedMeta.author;
-				fileHash = res.fileHash;
-				coverKey = res.coverKey;
-				coverPreviewUrl = res.coverPreviewUrl;
-				coverPreviewBroken = false;
-				editTagsDraft = [];
-				editTagInput = '';
-				phase = 'edit';
+				resetUpload();
+				await reload();
 			}
 		} catch (e2) {
 			uploadError = e2 instanceof Error ? e2.message : 'Upload fehlgeschlagen.';
 			phase = 'error';
-		}
-	}
-
-	// Step 4: confirm the (possibly corrected) details.
-	async function confirmAdd() {
-		const title = editTitle.trim();
-		const author = editAuthor.trim();
-		if (!title || !author || adding) return;
-		adding = true;
-		uploadError = null;
-		try {
-			await getProcessor().confirmAddBook(title, author, fileHash, coverKey, editTagsDraft);
-			resetUpload();
-			await reload();
-		} catch (e) {
-			uploadError = e instanceof Error ? e.message : 'Hinzufügen fehlgeschlagen.';
-		} finally {
-			adding = false;
 		}
 	}
 </script>
@@ -268,82 +172,6 @@
 						zum bestehenden Eintrag
 					</a>
 				</p>
-			{:else if phase === 'edit'}
-				{#if coverPreviewUrl && !coverPreviewBroken}
-					<img
-						src={coverPreviewUrl}
-						alt=""
-						class="h-24 w-16 flex-none border border-[var(--color-divider)] object-cover"
-						onerror={() => (coverPreviewBroken = true)}
-					/>
-				{/if}
-				<label class="flex flex-col gap-1 text-sm">
-					<span class="text-[var(--color-neutral-700)]">Titel</span>
-					<input
-						bind:value={editTitle}
-						class="border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2"
-					/>
-				</label>
-				<label class="flex flex-col gap-1 text-sm">
-					<span class="text-[var(--color-neutral-700)]">Autor</span>
-					<input
-						bind:value={editAuthor}
-						class="border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2"
-					/>
-				</label>
-				<div class="flex flex-col gap-1 text-sm">
-					<span class="text-[var(--color-neutral-700)]">Tags</span>
-					<div class="flex flex-wrap gap-2">
-						{#each editTagsDraft as tag (tag)}
-							<span
-								class="flex items-center gap-1 border border-[var(--color-divider)] bg-[var(--color-bg)] px-2 py-1 text-xs"
-							>
-								{tag}
-								<button
-									onclick={() => removeEditTag(tag)}
-									aria-label={`Tag ${tag} entfernen`}
-									class="text-[var(--color-accent-700)]"
-								>
-									×
-								</button>
-							</span>
-						{/each}
-					</div>
-					<input
-						bind:value={editTagInput}
-						onkeydown={onEditTagKeydown}
-						onfocus={onEditTagInputFocus}
-						onblur={onEditTagInputBlur}
-						placeholder="Tag eingeben, Enter zum Hinzufügen"
-						class="border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2"
-					/>
-					{#if editTagInputFocused}
-						{#if editTagSuggestions.length > 0}
-							<div class="flex max-h-32 flex-wrap gap-2 overflow-y-auto">
-								{#each editTagSuggestions as suggestion (suggestion)}
-									<button
-										type="button"
-										onclick={() => addEditTag(suggestion)}
-										class="border border-[var(--color-divider)] bg-[var(--color-surface)] px-2 py-1 text-xs transition hover:border-[var(--color-accent)]"
-									>
-										{suggestion}
-									</button>
-								{/each}
-							</div>
-						{:else if editTagInput.trim()}
-							<p class="text-xs text-[var(--color-neutral-700)]">
-								kein Treffer — Enter zum Anlegen von „{editTagInput.trim()}“
-							</p>
-						{/if}
-					{/if}
-				</div>
-				<button
-					onclick={confirmAdd}
-					disabled={adding || !editTitle.trim() || !editAuthor.trim()}
-					class="w-full bg-[var(--color-accent)] px-4 py-3 text-left font-semibold text-[var(--color-bg)] disabled:opacity-45"
-				>
-					{adding ? 'Wird gespeichert…' : 'Speichern'}
-				</button>
 			{/if}
 
 			{#if uploadError}

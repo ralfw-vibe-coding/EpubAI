@@ -7,7 +7,7 @@ import { requireUserId, AuthError } from "./shared/requireUserId.js";
 
 export type GetBookFileResult =
   | { status: 200; kind: "stream"; stream: Readable; contentType: string }
-  | { status: 401 | 404; kind: "json"; body: { error: string } };
+  | { status: 401 | 404 | 502; kind: "json"; body: { error: string } };
 
 /**
  * Reactor for GET /books/:id/file.
@@ -34,6 +34,20 @@ export async function getBookFile(
   const bookFile = await bookFileRepo.findByBookId(book.id);
   const storageKey = bookFile?.storageKey ?? `${book.currentFileHash}.epub`;
 
-  const stream = await r2.getObjectStream(storageKey);
+  let stream: Readable;
+  try {
+    stream = await r2.getObjectStream(storageKey);
+  } catch (err) {
+    // A missing R2 object surfaces as a clear, specific error instead of an
+    // unhandled 500 - this is exactly what a storage-key collision between
+    // two different uploads (now prevented, see resolveCoverKey/uploadEpub)
+    // would otherwise present as: the loan is created fine, but the file
+    // itself can't be fetched right after.
+    const name = (err as { name?: string })?.name;
+    if (name === "NoSuchKey" || name === "NotFound") {
+      return { status: 502, kind: "json", body: { error: "file_missing" } };
+    }
+    throw err;
+  }
   return { status: 200, kind: "stream", stream, contentType: "application/epub+zip" };
 }

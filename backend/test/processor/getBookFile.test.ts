@@ -83,4 +83,25 @@ describe("getBookFile reactor", () => {
 
     expect(r2.getObjectStream).toHaveBeenCalledWith("hash-1.epub");
   });
+
+  it("returns 502 file_missing instead of an unhandled crash when the R2 object is gone", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
+    (bookFileRepo.findByBookId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    const notFoundError = Object.assign(new Error("not found"), { name: "NoSuchKey" });
+    (r2.getObjectStream as ReturnType<typeof vi.fn>).mockRejectedValue(notFoundError);
+
+    const result = await getBookFile(`Bearer ${token}`, "book-1");
+
+    expect(result).toEqual({ status: 502, kind: "json", body: { error: "file_missing" } });
+  });
+
+  it("rethrows an unrelated R2 error rather than masking it as file_missing", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
+    (bookFileRepo.findByBookId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (r2.getObjectStream as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("network blip"));
+
+    await expect(getBookFile(`Bearer ${token}`, "book-1")).rejects.toThrow("network blip");
+  });
 });

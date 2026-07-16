@@ -49,11 +49,11 @@ export interface BookDraft {
 }
 
 /**
- * Builds the normalized draft for a new catalog entry from caller-confirmed
+ * Builds the normalized draft for a new catalog entry from the detected
  * metadata. No background text-extraction pipeline exists in the walking
- * skeleton, so the book is immediately marked "ready". `coverKey` must
- * already have been validated by `resolveCoverKey` - this function does not
- * re-check it.
+ * skeleton, so the book is immediately marked "ready". `coverKey` is the
+ * server-generated storage key from uploadEpub (or null when the EPUB had no
+ * cover) - it is trusted, not client-supplied.
  */
 export function buildBookDraft(input: {
   title: string;
@@ -72,21 +72,6 @@ export function buildBookDraft(input: {
     processingStatus: "ready",
     coverKey: input.coverKey ?? null
   };
-}
-
-/**
- * Security check for the client-supplied `coverKey` on POST /books: only
- * accept it if it is exactly the storage key `uploadEpub` would have
- * produced for *this* upload (`<fileHash>-cover.<anything>`). This prevents
- * a client from pointing a book at an arbitrary R2 key belonging to another
- * upload/user, which would otherwise surface as someone else's cover image.
- * Anything else - wrong prefix, non-string, missing - resolves to null
- * (silently dropped, not an error; a cover is optional).
- */
-export function resolveCoverKey(coverKey: unknown, fileHash: string): string | null {
-  if (typeof coverKey !== "string") return null;
-  const prefix = `${fileHash}-cover.`;
-  return coverKey.startsWith(prefix) ? coverKey : null;
 }
 
 /**
@@ -159,8 +144,8 @@ export function updateBookMetadata(input: { title?: unknown; author?: unknown; t
 /**
  * Validates and normalizes a tags array from untrusted input: must be an
  * array of strings, each trimmed and non-blank. Returns `null` if malformed
- * (caller decides how to react - e.g. 400 invalid_request). Shared between
- * `updateBookMetadata` (PATCH) and `createBook`'s optional `tags` on creation.
+ * (caller decides how to react - e.g. 400 invalid_request). Used by
+ * `updateBookMetadata` (PATCH) when the caller edits a book's tags.
  */
 export function parseTags(value: unknown): string[] | null {
   if (!Array.isArray(value) || !value.every((tag): tag is string => typeof tag === "string")) {

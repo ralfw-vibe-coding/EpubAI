@@ -1,6 +1,7 @@
-import { computeFileHash, detectDuplicate, buildDetectedMeta } from "../domain/bookRpu.js";
-import type { DetectedMeta } from "../domain/types.js";
+import { computeFileHash, detectDuplicate, buildDetectedMeta, buildBookDraft, toBookSummary } from "../domain/bookRpu.js";
+import type { BookSummary } from "../domain/types.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
+import * as bookFileRepo from "../providers/d/bookFileRepo.js";
 import * as r2 from "../providers/x/r2.js";
 import { parseEpub, EpubTooLargeError, EpubParseError, type ParsedEpubMeta } from "../providers/x/epubParser.js";
 import { MAX_UNPACKED_EPUB_BYTES } from "../config.js";
@@ -13,18 +14,7 @@ export interface UploadEpubInput {
 }
 
 export type UploadEpubBody =
-  | {
-      detectedMeta: DetectedMeta;
-      fileHash: string;
-      // Opaque to the client - it must be returned unchanged in POST /books
-      // if the caller wants this cover attached. Only present when the
-      // EPUB actually declared a cover image.
-      coverKey?: string;
-      // Presigned URL for showing the cover in the edit-metadata step
-      // before the catalog entry is confirmed via POST /books. Not stored
-      // anywhere - re-derived from coverKey whenever needed.
-      coverPreviewUrl?: string;
-    }
+  | BookSummary
   | { error: "duplicate"; existingBookId: string }
   | { error: string };
 
@@ -43,9 +33,13 @@ function extensionForCover(mediaType: string, href: string): string {
 
 /**
  * Reactor for POST /books/upload.
- * Composition: hash -> duplicate check (dProvider) -> parse metadata (xProvider,
- * zip-bomb/XXE guarded) -> upload to R2 (xProvider). No catalog entry is created
- * here (see createBook).
+ * Uploads a book fully in one step: hash -> duplicate check (dProvider) ->
+ * parse metadata (xProvider, zip-bomb/XXE guarded) -> upload the EPUB and its
+ * cover to R2 -> create the catalog entry with the detected metadata as-is.
+ * There is deliberately no separate "confirm details" step: the book is
+ * persisted immediately and the user edits/deletes it afterwards from the book
+ * detail page. This keeps R2 and the catalog in lockstep - a cover is only
+ * uploaded as part of actually creating the book, never left orphaned.
  */
 export async function uploadEpub(
   authorizationHeader: string | undefined,
@@ -79,16 +73,47 @@ export async function uploadEpub(
   const fallbackTitle = input.filename.replace(/\.epub$/i, "");
   const detectedMeta = buildDetectedMeta(rawMeta, fallbackTitle);
 
-  await r2.uploadObject(`${fileHash}.epub`, input.fileBuffer);
+  const storageKey = `${userId}/${fileHash}.epub`;
+  await r2.uploadObject(storageKey, input.fileBuffer);
 
-  if (!rawMeta.cover) {
-    return ok(200, { detectedMeta, fileHash });
+  let coverKey: string | null = null;
+  if (rawMeta.cover) {
+    const ext = extensionForCover(rawMeta.cover.mediaType, rawMeta.cover.href);
+    coverKey = `${userId}/${fileHash}-cover.${ext}`;
+    await r2.uploadObject(coverKey, rawMeta.cover.data, rawMeta.cover.mediaType);
   }
 
-  const ext = extensionForCover(rawMeta.cover.mediaType, rawMeta.cover.href);
-  const coverKey = `${fileHash}-cover.${ext}`;
-  await r2.uploadObject(coverKey, rawMeta.cover.data, rawMeta.cover.mediaType);
-  const coverPreviewUrl = await r2.getPresignedUrl(coverKey);
+  const draft = buildBookDraft({
+    title: detectedMeta.title,
+    author: detectedMeta.author,
+    fileHash,
+    coverKey,
+    tags: []
+  });
 
-  return ok(200, { detectedMeta, fileHash, coverKey, coverPreviewUrl });
+  let book;
+  try {
+    book = await bookRepo.insert(userId, draft);
+  } catch (err) {
+    // A concurrent upload of the same file can slip past the duplicate check
+    // above and hit the (user_id, current_file_hash) unique index - answer it
+    // as a duplicate rather than a 500. The R2 objects just written are the
+    // same content-addressed keys the winning upload already wrote, so there
+    // is nothing to clean up.
+    if ((err as { code?: string })?.code === "23505") {
+      const winner = await bookRepo.findByUserAndHash(userId, fileHash);
+      return ok(409, { error: "duplicate", existingBookId: winner?.id ?? "" });
+    }
+    throw err;
+  }
+
+  await bookFileRepo.insert({
+    bookId: book.id,
+    storageKey,
+    fileHash,
+    sizeBytes: input.fileBuffer.length
+  });
+
+  const coverUrl = book.coverUrl ? await r2.getPresignedUrl(book.coverUrl) : null;
+  return ok(201, toBookSummary(book, coverUrl));
 }

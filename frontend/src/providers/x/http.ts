@@ -2,7 +2,6 @@ import type { Annotation, CatalogBook } from '../../domain/types';
 import type {
 	AuthStore,
 	BookMetadataPatch,
-	DetectedMeta,
 	HttpClient,
 	LoanResponse,
 	LoginRequestResult,
@@ -158,14 +157,7 @@ export function createHttpClient(
 				};
 				xhr.onerror = () => reject(new HttpError(0, 'Netzwerkfehler beim Hochladen.'));
 				xhr.onload = () => {
-					let body: {
-						error?: string;
-						existingBookId?: string;
-						detectedMeta?: DetectedMeta;
-						fileHash?: string;
-						coverKey?: string;
-						coverPreviewUrl?: string;
-					};
+					let body: { error?: string; existingBookId?: string } & Partial<CatalogBook>;
 					try {
 						body = xhr.responseText ? JSON.parse(xhr.responseText) : {};
 					} catch {
@@ -182,37 +174,11 @@ export function createHttpClient(
 						reject(new HttpError(xhr.status, body.error ?? `HTTP ${xhr.status}`));
 						return;
 					}
-					resolve({
-						detectedMeta: body.detectedMeta as DetectedMeta,
-						fileHash: body.fileHash as string,
-						coverKey: body.coverKey,
-						coverPreviewUrl: body.coverPreviewUrl
-					});
+					// Success: the upload created the catalog entry in one step.
+					resolve(body as CatalogBook);
 				};
 				xhr.send(form);
 			});
-		},
-
-		async createBook(
-			title: string,
-			author: string,
-			fileHash: string,
-			coverKey?: string,
-			tags?: string[]
-		): Promise<CatalogBook> {
-			const res = await fetchImpl(`${base}/books`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', ...authHeaders() },
-				body: JSON.stringify({
-					title,
-					author,
-					fileHash,
-					...(coverKey ? { coverKey } : {}),
-					...(tags ? { tags } : {})
-				})
-			});
-			if (!res.ok) throw new HttpError(res.status, await readError(res));
-			return (await res.json()) as CatalogBook;
 		},
 
 		async updateBookMetadata(bookId: string, patch: BookMetadataPatch): Promise<CatalogBook> {
