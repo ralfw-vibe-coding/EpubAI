@@ -24,6 +24,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     addedAt: "2026-01-01T00:00:00.000Z",
     currentFileHash: "hash-1",
     processingStatus: "ready",
+    dossierUploadedAt: null,
     ...overrides
   };
 }
@@ -63,7 +64,8 @@ describe("listBooks reactor", () => {
             tags: ["a", "b"],
             coverUrl: null,
             fileHash: "hash-1",
-            processingStatus: "ready"
+            processingStatus: "ready",
+            hasDossier: false
           }
         ]
       }

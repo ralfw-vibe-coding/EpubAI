@@ -57,6 +57,43 @@ export async function deleteObject(key: string): Promise<void> {
 }
 
 /**
+ * Stores a plain-text object (full book text, dossier). Separate from
+ * `uploadObject` so callers never have to remember a Content-Type - text
+ * objects are always UTF-8 prose, never the EPUB media type.
+ */
+export async function putText(key: string, text: string): Promise<void> {
+  await client.send(
+    new PutObjectCommand({
+      Bucket: env.R2_BUCKET,
+      Key: key,
+      Body: Buffer.from(text, "utf8"),
+      ContentType: "text/plain; charset=utf-8"
+    })
+  );
+}
+
+/**
+ * Reads back a text object written by `putText`. Returns null rather than
+ * throwing when the object is missing - callers (lazy full-text backfill,
+ * dossier lookup) treat "not there yet" as a normal case, not an error.
+ */
+export async function getText(key: string): Promise<string | null> {
+  try {
+    const result = await client.send(new GetObjectCommand({ Bucket: env.R2_BUCKET, Key: key }));
+    const body = result.Body as Readable;
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks).toString("utf8");
+  } catch (err) {
+    const name = (err as { name?: string })?.name;
+    if (name === "NotFound" || name === "NoSuchKey") return null;
+    throw err;
+  }
+}
+
+/**
  * Deletes every object whose key starts with `prefix`. Used by deleteBook to
  * clear a book's whole per-user storage prefix (`<userId>/<fileHash>`) in one
  * shot - robust against a stored cover key being null or out of sync with the

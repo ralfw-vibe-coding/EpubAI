@@ -452,4 +452,96 @@ describe('createHttpClient', () => {
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
 		await expect(http.updateAccountSettings('xx')).rejects.toBeInstanceOf(HttpError);
 	});
+
+	it('chats about a book, sending the full history plus selection and progress', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ text: 'Antwort', dossierUsed: true }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.chatAboutBook(
+			'b1',
+			[{ role: 'user', content: 'Wer ist die Hauptfigur?' }],
+			'Ein markierter Satz',
+			0.42
+		);
+
+		expect(res).toEqual({ text: 'Antwort', dossierUsed: true });
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/ai/chat');
+		expect(opts.method).toBe('POST');
+		expect(JSON.parse(opts.body)).toEqual({
+			bookId: 'b1',
+			messages: [{ role: 'user', content: 'Wer ist die Hauptfigur?' }],
+			selection: 'Ein markierter Satz',
+			progressPercent: 0.42
+		});
+	});
+
+	it('chats about a whole book without selection/progressPercent when omitted', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ text: 'Antwort', dossierUsed: false }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.chatAboutBook('b1', [{ role: 'user', content: 'Worum geht es?' }]);
+
+		const [, opts] = fetchMock.mock.calls[0];
+		expect(JSON.parse(opts.body)).toEqual({
+			bookId: 'b1',
+			messages: [{ role: 'user', content: 'Worum geht es?' }]
+		});
+	});
+
+	it('throws on a failed chatAboutBook', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'chat_failed' }, { ok: false, status: 502 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.chatAboutBook('b1', [])).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('uploads a dossier and returns the updated book', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			jsonResponse({
+				id: 'b1',
+				title: 'T',
+				author: 'A',
+				fileHash: 'h1',
+				processingStatus: 'ready',
+				tags: [],
+				coverUrl: null,
+				progress: null,
+				hasDossier: true
+			})
+		);
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.uploadDossier('b1', 'Hintergrundwissen zum Buch');
+
+		expect(res.hasDossier).toBe(true);
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1/dossier');
+		expect(opts.method).toBe('PUT');
+		expect(JSON.parse(opts.body)).toEqual({ text: 'Hintergrundwissen zum Buch' });
+	});
+
+	it('throws on a failed uploadDossier', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'invalid_input' }, { ok: false, status: 400 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.uploadDossier('b1', '')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('deletes a dossier', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}, { status: 204 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await http.deleteDossier('b1');
+
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1/dossier');
+		expect(opts.method).toBe('DELETE');
+	});
+
+	it('throws on a failed deleteDossier', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not_found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.deleteDossier('b1')).rejects.toBeInstanceOf(HttpError);
+	});
 });

@@ -2,6 +2,7 @@ import type { DProvider } from '../domain/ports';
 import type { Annotation, Loan, ReadingProgress } from '../domain/types';
 import type {
 	AuthStore,
+	ChatReply,
 	Clock,
 	DeviceProvider,
 	FileStore,
@@ -115,7 +116,8 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		processingStatus: 'ready',
 		tags: [],
 		coverUrl: null,
-		progress: null
+		progress: null,
+		hasDossier: false
 	};
 	const defaultLoan: LoanResponse = {
 		id: 'loan1',
@@ -124,6 +126,7 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		borrowedAt: '2026-07-13T00:00:00.000Z'
 	};
 	const defaultUpload: UploadEpubResult = defaultBook;
+	const defaultChatReply: ChatReply = { text: 'Antwort', dossierUsed: true };
 	const defaultAnnotation: Annotation = {
 		id: 'a1',
 		bookId: 'b1',
@@ -154,6 +157,9 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		translateSelection: record('translateSelection', 'Übersetzter Text'),
 		lookupSelection: record('lookupSelection', 'Erklärung des Begriffs'),
 		updateAccountSettings: record('updateAccountSettings', 'de'),
+		chatAboutBook: record('chatAboutBook', defaultChatReply),
+		uploadDossier: record('uploadDossier', { ...defaultBook, hasDossier: true }),
+		deleteDossier: record('deleteDossier', undefined as void),
 		...overrides
 	};
 	return { impl, calls };

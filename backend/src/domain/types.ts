@@ -31,6 +31,10 @@ export interface Book {
   addedAt: string;
   currentFileHash: string;
   processingStatus: ProcessingStatus;
+  // ISO timestamp of the last dossier upload, or null when none exists yet.
+  // Public projections only ever expose the derived `hasDossier` boolean
+  // (see BookSummary) - the timestamp itself is an implementation detail.
+  dossierUploadedAt: string | null;
 }
 
 export interface BookFile {
@@ -64,6 +68,8 @@ export interface BookSummary {
   coverUrl: string | null;
   fileHash: string;
   processingStatus: ProcessingStatus;
+  /** True once a dossier has been uploaded (dossier_uploaded_at is not null). */
+  hasDossier: boolean;
 }
 
 export interface DetectedMeta {

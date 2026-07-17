@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { translateText } from "../processor/translateText.js";
 import { lookupText } from "../processor/lookupText.js";
+import { chatAboutBook } from "../processor/chatAboutBook.js";
 
 // Portal: pure HTTP-to-Reactor translation, no business logic.
 export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
@@ -13,6 +14,22 @@ export async function registerAiRoutes(app: FastifyInstance): Promise<void> {
   app.post("/ai/lookup", async (request, reply) => {
     const body = (request.body ?? {}) as { text?: unknown; lang?: unknown };
     const result = await lookupText(request.headers.authorization, { text: body.text, lang: body.lang });
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.post("/ai/chat", async (request, reply) => {
+    const body = (request.body ?? {}) as {
+      bookId?: unknown;
+      selection?: unknown;
+      progressPercent?: unknown;
+      messages?: unknown;
+    };
+    const result = await chatAboutBook(request.headers.authorization, {
+      bookId: body.bookId,
+      selection: body.selection,
+      progressPercent: body.progressPercent,
+      messages: body.messages
+    });
     return reply.code(result.status).send(result.body);
   });
 }

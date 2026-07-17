@@ -9,13 +9,14 @@ vi.mock("../../src/providers/d/bookFileRepo.js", () => ({
 }));
 vi.mock("../../src/providers/x/r2.js", () => ({
   uploadObject: vi.fn(),
+  putText: vi.fn(),
   getPresignedUrl: vi.fn()
 }));
 vi.mock("../../src/providers/x/epubParser.js", async () => {
   const actual = await vi.importActual<typeof import("../../src/providers/x/epubParser.js")>(
     "../../src/providers/x/epubParser.js"
   );
-  return { ...actual, parseEpub: vi.fn() };
+  return { ...actual, parseEpub: vi.fn(), extractFullText: vi.fn() };
 });
 
 import { uploadEpub } from "../../src/processor/uploadEpub.js";
@@ -23,7 +24,7 @@ import * as bookRepo from "../../src/providers/d/bookRepo.js";
 import * as bookFileRepo from "../../src/providers/d/bookFileRepo.js";
 import * as r2 from "../../src/providers/x/r2.js";
 import * as epubParser from "../../src/providers/x/epubParser.js";
-import { EpubTooLargeError, EpubParseError } from "../../src/providers/x/epubParser.js";
+import { EpubTooLargeError, EpubParseError, EpubNoTextError } from "../../src/providers/x/epubParser.js";
 import { sign } from "../../src/providers/x/jwt.js";
 import type { Book } from "../../src/domain/types.js";
 
@@ -38,6 +39,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     addedAt: "2026-01-01T00:00:00.000Z",
     currentFileHash: "existing-hash",
     processingStatus: "ready",
+    dossierUploadedAt: null,
     ...overrides
   };
 }
@@ -49,6 +51,9 @@ describe("uploadEpub reactor", () => {
     vi.clearAllMocks();
     (bookRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
     (bookFileRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    // Full-text extraction succeeds by default - individual tests override
+    // this to exercise the "extraction failed, book still created" path.
+    (epubParser.extractFullText as ReturnType<typeof vi.fn>).mockResolvedValue("Full book text.");
   });
 
   it("returns 401 without a token", async () => {
@@ -210,5 +215,64 @@ describe("uploadEpub reactor", () => {
     const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "book.epub" });
 
     expect(result).toEqual({ status: 400, body: { error: "invalid_epub" } });
+  });
+
+  describe("full-text extraction", () => {
+    it("extracts the full text and stores it at <userId>/<fileHash>.txt, creating the book as 'ready'", async () => {
+      const token = sign({ userId: "user-1" });
+      (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({ title: "T", author: "A" });
+      (epubParser.extractFullText as ReturnType<typeof vi.fn>).mockResolvedValue("=== [1] ===\n\nChapter one.");
+
+      const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "book.epub" });
+
+      expect(epubParser.extractFullText).toHaveBeenCalledWith(buf, expect.any(Number));
+      expect(r2.putText).toHaveBeenCalledWith(
+        expect.stringMatching(/^user-1\/[0-9a-f]{64}\.txt$/),
+        "=== [1] ===\n\nChapter one."
+      );
+      expect(bookRepo.insert).toHaveBeenCalledWith("user-1", expect.objectContaining({ processingStatus: "ready" }));
+      expect(result.status).toBe(201);
+    });
+
+    it("still creates the book (as 'failed') when extraction finds no readable text, instead of failing the upload", async () => {
+      const token = sign({ userId: "user-1" });
+      (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({ title: "T", author: "A" });
+      (epubParser.extractFullText as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new EpubNoTextError("no readable text")
+      );
+
+      const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "book.epub" });
+
+      expect(r2.putText).not.toHaveBeenCalled();
+      expect(bookRepo.insert).toHaveBeenCalledWith("user-1", expect.objectContaining({ processingStatus: "failed" }));
+      expect(result.status).toBe(201);
+    });
+
+    it("still creates the book (as 'failed') when extraction reports the epub as too large", async () => {
+      const token = sign({ userId: "user-1" });
+      (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({ title: "T", author: "A" });
+      (epubParser.extractFullText as ReturnType<typeof vi.fn>).mockRejectedValue(new EpubTooLargeError("too big"));
+
+      const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "book.epub" });
+
+      expect(bookRepo.insert).toHaveBeenCalledWith("user-1", expect.objectContaining({ processingStatus: "failed" }));
+      expect(result.status).toBe(201);
+    });
+
+    it("still creates the book (as 'failed') when the R2 text upload itself fails", async () => {
+      const token = sign({ userId: "user-1" });
+      (bookRepo.findByUserAndHash as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      (epubParser.parseEpub as ReturnType<typeof vi.fn>).mockResolvedValue({ title: "T", author: "A" });
+      (epubParser.extractFullText as ReturnType<typeof vi.fn>).mockResolvedValue("some text");
+      (r2.putText as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("R2 unavailable"));
+
+      const result = await uploadEpub(`Bearer ${token}`, { fileBuffer: buf, filename: "book.epub" });
+
+      expect(bookRepo.insert).toHaveBeenCalledWith("user-1", expect.objectContaining({ processingStatus: "failed" }));
+      expect(result.status).toBe(201);
+    });
   });
 });

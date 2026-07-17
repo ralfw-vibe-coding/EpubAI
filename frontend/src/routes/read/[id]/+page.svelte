@@ -15,9 +15,12 @@
 		Trash2,
 		Check,
 		Languages,
-		BookOpenText
+		BookOpenText,
+		MessageCircleQuestion,
+		MessagesSquare
 	} from 'lucide-svelte';
 	import type { Annotation, AnnotationColor } from '../../../domain/types';
+	import type { ChatMessage } from '../../../processor/ports';
 	import { getProcessor, getSession, isAuthenticated } from '../../../portal/runtime';
 	import { colorHex, HIGHLIGHT_COLORS, highlightStyles } from './colors';
 	import { AVAILABLE_LANGUAGES } from './languages';
@@ -126,6 +129,87 @@
 				text: null,
 				error: 'Nachschlagen fehlgeschlagen — keine Verbindung.'
 			};
+		}
+	}
+
+	/**
+	 * Chat sheet (§4.6/chat): two entry points share one state — "Kontext-Chat"
+	 * from the selection bar (carries the excerpt + reading progress so the
+	 * backend can disambiguate a repeated passage) and "Buch-Chat" from the
+	 * toolbar (no selection, just the book as a whole). History is kept only in
+	 * this page's state and sent in full on every turn — the backend is
+	 * stateless — and is gone once the sheet closes (by design).
+	 */
+	let chat = $state<{
+		kind: 'context' | 'book';
+		selectionExcerpt: string | null;
+		messages: ChatMessage[];
+		input: string;
+		loading: boolean;
+		error: string | null;
+		/** From the latest reply; null until the first answer arrives. */
+		dossierUsed: boolean | null;
+	} | null>(null);
+
+	/** Chat replies are Markdown too (same backend prompts as translate/lookup) — render like `aiResultHtml`. */
+	function chatMessageHtml(content: string): string {
+		return DOMPurify.sanitize(marked.parse(content, { async: false }));
+	}
+
+	function openContextChat() {
+		if (!selection) return;
+		chat = {
+			kind: 'context',
+			selectionExcerpt: selection.excerpt,
+			messages: [],
+			input: '',
+			loading: false,
+			error: null,
+			dossierUsed: null
+		};
+	}
+
+	function openBookChat() {
+		chat = {
+			kind: 'book',
+			selectionExcerpt: null,
+			messages: [],
+			input: '',
+			loading: false,
+			error: null,
+			dossierUsed: null
+		};
+	}
+
+	function closeChat() {
+		chat = null;
+	}
+
+	async function sendChatMessage() {
+		if (!chat || chat.loading) return;
+		const text = chat.input.trim();
+		if (!text) return;
+		const current = chat;
+		const messages: ChatMessage[] = [...current.messages, { role: 'user', content: text }];
+		chat = { ...current, messages, input: '', loading: true, error: null };
+		try {
+			// `percent` is 0..100 for the on-screen read-out; the contract wants 0..1.
+			const reply = await getProcessor().chatAboutBook(
+				bookId,
+				messages,
+				chat.kind === 'context' ? (chat.selectionExcerpt ?? undefined) : undefined,
+				chat.kind === 'context' ? percent / 100 : undefined
+			);
+			if (!chat) return;
+			chat = {
+				...chat,
+				messages: [...chat.messages, { role: 'assistant', content: reply.text }],
+				loading: false,
+				dossierUsed: reply.dossierUsed
+			};
+		} catch {
+			if (!chat) return;
+			chat = { ...chat, loading: false, error: 'Antwort fehlgeschlagen — keine Verbindung.' };
 		}
 	}
 
@@ -502,6 +586,13 @@
 				<Highlighter size={20} />
 			</button>
 			<button
+				onclick={openBookChat}
+				aria-label="Chat zum Buch"
+				class="p-1.5 text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
+			>
+				<MessagesSquare size={20} />
+			</button>
+			<button
 				onclick={() => (settingsOpen = true)}
 				aria-label="Einstellungen"
 				class="p-1.5 text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
@@ -534,7 +625,7 @@
 			</div>
 		{/if}
 
-		{#if selection && !aiResult}
+		{#if selection && !aiResult && !chat}
 			<div class="absolute inset-x-0 bottom-4 z-40 flex justify-center">
 				<div class="flex items-center gap-1.5 border-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-2 py-1.5 shadow">
 					{#each HIGHLIGHT_COLORS as color (color.value)}
@@ -548,23 +639,30 @@
 					<button
 						onclick={translateExcerpt}
 						aria-label="Übersetzen"
-						class="ml-1 flex flex-none items-center gap-1 border-l-2 border-[var(--color-divider)] py-2 pl-2 text-sm text-[var(--color-accent-700)]"
+						class="ml-1 flex h-9 w-9 flex-none items-center justify-center border-l-2 border-[var(--color-divider)] text-[var(--color-accent-700)]"
 					>
-						<Languages size={16} /> Übersetzen
+						<Languages size={18} />
 					</button>
 					<button
 						onclick={lookupExcerpt}
 						aria-label="Nachschlagen"
-						class="flex flex-none items-center gap-1 py-2 text-sm text-[var(--color-accent-700)]"
+						class="flex h-9 w-9 flex-none items-center justify-center text-[var(--color-accent-700)]"
 					>
-						<BookOpenText size={16} /> Nachschlagen
+						<BookOpenText size={18} />
+					</button>
+					<button
+						onclick={openContextChat}
+						aria-label="Chat zur Selektion"
+						class="flex h-9 w-9 flex-none items-center justify-center text-[var(--color-accent-700)]"
+					>
+						<MessageCircleQuestion size={18} />
 					</button>
 					<button
 						onclick={() => (selection = null)}
 						aria-label="Abbrechen"
-						class="ml-1 flex-none border-l-2 border-[var(--color-divider)] py-2 pl-2 text-[var(--color-neutral-700)]"
+						class="ml-1 flex h-9 w-9 flex-none items-center justify-center border-l-2 border-[var(--color-divider)] text-[var(--color-neutral-700)]"
 					>
-						<X size={16} />
+						<X size={18} />
 					</button>
 				</div>
 			</div>
@@ -865,6 +963,100 @@
 					{@html aiResultHtml}
 				</div>
 			{/if}
+		</section>
+	{/if}
+
+	{#if chat}
+		<button
+			aria-label="Chat schließen"
+			onclick={closeChat}
+			class="absolute inset-0 z-20 bg-black/40"
+		></button>
+		<section
+			class="absolute inset-x-0 bottom-0 z-30 flex max-h-[85vh] flex-col border-t-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+		>
+			<div class="mb-2 flex flex-none items-center justify-between">
+				<span class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">
+					{chat.kind === 'context' ? 'Chat zur Textstelle' : 'Chat zum Buch'}
+				</span>
+				<button onclick={closeChat} aria-label="Schließen" class="text-[var(--color-accent-700)]">
+					<X size={20} />
+				</button>
+			</div>
+
+			{#if chat.selectionExcerpt}
+				<blockquote
+					class="mb-2 flex-none border-l-2 border-[var(--color-divider)] pl-2 text-xs text-[var(--color-neutral-700)]"
+				>
+					<p class="line-clamp-3">„{chat.selectionExcerpt}“</p>
+				</blockquote>
+			{/if}
+
+			<div class="min-h-0 flex-1 space-y-2 overflow-y-auto py-1">
+				{#if chat.messages.length === 0 && !chat.loading}
+					<p class="text-sm text-[var(--color-neutral-700)]">
+						{chat.kind === 'context'
+							? 'Stelle eine Frage zu dieser Textstelle.'
+							: 'Stelle eine Frage zum Buch.'}
+					</p>
+				{/if}
+				{#each chat.messages as m, i (i)}
+					<div class="flex {m.role === 'user' ? 'justify-end' : 'justify-start'}">
+						{#if m.role === 'assistant'}
+							<div
+								class="max-w-[85%] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] [&_p]:mb-1 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+							>
+								{@html chatMessageHtml(m.content)}
+							</div>
+						{:else}
+							<div class="max-w-[85%] bg-[var(--color-accent)] px-3 py-2 text-sm text-[var(--color-bg)]">
+								{m.content}
+							</div>
+						{/if}
+					</div>
+				{/each}
+				{#if chat.loading}
+					<p class="text-sm text-[var(--color-neutral-700)]">Einen Moment…</p>
+				{/if}
+			</div>
+
+			{#if chat.dossierUsed === false}
+				<p class="flex-none pt-1 text-xs text-[var(--color-neutral-700)] italic">
+					{chat.kind === 'context'
+						? 'Ohne Dossier — Antworten stützen sich nur auf die Textstelle und ihre Umgebung.'
+						: 'Ohne Dossier — bekannt ist nur die Gliederung des Buchs.'}
+				</p>
+			{/if}
+
+			{#if chat.error}
+				<p class="mt-1 flex-none bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
+					{chat.error}
+				</p>
+			{/if}
+
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					void sendChatMessage();
+				}}
+				class="mt-2 flex flex-none items-center gap-2"
+			>
+				<input
+					bind:value={chat.input}
+					type="text"
+					placeholder="Frage stellen…"
+					disabled={chat.loading}
+					class="min-w-0 flex-1 border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)]"
+				/>
+				<button
+					type="submit"
+					disabled={chat.loading || !chat.input.trim()}
+					aria-label="Senden"
+					class="flex-none bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-[var(--color-bg)] disabled:opacity-45"
+				>
+					Senden
+				</button>
+			</form>
 		</section>
 	{/if}
 </div>

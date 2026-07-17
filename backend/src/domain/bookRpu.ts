@@ -50,10 +50,12 @@ export interface BookDraft {
 
 /**
  * Builds the normalized draft for a new catalog entry from the detected
- * metadata. No background text-extraction pipeline exists in the walking
- * skeleton, so the book is immediately marked "ready". `coverKey` is the
- * server-generated storage key from uploadEpub (or null when the EPUB had no
- * cover) - it is trusted, not client-supplied.
+ * metadata. Defaults to "ready" - the book is immediately readable. uploadEpub
+ * overrides this to "failed" when the (inline, best-effort) full-text
+ * extraction that feeds the AI chat couldn't produce anything: the book is
+ * still perfectly readable, only the AI-chat "Grundlage" is missing. `coverKey`
+ * is the server-generated storage key from uploadEpub (or null when the EPUB
+ * had no cover) - it is trusted, not client-supplied.
  */
 export function buildBookDraft(input: {
   title: string;
@@ -61,6 +63,7 @@ export function buildBookDraft(input: {
   fileHash: string;
   coverKey?: string | null;
   tags?: string[];
+  processingStatus?: ProcessingStatus;
 }): BookDraft {
   const title = normalizeText(input.title) ?? "Untitled";
   const author = normalizeText(input.author) ?? "Unknown";
@@ -69,7 +72,7 @@ export function buildBookDraft(input: {
     author,
     fileHash: input.fileHash,
     tags: input.tags ?? [],
-    processingStatus: "ready",
+    processingStatus: input.processingStatus ?? "ready",
     coverKey: input.coverKey ?? null
   };
 }
@@ -88,7 +91,8 @@ export function toBookSummary(book: Book, coverUrl: string | null): BookSummary 
     tags: book.tags,
     coverUrl,
     fileHash: book.currentFileHash,
-    processingStatus: book.processingStatus
+    processingStatus: book.processingStatus,
+    hasDossier: book.dossierUploadedAt != null
   };
 }
 
@@ -154,6 +158,15 @@ export function parseTags(value: unknown): string[] | null {
   const tags = value.map((tag) => tag.trim());
   if (tags.some((tag) => tag.length === 0)) return null;
   return tags;
+}
+
+/**
+ * Validates a PUT /books/:id/dossier request body: must be a non-blank
+ * string. Kept out of the Reactor so the "what counts as a valid dossier"
+ * rule lives in one place, same as updateBookMetadata for title/author/tags.
+ */
+export function isValidDossierText(text: unknown): text is string {
+  return typeof text === "string" && text.trim().length > 0;
 }
 
 function normalizeText(value?: string | null): string | undefined {

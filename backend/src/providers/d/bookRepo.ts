@@ -12,6 +12,7 @@ interface BookRow {
   added_at: Date;
   current_file_hash: string;
   processing_status: ProcessingStatus;
+  dossier_uploaded_at: Date | null;
 }
 
 function toBook(row: BookRow): Book {
@@ -24,12 +25,13 @@ function toBook(row: BookRow): Book {
     coverUrl: row.cover_url,
     addedAt: row.added_at.toISOString(),
     currentFileHash: row.current_file_hash,
-    processingStatus: row.processing_status
+    processingStatus: row.processing_status,
+    dossierUploadedAt: row.dossier_uploaded_at ? row.dossier_uploaded_at.toISOString() : null
   };
 }
 
 const SELECT_FIELDS =
-  "id, user_id, title, author, tags, cover_url, added_at, current_file_hash, processing_status";
+  "id, user_id, title, author, tags, cover_url, added_at, current_file_hash, processing_status, dossier_uploaded_at";
 
 export async function findByUserAndHash(userId: string, fileHash: string): Promise<Book | null> {
   const result = await pool.query<BookRow>(
@@ -100,4 +102,18 @@ export async function update(bookId: string, patch: BookMetadataPatch): Promise<
 
 export async function remove(bookId: string): Promise<void> {
   await pool.query("delete from book where id = $1", [bookId]);
+}
+
+/**
+ * Sets or clears the dossier timestamp (pass a Date to mark it uploaded,
+ * null to clear it on delete). One function for both directions since
+ * they're the same single-column write - `hasDossier` is derived from this
+ * timestamp being non-null (see toBookSummary).
+ */
+export async function setDossierUploadedAt(bookId: string, uploadedAt: Date | null): Promise<Book> {
+  const result = await pool.query<BookRow>(
+    `update book set dossier_uploaded_at = $1 where id = $2 returning ${SELECT_FIELDS}`,
+    [uploadedAt, bookId]
+  );
+  return toBook(result.rows[0]);
 }

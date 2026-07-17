@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { Pencil, Trash2 } from 'lucide-svelte';
+	import { Pencil, Trash2, Upload, FileText } from 'lucide-svelte';
 	import type { BookDetail } from '../../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../../portal/runtime';
 	import BookMetaFields from '$lib/BookMetaFields.svelte';
@@ -50,6 +50,13 @@
 	// The cover image falls back to the color-swatch display if it fails to
 	// load (broken/expired URL) instead of showing a broken-image icon.
 	let coverBroken = $state(false);
+
+	// Dossier (optional background knowledge for the book chat, §4.6/chat):
+	// upload reads the chosen .txt/.md file as text client-side and hands it to
+	// uploadDossier as-is; the input itself is hidden, triggered via the button.
+	let dossierInput = $state<HTMLInputElement | undefined>(undefined);
+	let dossierBusy = $state(false);
+	let dossierError = $state<string | null>(null);
 
 	onMount(async () => {
 		if (!isAuthenticated()) {
@@ -105,6 +112,45 @@
 			error = e instanceof Error ? e.message : 'Zurückgeben fehlgeschlagen.';
 		} finally {
 			returning = false;
+		}
+	}
+
+	function pickDossierFile() {
+		dossierError = null;
+		dossierInput?.click();
+	}
+
+	async function onDossierFileChosen(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = ''; // allow re-choosing the same file name after an error
+		if (!file || dossierBusy) return;
+		dossierBusy = true;
+		dossierError = null;
+		try {
+			const text = await file.text();
+			const updated = await getProcessor().uploadDossier(bookId, text);
+			// uploadDossier returns a CatalogBook (no isLocal) — merge onto the
+			// existing BookDetail rather than replacing it outright.
+			if (detail) detail = { ...detail, ...updated };
+		} catch (e) {
+			dossierError = e instanceof Error ? e.message : 'Dossier konnte nicht hochgeladen werden.';
+		} finally {
+			dossierBusy = false;
+		}
+	}
+
+	async function deleteDossier() {
+		if (dossierBusy) return;
+		dossierBusy = true;
+		dossierError = null;
+		try {
+			await getProcessor().deleteDossier(bookId);
+			if (detail) detail = { ...detail, hasDossier: false };
+		} catch (e) {
+			dossierError = e instanceof Error ? e.message : 'Dossier konnte nicht gelöscht werden.';
+		} finally {
+			dossierBusy = false;
 		}
 	}
 
@@ -305,6 +351,55 @@
 				{/if}
 			</div>
 		{/if}
+
+		<div class="mt-8 border-t-2 border-[var(--color-divider)] pt-4">
+			<h2 class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">Dossier</h2>
+			<p class="mt-1 text-xs text-[var(--color-neutral-700)]">
+				Ein Dossier gibt dem Chat zum Buch Hintergrundwissen zum ganzen Buch mit — optional; ohne
+				Dossier stützen sich Antworten nur auf die Textstelle bzw. die Gliederung.
+			</p>
+			<input
+				bind:this={dossierInput}
+				onchange={onDossierFileChosen}
+				type="file"
+				accept=".txt,.md,text/plain,text/markdown"
+				class="hidden"
+			/>
+			<div class="mt-2 flex items-center gap-3">
+				{#if detail.hasDossier}
+					<span class="flex items-center gap-1.5 text-sm text-[var(--color-text)]">
+						<FileText size={16} /> Dossier vorhanden
+					</span>
+					<button
+						onclick={deleteDossier}
+						disabled={dossierBusy}
+						class="flex items-center gap-1.5 border border-[var(--color-divider)] px-3 py-1.5 text-sm text-[var(--color-accent-700)] disabled:opacity-45"
+					>
+						<Trash2 size={16} /> Löschen
+					</button>
+					<button
+						onclick={pickDossierFile}
+						disabled={dossierBusy}
+						class="flex items-center gap-1.5 border border-[var(--color-divider)] px-3 py-1.5 text-sm text-[var(--color-text)] disabled:opacity-45"
+					>
+						<Upload size={16} /> Ersetzen
+					</button>
+				{:else}
+					<button
+						onclick={pickDossierFile}
+						disabled={dossierBusy}
+						class="flex items-center gap-1.5 border border-[var(--color-divider)] px-3 py-1.5 text-sm text-[var(--color-text)] disabled:opacity-45"
+					>
+						<Upload size={16} /> {dossierBusy ? 'Wird hochgeladen…' : 'Dossier hochladen'}
+					</button>
+				{/if}
+			</div>
+			{#if dossierError}
+				<p class="mt-2 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
+					{dossierError}
+				</p>
+			{/if}
+		</div>
 
 		{#if error}
 			<p class="mt-4 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">{error}</p>

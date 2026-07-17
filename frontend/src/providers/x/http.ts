@@ -2,6 +2,8 @@ import type { Annotation, CatalogBook } from '../../domain/types';
 import type {
 	AuthStore,
 	BookMetadataPatch,
+	ChatMessage,
+	ChatReply,
 	HttpClient,
 	LoanResponse,
 	LoginRequestResult,
@@ -286,6 +288,44 @@ export function createHttpClient(
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 			const body = (await res.json()) as { translationLanguage: string };
 			return body.translationLanguage;
+		},
+
+		async chatAboutBook(
+			bookId: string,
+			messages: ChatMessage[],
+			selection?: string,
+			progressPercent?: number
+		): Promise<ChatReply> {
+			const res = await fetchImpl(`${base}/ai/chat`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({
+					bookId,
+					messages,
+					...(selection !== undefined ? { selection } : {}),
+					...(progressPercent !== undefined ? { progressPercent } : {})
+				})
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as ChatReply;
+		},
+
+		async uploadDossier(bookId: string, text: string): Promise<CatalogBook> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/dossier`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({ text })
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as CatalogBook;
+		},
+
+		async deleteDossier(bookId: string): Promise<void> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/dossier`, {
+				method: 'DELETE',
+				headers: authHeaders()
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
 		}
 	};
 }

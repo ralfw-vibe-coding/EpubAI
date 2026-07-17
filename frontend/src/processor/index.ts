@@ -2,14 +2,18 @@ import type { Annotation, AnnotationColor, BookDetail, CatalogBook, Loan, Readin
 import type { ReactorDeps } from './deps';
 import type {
 	BookMetadataPatch,
+	ChatMessage,
+	ChatReply,
 	LoginRequestResult,
 	Session,
 	UploadEpubResult
 } from './ports';
 import { borrowBook } from './reactors/borrowBook';
+import { chatAboutBook } from './reactors/chatAboutBook';
 import { createAnnotation } from './reactors/createAnnotation';
 import { deleteAnnotation } from './reactors/deleteAnnotation';
 import { deleteBook } from './reactors/deleteBook';
+import { deleteDossier } from './reactors/deleteDossier';
 import { loadAnnotations } from './reactors/loadAnnotations';
 import { loadCatalog } from './reactors/loadCatalog';
 import { lookupSelection } from './reactors/lookupSelection';
@@ -25,6 +29,7 @@ import { translateSelection } from './reactors/translateSelection';
 import { updateAnnotationColor } from './reactors/updateAnnotationColor';
 import { updateAnnotationNote } from './reactors/updateAnnotationNote';
 import { updateBookMetadata } from './reactors/updateBookMetadata';
+import { uploadDossier } from './reactors/uploadDossier';
 import { uploadEpub } from './reactors/uploadEpub';
 import { verifyLoginCode } from './reactors/verifyLoginCode';
 
@@ -80,7 +85,16 @@ export function createProcessor(deps: ReactorDeps) {
 		translateSelection: (text: string, lang: string): Promise<string> =>
 			translateSelection(deps, text, lang),
 		lookupSelection: (text: string, lang: string): Promise<string> => lookupSelection(deps, text, lang),
-		setTranslationLanguage: (lang: string): Promise<void> => setTranslationLanguage(deps, lang)
+		setTranslationLanguage: (lang: string): Promise<void> => setTranslationLanguage(deps, lang),
+		chatAboutBook: (
+			bookId: string,
+			messages: ChatMessage[],
+			selection?: string,
+			progressPercent?: number
+		): Promise<ChatReply> => chatAboutBook(deps, bookId, messages, selection, progressPercent),
+		uploadDossier: (bookId: string, text: string): Promise<CatalogBook> =>
+			uploadDossier(deps, bookId, text),
+		deleteDossier: (bookId: string): Promise<void> => deleteDossier(deps, bookId)
 	};
 }
 

@@ -16,6 +16,8 @@ export interface CatalogBook {
 	coverUrl: string | null;
 	/** Locally stored reading progress for this book, or null if never opened. */
 	progress: { percent: number; page: number | null; totalPages: number | null } | null;
+	/** True once a dossier has been uploaded (background knowledge for the book chat). */
+	hasDossier: boolean;
 }
 
 /** A local loan: the book's EPUB is present in OPFS on this device. */

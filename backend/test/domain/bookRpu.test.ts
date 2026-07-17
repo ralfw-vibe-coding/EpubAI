@@ -5,6 +5,7 @@ import {
   buildDetectedMeta,
   computeFileHash,
   detectDuplicate,
+  isValidDossierText,
   toBookSummary,
   updateBookMetadata
 } from "../../src/domain/bookRpu.js";
@@ -21,6 +22,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     addedAt: "2026-01-01T00:00:00.000Z",
     currentFileHash: "abc123",
     processingStatus: "ready",
+    dossierUploadedAt: null,
     ...overrides
   };
 }
@@ -89,6 +91,11 @@ describe("buildBookDraft", () => {
     const draft = buildBookDraft({ title: "T", author: "A", fileHash: "hash1", coverKey: "hash1-cover.jpg" });
     expect(draft.coverKey).toBe("hash1-cover.jpg");
   });
+
+  it("overrides processingStatus when explicitly given (e.g. failed full-text extraction)", () => {
+    const draft = buildBookDraft({ title: "T", author: "A", fileHash: "hash1", processingStatus: "failed" });
+    expect(draft.processingStatus).toBe("failed");
+  });
 });
 
 describe("toBookSummary", () => {
@@ -101,13 +108,44 @@ describe("toBookSummary", () => {
       tags: ["sci-fi", "physics"],
       coverUrl: "https://example.com/presigned-cover",
       fileHash: "abc123",
-      processingStatus: "ready"
+      processingStatus: "ready",
+      hasDossier: false
     });
   });
 
   it("uses null coverUrl when the book has no cover", () => {
     const book = makeBook();
     expect(toBookSummary(book, null).coverUrl).toBeNull();
+  });
+
+  it("derives hasDossier: true once dossierUploadedAt is set", () => {
+    const book = makeBook({ dossierUploadedAt: "2026-01-02T00:00:00.000Z" });
+    expect(toBookSummary(book, null).hasDossier).toBe(true);
+  });
+
+  it("derives hasDossier: false when dossierUploadedAt is null", () => {
+    const book = makeBook({ dossierUploadedAt: null });
+    expect(toBookSummary(book, null).hasDossier).toBe(false);
+  });
+});
+
+describe("isValidDossierText", () => {
+  it("accepts a non-blank string", () => {
+    expect(isValidDossierText("Some dossier text.")).toBe(true);
+  });
+
+  it("rejects a blank string", () => {
+    expect(isValidDossierText("   ")).toBe(false);
+  });
+
+  it("rejects an empty string", () => {
+    expect(isValidDossierText("")).toBe(false);
+  });
+
+  it("rejects non-string input", () => {
+    expect(isValidDossierText(undefined)).toBe(false);
+    expect(isValidDossierText(null)).toBe(false);
+    expect(isValidDossierText(42)).toBe(false);
   });
 });
 

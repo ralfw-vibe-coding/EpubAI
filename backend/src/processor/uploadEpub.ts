@@ -3,7 +3,13 @@ import type { BookSummary } from "../domain/types.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
 import * as bookFileRepo from "../providers/d/bookFileRepo.js";
 import * as r2 from "../providers/x/r2.js";
-import { parseEpub, EpubTooLargeError, EpubParseError, type ParsedEpubMeta } from "../providers/x/epubParser.js";
+import {
+  parseEpub,
+  extractFullText,
+  EpubTooLargeError,
+  EpubParseError,
+  type ParsedEpubMeta
+} from "../providers/x/epubParser.js";
 import { MAX_UNPACKED_EPUB_BYTES } from "../config.js";
 import { requireUserId, AuthError } from "./shared/requireUserId.js";
 import { ok, type ReactorResult } from "./shared/result.js";
@@ -83,12 +89,31 @@ export async function uploadEpub(
     await r2.uploadObject(coverKey, rawMeta.cover.data, rawMeta.cover.mediaType);
   }
 
+  // Full-text extraction feeds the AI chat's "Grundlage" (Requirements 4.6).
+  // It's inline (~25-50ms for a typical epub) rather than a background job,
+  // but it must never turn a perfectly readable book into a failed upload:
+  // a malformed spine, an oversized epub, or an R2 hiccup here only degrades
+  // the book to processingStatus "failed" - the reader still gets the book,
+  // and the chat feature lazily retries extraction later.
+  let processingStatus: "ready" | "failed" = "ready";
+  try {
+    const fullText = await extractFullText(input.fileBuffer, MAX_UNPACKED_EPUB_BYTES);
+    await r2.putText(`${userId}/${fileHash}.txt`, fullText);
+  } catch (err) {
+    // EpubNoTextError/EpubTooLargeError/EpubParseError (bad spine, oversized,
+    // malformed XML) or an R2 failure - whatever the cause, the book is still
+    // readable, so it's created anyway, just without an AI-chat "Grundlage".
+    console.error(`uploadEpub: full-text extraction failed for ${userId}/${fileHash}`, err);
+    processingStatus = "failed";
+  }
+
   const draft = buildBookDraft({
     title: detectedMeta.title,
     author: detectedMeta.author,
     fileHash,
     coverKey,
-    tags: []
+    tags: [],
+    processingStatus
   });
 
   let book;

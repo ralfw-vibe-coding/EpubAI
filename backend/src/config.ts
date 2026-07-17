@@ -7,6 +7,23 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../../");
 dotenv.config({ path: path.join(repoRoot, ".env") });
 
+// Optional environment overlay. `.env` is always the local/test environment;
+// setting EPUBAI_ENV=production (etc.) layers `.env.<name>` on top, overriding
+// only the keys it defines (for us: DATABASE_URL and R2_BUCKET). This keeps the
+// default pointed at test - production is never reachable without an explicit,
+// per-command opt-in, so it can't be left on by accident the way commenting
+// lines in `.env` in and out could. On Deno Deploy there is no EPUBAI_ENV and
+// no `.env.*` file, so this is a no-op there and the platform vars win.
+const overlay = process.env.EPUBAI_ENV;
+if (overlay) {
+  const result = dotenv.config({ path: path.join(repoRoot, `.env.${overlay}`), override: true });
+  if (result.error) {
+    // A requested environment that can't be loaded must fail loudly, not
+    // silently fall back to the test values in `.env`.
+    throw new Error(`EPUBAI_ENV=${overlay} gesetzt, aber .env.${overlay} nicht ladbar: ${result.error.message}`);
+  }
+}
+
 const REQUIRED_VARS = [
   "DATABASE_URL",
   "R2_BUCKET",

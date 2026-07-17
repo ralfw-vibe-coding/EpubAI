@@ -223,7 +223,8 @@ describe('processor reactors', () => {
 				processingStatus: 'ready',
 				tags: [],
 				coverUrl: null,
-				progress: null
+				progress: null,
+				hasDossier: false
 			})
 		});
 		const { deps, domain } = makeDeps({ http: http.impl });
@@ -476,6 +477,71 @@ describe('processor reactors', () => {
 			const { deps } = makeDeps({ auth });
 			await createProcessor(deps).setTranslationLanguage('fr');
 			expect(auth.get()).toBeNull();
+		});
+
+		it('chatAboutBook delegates to http with the full history, selection and progress', async () => {
+			const { deps, http } = makeDeps();
+			const messages = [{ role: 'user' as const, content: 'Wer ist die Hauptfigur?' }];
+			const res = await createProcessor(deps).chatAboutBook('b1', messages, 'Ein markierter Satz', 0.5);
+
+			expect(res).toEqual({ text: 'Antwort', dossierUsed: true });
+			const call = http.calls.find((c) => c.method === 'chatAboutBook');
+			expect(call?.args).toEqual(['b1', messages, 'Ein markierter Satz', 0.5]);
+		});
+
+		it('chatAboutBook works without a selection (book-wide chat)', async () => {
+			const { deps, http } = makeDeps();
+			const messages = [{ role: 'user' as const, content: 'Worum geht es?' }];
+			await createProcessor(deps).chatAboutBook('b1', messages);
+
+			const call = http.calls.find((c) => c.method === 'chatAboutBook');
+			expect(call?.args).toEqual(['b1', messages, undefined, undefined]);
+		});
+
+		it('chatAboutBook throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				chatAboutBook: async () => {
+					throw new Error('chat_failed');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).chatAboutBook('b1', [])).rejects.toThrow('chat_failed');
+		});
+
+		it('uploadDossier delegates to http with the book id and text', async () => {
+			const { deps, http } = makeDeps();
+			const res = await createProcessor(deps).uploadDossier('b1', 'Hintergrundwissen');
+
+			expect(res.hasDossier).toBe(true);
+			const call = http.calls.find((c) => c.method === 'uploadDossier');
+			expect(call?.args).toEqual(['b1', 'Hintergrundwissen']);
+		});
+
+		it('uploadDossier throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				uploadDossier: async () => {
+					throw new Error('invalid_input');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).uploadDossier('b1', '')).rejects.toThrow('invalid_input');
+		});
+
+		it('deleteDossier delegates to http with the book id', async () => {
+			const { deps, http } = makeDeps();
+			await createProcessor(deps).deleteDossier('b1');
+			const call = http.calls.find((c) => c.method === 'deleteDossier');
+			expect(call?.args).toEqual(['b1']);
+		});
+
+		it('deleteDossier throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				deleteDossier: async () => {
+					throw new Error('not_found');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).deleteDossier('b1')).rejects.toThrow('not_found');
 		});
 	});
 });

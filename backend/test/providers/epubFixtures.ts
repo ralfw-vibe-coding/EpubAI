@@ -133,3 +133,66 @@ export async function buildZipBomb(unpackedBytes: number): Promise<Buffer> {
 export async function buildNotAZip(): Promise<Buffer> {
   return Buffer.from("this is definitely not a zip file");
 }
+
+export interface SpineDoc {
+  /** Manifest id, referenced by the spine itemref. */
+  id: string;
+  /** OPF-relative href; the zip entry is written at OEBPS/<href>. */
+  href: string;
+  xhtml: string;
+  mediaType?: string;
+  /** Declared in the manifest but left out of the spine when false. */
+  inSpine?: boolean;
+}
+
+function opfXmlWithSpine(docs: SpineDoc[]): string {
+  const manifest = docs
+    .map(
+      (d) =>
+        `    <item id="${d.id}" href="${d.href}" media-type="${d.mediaType ?? "application/xhtml+xml"}"/>`
+    )
+    .join("\n");
+  const spine = docs
+    .filter((d) => d.inSpine !== false)
+    .map((d) => `    <itemref idref="${d.id}"/>`)
+    .join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="BookId">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Title</dc:title>
+    <dc:creator>Test Author</dc:creator>
+    <dc:language>en</dc:language>
+  </metadata>
+  <manifest>
+${manifest}
+  </manifest>
+  <spine>
+${spine}
+  </spine>
+</package>`;
+}
+
+/** An EPUB whose spine references real XHTML content documents. */
+export async function buildEpubWithText(docs: SpineDoc[]): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file("mimetype", "application/epub+zip");
+  zip.file("META-INF/container.xml", CONTAINER_XML);
+  zip.file("OEBPS/content.opf", opfXmlWithSpine(docs));
+  for (const d of docs) {
+    // href is OPF-relative and may be percent-encoded; the zip entry is not.
+    zip.file(`OEBPS/${decodeURIComponent(d.href)}`, d.xhtml);
+  }
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+export function chapterXhtml(heading: string, body: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head><title>${heading}</title></head>
+  <body>
+    <h1>${heading}</h1>
+    <p>${body}</p>
+  </body>
+</html>`;
+}

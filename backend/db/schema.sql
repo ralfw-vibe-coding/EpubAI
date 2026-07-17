@@ -37,6 +37,11 @@ create table if not exists book (
 
 create index if not exists book_user_id_idx on book(user_id);
 
+-- Dossier upload timestamp (Requirements 4.6 "KI-Grundlage" chat dossier).
+-- Null means no dossier uploaded yet; the public API derives the boolean
+-- `hasDossier` from "is not null" rather than storing that flag redundantly.
+alter table book add column if not exists dossier_uploaded_at timestamptz;
+
 -- Enforces the "same hash + same user -> duplicate" rule at the storage
 -- layer too, on top of the application-level check in uploadEpub.
 create unique index if not exists book_user_hash_idx on book(user_id, current_file_hash);

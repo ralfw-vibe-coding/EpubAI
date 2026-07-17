@@ -1,0 +1,288 @@
+{
+  "comments": [
+    {
+      "anchorHash": "9a03062e42295b19",
+      "comment": "das icon soll dasselbe sein wie für den chat mit dem ganzen buch. der kontext in der selektionsliste macht klar, worauf sich der chat bezieht.",
+      "contextLength": 160,
+      "createdAt": "2026-07-17T15:15:41.824Z",
+      "createdBy": "reviewer",
+      "endLine": 17,
+      "endOffset": 615,
+      "id": "fb-mrp2y6ps",
+      "prefix": "tzen\"/„Nachschlagen\" sind weg, dafür drei Icons plus Abbrechen:\n\n| Funktion | Icon |\n|---|---|\n| Übersetzen | `Languages` |\n| Nachschlagen | `BookOpenText` |\n| ",
+      "quote": "**Chat zur Selektion** (neu) | `MessageCircleQuestion`",
+      "quotePreview": "**Chat zur Selektion** (neu) | `MessageCircleQuestion`",
+      "resolution": "",
+      "startLine": 17,
+      "startOffset": 561,
+      "status": "commented",
+      "suffix": " |\n\nTouch-Ziele sind 36×36 (vorher kleiner), `aria-label`s sind geblieben.\n\n**Zu prüfen:** Sind die Icons auf dem iPhone eindeutig genug ohne Text? Besonders `B",
+      "thread": [
+        {
+          "body": "das icon soll dasselbe sein wie für den chat mit dem ganzen buch. der kontext in der selektionsliste macht klar, worauf sich der chat bezieht.",
+          "createdAt": "2026-07-17T15:15:41.824Z",
+          "createdBy": "reviewer",
+          "id": "th-mrp2y6ps",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-17T15:15:41.824Z"
+    },
+    {
+      "anchorHash": "fa0f5fac080476fc",
+      "comment": "das soll das icon auch für den chat mit der selektion sein.",
+      "contextLength": 160,
+      "createdAt": "2026-07-17T15:16:12.438Z",
+      "createdBy": "reviewer",
+      "endLine": 27,
+      "endOffset": 1344,
+      "id": "fb-mrp2yuc6",
+      "prefix": "ch habe sie im Code verifiziert (Icons, aria-labels, Größen) und alles andere live. **Das ist der eine Punkt, den nur du prüfen kannst.**\n\n## 2. Chat zum Buch\n\n",
+      "quote": "Neues Icon MessagesSquare in der Reader-Toolbar, neben Inhaltsverzeichnis/Notizen/Einstellungen.",
+      "quotePreview": "Neues Icon MessagesSquare in der Reader-Toolbar, neben Inhaltsverzeichnis/Notizen/Einstellungen.",
+      "resolution": "",
+      "startLine": 27,
+      "startOffset": 1248,
+      "status": "commented",
+      "suffix": "n.\n\n**Zu prüfen:** Gehört der Einstieg dorthin, oder erwartest du ihn woanders?\n\n## 3. Dossier-Upload (Buchdetails)\n\nBereich „Dossier\" mit Erklärsatz, Upload ei",
+      "thread": [
+        {
+          "body": "das soll das icon auch für den chat mit der selektion sein.",
+          "createdAt": "2026-07-17T15:16:12.438Z",
+          "createdBy": "reviewer",
+          "id": "th-mrp2yuc6",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-17T15:16:12.438Z"
+    },
+    {
+      "anchorHash": "1ff4eae8e7ab90b9",
+      "comment": "ich habe zu eine buch ohne dossier gefragt \"was ist die kernthese des buches?“ und die antwort war länglich. das hat mich gewundert. am anfang stand: \"Auf Basis des Outlines und ohne den vollständigen Text vorliegen zu haben, lässt sich die Kernthese nur in groben Zügen skizzieren, gestützt vor allem auf die Kapiteltitel:“ das bedeutet für mich, das die KI nur das inhaltsverzeichnis gesehen hat.\n\nich würde ohne dossier spekulationen vermeiden. am besten so reagieren: „Ich habe kein Dossier zum Buch vorliegen. Deshalb kann ich Fragen zu ganzen Buch nur schwer beantworten.“ wenn das buch der KI bekannt ist, kann sie auf ihr wissen oder das, was sie live in einer websuche findet, bezug nehmen (aber mit konkretem hinweis). oder si verweigert ganz die aussage.",
+      "contextLength": 160,
+      "createdAt": "2026-07-17T15:19:24.743Z",
+      "createdBy": "reviewer",
+      "endLine": 39,
+      "endOffset": 2016,
+      "id": "fb-mrp32ypz",
+      "prefix": "gebaut:** der Generieren-Button. Du hattest in der Durchstich-Liste nur den Upload genannt — und ohne Generierung entfallen die $1,42 pro Buch komplett.\n\n## 4. ",
+      "quote": "Chat ohne Dossier — funktioniert, sagt aber was er nicht weiß",
+      "quotePreview": "Chat ohne Dossier — funktioniert, sagt aber was er nicht weiß",
+      "resolution": "",
+      "startLine": 39,
+      "startOffset": 1955,
+      "status": "commented",
+      "suffix": "\n\nLive getestet, Frage „Worum geht es in diesem Buch? Und was genau steht in Kapitel 4?\" **ohne** Dossier:\n\n> „Zur Gesamtthese des Buchs kann ich nur aus dem Ti",
+      "thread": [
+        {
+          "body": "ich habe zu eine buch ohne dossier gefragt \"was ist die kernthese des buches?“ und die antwort war länglich. das hat mich gewundert. am anfang stand: \"Auf Basis des Outlines und ohne den vollständigen Text vorliegen zu haben, lässt sich die Kernthese nur in groben Zügen skizzieren, gestützt vor allem auf die Kapiteltitel:“ das bedeutet für mich, das die KI nur das inhaltsverzeichnis gesehen hat.\n\nich würde ohne dossier spekulationen vermeiden. am besten so reagieren: „Ich habe kein Dossier zum Buch vorliegen. Deshalb kann ich Fragen zu ganzen Buch nur schwer beantworten.“ wenn das buch der KI bekannt ist, kann sie auf ihr wissen oder das, was sie live in einer websuche findet, bezug nehmen (aber mit konkretem hinweis). oder si verweigert ganz die aussage.",
+          "createdAt": "2026-07-17T15:19:24.743Z",
+          "createdBy": "reviewer",
+          "id": "th-mrp32ypz",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-17T15:19:24.743Z"
+    },
+    {
+      "anchorHash": "3189d3763876ec80",
+      "comment": "funktioniert wie gewünscht.",
+      "contextLength": 160,
+      "createdAt": "2026-07-17T15:21:58.008Z",
+      "createdBy": "reviewer",
+      "endLine": 49,
+      "endOffset": 2693,
+      "id": "fb-mrp368zc",
+      "prefix": "\n\n**Zu prüfen:** Ist dieser Ton richtig, oder zu defensiv? Der System-Prompt zwingt das Modell aktiv dazu, Lücken zu benennen, statt sie zu überspielen.\n\n## 5. ",
+      "quote": "Chat mit Dossier",
+      "quotePreview": "Chat mit Dossier",
+      "resolution": "",
+      "startLine": 49,
+      "startOffset": 2677,
+      "status": "commented",
+      "suffix": "\n\nDieselbe Frage mit Dossier liefert die vier Thesen, die drei Hebel mit Details (Bologna, Multiple-Choice, Burchardt, KMK Konstanz 1997) — und trägt die Einord",
+      "thread": [
+        {
+          "body": "funktioniert wie gewünscht.",
+          "createdAt": "2026-07-17T15:21:58.008Z",
+          "createdBy": "reviewer",
+          "id": "th-mrp368zc",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-17T15:21:58.008Z"
+    },
+    {
+      "anchorHash": "ff1ac1d157f31314",
+      "comment": "so ein disclaimer nervt. aber das ist ja eine sache der dossiergenerierung. in deinem prompt streiche anweisungen, die ihn generieren könnten. ein buch wird im dossier einfach entlang der großen kapitel zusammengefasst. es soll keine einordnung stattfinden.",
+      "contextLength": 160,
+      "createdAt": "2026-07-17T15:23:10.064Z",
+      "createdBy": "reviewer",
+      "endLine": 55,
+      "endOffset": 3160,
+      "id": "fb-mrp37skw",
+      "prefix": "rschaftskritische Streitschrift […] das sind Positionen des Autors, keine gesicherten Fakten.\"\n\n**Zu prüfen:** Genau das wolltest du bei einem Buch wie Meyen, o",
+      "quote": "nervt der Disclaimer bei jeder Antwort?",
+      "quotePreview": "nervt der Disclaimer bei jeder Antwort?",
+      "resolution": "",
+      "startLine": 55,
+      "startOffset": 3121,
+      "status": "commented",
+      "suffix": "ort?\n\n## 6. Kontext-Chat (Selektion)\n\nGetestet mit einer Selektion, die absichtlich Zeilenumbrüche mittendrin hat — so liefert epub.js sie wirklich, und daran w",
+      "thread": [
+        {
+          "body": "so ein disclaimer nervt. aber das ist ja eine sache der dossiergenerierung. in deinem prompt streiche anweisungen, die ihn generieren könnten. ein buch wird im dossier einfach entlang der großen kapitel zusammengefasst. es soll keine einordnung stattfinden.",
+          "createdAt": "2026-07-17T15:23:10.064Z",
+          "createdBy": "reviewer",
+          "id": "th-mrp37skw",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-17T15:23:10.064Z"
+    },
+    {
+      "anchorHash": "eb9837463ad218b5",
+      "comment": "das kann ich schwer prüfen. ich weiß nicht, bis wohin im text der kontext reicht.\n\nwas ich aber auf jeden fall sehe: ich kann kein mehrzeiliges prompt eingeben. das muss mit shift-enter möglich sein.",
+      "contextLength": 160,
+      "createdAt": "2026-07-17T15:24:22.119Z",
+      "createdBy": "reviewer",
+      "endLine": 63,
+      "endOffset": 3672,
+      "id": "fb-mrp39c6f",
+      "prefix": "s dem **umgebenden** Fenster und trennt die Quellen sauber:\n\n> „im Anschluss an Werner Hofmann (den er **laut Dossier** in Kapitel 3 ausführlicher entfaltet)\"\n\n",
+      "quote": "Zu prüfen: ±10.000 Zeichen pro Seite — reicht das bei deinen Sachbüchern, oder schneidet es Argumente ab?",
+      "quotePreview": "Zu prüfen: ±10.000 Zeichen pro Seite — reicht das bei deinen Sachbüchern, oder schneidet es Argument",
+      "resolution": "",
+      "startLine": 63,
+      "startOffset": 3567,
+      "status": "commented",
+      "suffix": " ab? Ist eine Konstante, ich kann dran drehen (±20.000 kostet ~$0,04 statt ~$0,02 pro Frage).\n\n## 7. Kosten — gemessen, nicht geschätzt\n\nCaching verifiziert:\n\n`",
+      "thread": [
+        {
+          "body": "das kann ich schwer prüfen. ich weiß nicht, bis wohin im text der kontext reicht.\n\nwas ich aber auf jeden fall sehe: ich kann kein mehrzeiliges prompt eingeben. das muss mit shift-enter möglich sein.",
+          "createdAt": "2026-07-17T15:24:22.119Z",
+          "createdBy": "reviewer",
+          "id": "th-mrp39c6f",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-17T15:24:22.119Z"
+    },
+    {
+      "anchorHash": "9d640e2f17788194",
+      "comment": "ich sehe keine kostenangaben. nirgends. nicht für das ganze buch, nicht für einen chat. das ist nicht gut.",
+      "contextLength": 160,
+      "createdAt": "2026-07-17T15:25:08.580Z",
+      "createdBy": "reviewer",
+      "endLine": 65,
+      "endOffset": 3807,
+      "id": "fb-mrp3ac10",
+      "prefix": "cht das bei deinen Sachbüchern, oder schneidet es Argumente ab? Ist eine Konstante, ich kann dran drehen (±20.000 kostet ~$0,04 statt ~$0,02 pro Frage).\n\n## 7. ",
+      "quote": "Kosten — gemessen, nicht geschätzt",
+      "quotePreview": "Kosten — gemessen, nicht geschätzt",
+      "resolution": "",
+      "startLine": 65,
+      "startOffset": 3773,
+      "status": "commented",
+      "suffix": "\n\nCaching verifiziert:\n\n```\nAufruf 1: write=8065  read=0\nAufruf 2: write=0     read=8065   ← Treffer\n```\n\n**Korrektur meiner früheren Zahl:** Ich hatte „Dossier",
+      "thread": [
+        {
+          "body": "ich sehe keine kostenangaben. nirgends. nicht für das ganze buch, nicht für einen chat. das ist nicht gut.",
+          "createdAt": "2026-07-17T15:25:08.580Z",
+          "createdBy": "reviewer",
+          "id": "th-mrp3ac10",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-17T15:25:08.580Z"
+    },
+    {
+      "anchorHash": "92a6f0d7de80ef8e",
+      "comment": "absolut! je chat und fürs buch kummuliert.",
+      "contextLength": 160,
+      "createdAt": "2026-07-17T15:25:49.621Z",
+      "createdBy": "reviewer",
+      "endLine": 98,
+      "endOffset": 5446,
+      "id": "fb-mrp3b7p1",
+      "prefix": " Fehler/0 Warnungen\n- Coverage: Backend 92 %, Frontend 99 % (Schwelle 80 %)\n- Extraktion: ~25–50 ms pro Buch, läuft inline beim Upload\n\n## 10. Offene Punkte\n\n- ",
+      "quote": "• Kostenanzeige (Punkt aus einer früheren Runde, nicht in der Durchstich-Liste) — soll sie rein?",
+      "quotePreview": "• Kostenanzeige (Punkt aus einer früheren Runde, nicht in der Durchstich-Liste) — soll sie rein?",
+      "resolution": "",
+      "startLine": 98,
+      "startOffset": 5352,
+      "status": "commented",
+      "suffix": "ein?\n- **Bild-Transkription** — bei Keen-artigen Büchern fehlen Tabellen/Diagramme weiterhin. Der Prompt verhindert, dass das Modell sie erfindet. Bewusst zurüc",
+      "thread": [
+        {
+          "body": "absolut! je chat und fürs buch kummuliert.",
+          "createdAt": "2026-07-17T15:25:49.621Z",
+          "createdBy": "reviewer",
+          "id": "th-mrp3b7p1",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-17T15:25:49.621Z"
+    },
+    {
+      "anchorHash": "a3c16ba05979850f",
+      "comment": "ja, lokal zu sitzung. beim chat mit selektion soll der chat auch immer wieder neu starten. beim chat mit dem buch soll er per default weitergehen. aber ich muss ihn leeren können.",
+      "contextLength": 160,
+      "createdAt": "2026-07-17T15:26:43.283Z",
+      "createdBy": "reviewer",
+      "endLine": 100,
+      "endOffset": 5688,
+      "id": "fb-mrp3cd3n",
+      "prefix": "ranskription** — bei Keen-artigen Büchern fehlen Tabellen/Diagramme weiterhin. Der Prompt verhindert, dass das Modell sie erfindet. Bewusst zurückgestellt.\n- **",
+      "quote": "Chat-Verlauf ist Sitzungs-lokal, beim Schließen weg (so entschieden).",
+      "quotePreview": "Chat-Verlauf ist Sitzungs-lokal, beim Schließen weg (so entschieden).",
+      "resolution": "",
+      "startLine": 100,
+      "startOffset": 5621,
+      "status": "commented",
+      "suffix": "en).\n- **Streaming** — Antworten erscheinen am Stück nach ~10 s. Bei längeren Antworten könnte das zu lang wirken.\n",
+      "thread": [
+        {
+          "body": "ja, lokal zu sitzung. beim chat mit selektion soll der chat auch immer wieder neu starten. beim chat mit dem buch soll er per default weitergehen. aber ich muss ihn leeren können.",
+          "createdAt": "2026-07-17T15:26:43.283Z",
+          "createdBy": "reviewer",
+          "id": "th-mrp3cd3n",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-17T15:26:43.283Z"
+    },
+    {
+      "anchorHash": "b4f532917aeb6908",
+      "comment": "ich lebe erstmal ohne streaming.",
+      "contextLength": 160,
+      "createdAt": "2026-07-17T15:27:05.625Z",
+      "createdBy": "reviewer",
+      "endLine": 101,
+      "endOffset": 5798,
+      "id": "fb-mrp3cuc9",
+      "prefix": "n. Der Prompt verhindert, dass das Modell sie erfindet. Bewusst zurückgestellt.\n- **Chat-Verlauf** ist Sitzungs-lokal, beim Schließen weg (so entschieden).\n- **",
+      "quote": "Streaming — Antworten erscheinen am Stück nach ~10 s. Bei längeren Antworten könnte das zu lang wirken.",
+      "quotePreview": "Streaming — Antworten erscheinen am Stück nach ~10 s. Bei längeren Antworten könnte das zu lang wirk",
+      "resolution": "",
+      "startLine": 101,
+      "startOffset": 5697,
+      "status": "commented",
+      "suffix": "ken.\n",
+      "thread": [
+        {
+          "body": "ich lebe erstmal ohne streaming.",
+          "createdAt": "2026-07-17T15:27:05.625Z",
+          "createdBy": "reviewer",
+          "id": "th-mrp3cuc9",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-17T15:27:05.625Z"
+    }
+  ],
+  "file": "Review-KI-Chat.md",
+  "sourcePath": "/Users/ralfw/Repositories/08 Vibe Coding/EpubAI/requirements/Review-KI-Chat.md",
+  "updatedAt": "2026-07-17T15:27:05.625Z",
+  "version": 1
+}

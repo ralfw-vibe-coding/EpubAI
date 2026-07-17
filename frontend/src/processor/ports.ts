@@ -32,6 +32,19 @@ export interface LoanResponse {
  */
 export type UploadEpubResult = CatalogBook | { duplicate: true; existingBookId: string };
 
+/** One turn of the chat history, sent in full on every request (backend is stateless). */
+export interface ChatMessage {
+	role: 'user' | 'assistant';
+	content: string;
+}
+
+/** The backend's answer to a chat turn (POST /ai/chat). */
+export interface ChatReply {
+	text: string;
+	/** False when the book has no dossier — the Portal shows a subtle hint. */
+	dossierUsed: boolean;
+}
+
 /** Editable subset of a catalog book's metadata. */
 export interface BookMetadataPatch {
 	title?: string;
@@ -77,6 +90,22 @@ export interface HttpClient {
 	lookupSelection(text: string, lang: string): Promise<string>;
 	/** Persist the user's preferred translation target language; returns the confirmed value. */
 	updateAccountSettings(translationLanguage: string): Promise<string>;
+	/**
+	 * Ask a question about the book (POST /ai/chat), either about a selected
+	 * excerpt (`selection`/`progressPercent` set) or about the book as a whole
+	 * (both omitted). `messages` is the full history so far, client-held since
+	 * the backend is stateless.
+	 */
+	chatAboutBook(
+		bookId: string,
+		messages: ChatMessage[],
+		selection?: string,
+		progressPercent?: number
+	): Promise<ChatReply>;
+	/** Upload a dossier (background knowledge) for a book; returns the updated book. */
+	uploadDossier(bookId: string, text: string): Promise<CatalogBook>;
+	/** Remove a book's dossier. Idempotent. */
+	deleteDossier(bookId: string): Promise<void>;
 }
 
 /** Stores the auth session (token + userId) and the backend auth header. */

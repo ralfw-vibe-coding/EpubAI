@@ -11,7 +11,8 @@ const book: CatalogBook = {
 	processingStatus: 'ready',
 	tags: [],
 	coverUrl: null,
-	progress: null
+	progress: null,
+	hasDossier: false
 };
 
 describe('createReaderDomain', () => {

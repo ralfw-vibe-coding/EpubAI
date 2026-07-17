@@ -84,7 +84,8 @@ describe('toBookDetail', () => {
 		processingStatus: 'ready',
 		tags: [],
 		coverUrl: null,
-		progress: null
+		progress: null,
+		hasDossier: false
 	};
 	it('marks isLocal true when loaned', () => {
 		const loans: Loan[] = [

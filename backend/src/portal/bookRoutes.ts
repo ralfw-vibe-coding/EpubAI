@@ -5,6 +5,8 @@ import { updateBook } from "../processor/updateBook.js";
 import { deleteBook } from "../processor/deleteBook.js";
 import { uploadEpub } from "../processor/uploadEpub.js";
 import { getBookFile } from "../processor/getBookFile.js";
+import { uploadDossier } from "../processor/uploadDossier.js";
+import { deleteDossier } from "../processor/deleteDossier.js";
 
 // Portal: pure HTTP-to-Reactor translation, no business logic.
 //
@@ -60,5 +62,16 @@ export async function registerBookRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(result.status).send(result.body);
     }
     return reply.code(result.status).type(result.contentType).send(result.stream);
+  });
+
+  app.put<{ Params: { id: string } }>("/books/:id/dossier", async (request, reply) => {
+    const body = (request.body ?? {}) as { text?: unknown };
+    const result = await uploadDossier(request.headers.authorization, request.params.id, { text: body.text });
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.delete<{ Params: { id: string } }>("/books/:id/dossier", async (request, reply) => {
+    const result = await deleteDossier(request.headers.authorization, request.params.id);
+    return reply.code(result.status).send(result.body);
   });
 }
