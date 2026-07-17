@@ -8,7 +8,7 @@ import { env } from "../../config.js";
 // chat feature.
 const client = new Anthropic({ apiKey: env.CLAUDE_API_KEY });
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-sonnet-5";
 
 // The frontend only ever sends one of AVAILABLE_LANGUAGES's short codes
 // (frontend/src/routes/read/[id]/languages.ts) - mapped to a full English
@@ -36,16 +36,25 @@ function extractText(content: Anthropic.ContentBlock[]): string {
 }
 
 export async function translateText(text: string, lang: string): Promise<string> {
+  const target = languageName(lang);
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: 2048,
+    thinking: { type: "disabled" },
     system:
-      `Translate the following text into ${languageName(lang)}. If it is a single word or a ` +
-      "very short phrase, give a dictionary-style translation: the main translation(s), and " +
-      "briefly note different senses or nuances if the word has more than one common meaning - " +
-      "like a bilingual dictionary entry, not just one bare word. If it is a longer passage, " +
-      "give a natural, fluent translation of the whole passage instead. Output only the " +
-      'translation/dictionary entry itself, with no extra framing like "Here is the translation:".',
+      `Translate the following text into ${target}.\n\n` +
+      `Write your ENTIRE response in ${target}. Every part of the output - the ` +
+      "translation itself, any sense or usage descriptions, grammatical labels, and any " +
+      `explanatory notes - must be written in ${target}. Do not switch back to the source ` +
+      "language of the text at any point. The only text that may appear in another language is " +
+      "the original word or phrase when you quote it as a headword for reference.\n\n" +
+      "If it is a single word or a very short phrase, give a dictionary-style entry: the main " +
+      "translation(s), and briefly note different senses or nuances if the word has more than " +
+      `one common meaning - like a bilingual dictionary entry, with every description and sense ` +
+      `label written in ${target}, not just one bare word. If it is a longer passage, give a ` +
+      "natural, fluent translation of the whole passage instead.\n\n" +
+      "Output only the translation/dictionary entry itself, with no extra framing like " +
+      '"Here is the translation:".',
     messages: [{ role: "user", content: text }]
   });
 
@@ -53,13 +62,18 @@ export async function translateText(text: string, lang: string): Promise<string>
 }
 
 export async function lookupText(text: string, lang: string): Promise<string> {
+  const target = languageName(lang);
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: 2048,
+    thinking: { type: "disabled" },
     system:
       "The following is a short excerpt marked by a reader inside a book - a word, phrase, or " +
       "concept, not necessarily a full sentence. Briefly explain it (2-4 sentences), as context " +
-      `or a definition for the reader. Respond in ${languageName(lang)}.`,
+      "or a definition for the reader.\n\n" +
+      `Write your ENTIRE response in ${target}. Every sentence must be written in ${target}; do ` +
+      "not switch to the language of the excerpt at any point. The only text that may appear in " +
+      "another language is the excerpt itself if you quote it.",
     messages: [{ role: "user", content: text }]
   });
 
