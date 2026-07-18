@@ -292,6 +292,9 @@
 					{/if}
 					<p class="mt-2 text-xs text-[var(--color-neutral-700)]">
 						Status: {detail.isLocal ? 'auf diesem Gerät' : 'nicht ausgeliehen'}
+						{#if detail.aiCostUsd > 0}
+							&nbsp;/&nbsp; KI-Kosten: ≈ {formatUsd(detail.aiCostUsd)} (Chats)
+						{/if}
 					</p>
 					{#if detail.progress}
 						<div class="mt-2 max-w-xs">
@@ -405,11 +408,6 @@
 					{dossierError}
 				</p>
 			{/if}
-
-			<p class="mt-4 text-xs text-[var(--color-neutral-700)]">
-				KI-Kosten dieses Buchs bisher: ≈ {formatUsd(detail.aiCostUsd)}
-				<span class="text-[var(--color-neutral-500)]">(Chats; grobe Richtung)</span>
-			</p>
 		</div>
 
 		{#if error}

@@ -173,6 +173,16 @@
 		return '$' + amount.toFixed(2).replace('.', ',');
 	}
 
+	// The chat input grows with its content up to ~5 lines, then scrolls.
+	let chatInputEl = $state<HTMLTextAreaElement | undefined>(undefined);
+	const CHAT_INPUT_MAX_PX = 120;
+	function autoGrowChatInput() {
+		const el = chatInputEl;
+		if (!el) return;
+		el.style.height = 'auto';
+		el.style.height = Math.min(el.scrollHeight, CHAT_INPUT_MAX_PX) + 'px';
+	}
+
 	function openContextChat() {
 		if (!selection) return;
 		chat = {
@@ -228,6 +238,7 @@
 		const current = chat;
 		const messages: ChatMessage[] = [...current.messages, { role: 'user', content: text }];
 		chat = { ...current, messages, input: '', loading: true, error: null };
+		void tick().then(autoGrowChatInput); // input cleared → shrink back to one line
 		try {
 			// `percent` is 0..100 for the on-screen read-out; the contract wants 0..1.
 			const reply = await getProcessor().chatAboutBook(
@@ -1014,7 +1025,10 @@
 		>
 			<div class="mb-2 flex flex-none items-center justify-between">
 				<span class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">
-					{chat.kind === 'context' ? 'Chat zur Textstelle' : 'Chat zum Buch'}
+					{chat.kind === 'context' ? 'Chat zur Textstelle' : 'Chat zum Buch'}{#if chat.sessionCostUsd > 0}<span
+							class="ml-1 text-xs font-normal text-[var(--color-neutral-700)]"
+							>(≈ {formatUsd(chat.sessionCostUsd)})</span
+						>{/if}
 				</span>
 				<div class="flex items-center gap-3">
 					{#if chat.kind === 'book' && chat.messages.length > 0}
@@ -1076,12 +1090,6 @@
 				</p>
 			{/if}
 
-			{#if chat.sessionCostUsd > 0}
-				<p class="flex-none pt-1 text-right text-xs text-[var(--color-neutral-700)]">
-					Dieser Chat: ≈ {formatUsd(chat.sessionCostUsd)}
-				</p>
-			{/if}
-
 			{#if chat.error}
 				<p class="mt-1 flex-none bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
 					{chat.error}
@@ -1096,10 +1104,12 @@
 				class="mt-2 flex flex-none items-end gap-2"
 			>
 				<textarea
+					bind:this={chatInputEl}
 					bind:value={chat.input}
 					rows="1"
 					placeholder="Frage stellen… (Umschalt+Enter für neue Zeile)"
 					disabled={chat.loading}
+					oninput={autoGrowChatInput}
 					onkeydown={(e) => {
 						// Enter sends; Shift+Enter inserts a newline (multi-line prompts).
 						if (e.key === 'Enter' && !e.shiftKey) {
@@ -1107,7 +1117,7 @@
 							if (chat && !chat.loading && chat.input.trim()) void sendChatMessage();
 						}
 					}}
-					class="max-h-32 min-h-[2.5rem] min-w-0 flex-1 resize-y border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)]"
+					class="min-h-[2.5rem] min-w-0 flex-1 resize-none overflow-y-auto border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)]"
 				></textarea>
 				<button
 					type="submit"
