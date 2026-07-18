@@ -120,6 +120,12 @@
 		dossierInput?.click();
 	}
 
+	/** Rough USD figure for the KI-cost read-out — cents, German decimal comma, small floor. */
+	function formatUsd(amount: number): string {
+		if (amount < 0.005) return '$0,00';
+		return '$' + amount.toFixed(2).replace('.', ',');
+	}
+
 	async function onDossierFileChosen(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
@@ -399,6 +405,11 @@
 					{dossierError}
 				</p>
 			{/if}
+
+			<p class="mt-4 text-xs text-[var(--color-neutral-700)]">
+				KI-Kosten dieses Buchs bisher: ≈ {formatUsd(detail.aiCostUsd)}
+				<span class="text-[var(--color-neutral-500)]">(Chats; grobe Richtung)</span>
+			</p>
 		</div>
 
 		{#if error}

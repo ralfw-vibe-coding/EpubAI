@@ -12,7 +12,8 @@ const book: CatalogBook = {
 	tags: [],
 	coverUrl: null,
 	progress: null,
-	hasDossier: false
+	hasDossier: false,
+	aiCostUsd: 0
 };
 
 describe('createReaderDomain', () => {

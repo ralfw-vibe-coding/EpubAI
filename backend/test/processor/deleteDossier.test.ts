@@ -26,6 +26,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     currentFileHash: "hash-1",
     processingStatus: "ready",
     dossierUploadedAt: "2026-01-01T00:00:00.000Z",
+    aiCostUsd: 0,
     ...overrides
   };
 }

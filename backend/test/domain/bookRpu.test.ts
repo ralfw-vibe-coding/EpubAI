@@ -23,6 +23,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     currentFileHash: "abc123",
     processingStatus: "ready",
     dossierUploadedAt: null,
+    aiCostUsd: 0,
     ...overrides
   };
 }
@@ -109,7 +110,8 @@ describe("toBookSummary", () => {
       coverUrl: "https://example.com/presigned-cover",
       fileHash: "abc123",
       processingStatus: "ready",
-      hasDossier: false
+      hasDossier: false,
+      aiCostUsd: 0
     });
   });
 

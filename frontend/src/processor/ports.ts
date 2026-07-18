@@ -43,6 +43,8 @@ export interface ChatReply {
 	text: string;
 	/** False when the book has no dossier — the Portal shows a subtle hint. */
 	dossierUsed: boolean;
+	/** USD cost of this one call; the chat sheet sums it over the session. */
+	costUsd: number;
 }
 
 /** Editable subset of a catalog book's metadata. */

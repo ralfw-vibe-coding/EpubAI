@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "../../config.js";
+import type { TokenUsage } from "../../domain/aiCostRpu.js";
 
 // xProvider: Claude API for the two stateless AI reactors (translate/lookup).
 // Untested like the other thin external-SDK wrappers (resend.ts, r2.ts) - not
@@ -116,11 +117,23 @@ function bookBlock(input: ChatAboutBookInput): string {
     parts.push(`OUTLINE (the book's own structure)\n${input.outline}`);
   }
   if (!input.dossier) {
-    // Said here rather than left implicit: without it the model treats the
-    // outline as if it were knowledge of the book's content.
+    // Without this, the model happily reconstructs the book's thesis from
+    // chapter titles and presents the guess as if it had read the book - the
+    // reader explicitly did not want that (see review feedback). The outline
+    // locates a passage; it is not knowledge of the book's content.
     parts.push(
-      "NO DOSSIER\nThe reader has not added a dossier for this book. Outside the excerpt you know only " +
-        "the outline above - chapter names, not what they argue. Do not pretend otherwise."
+      "NO DOSSIER\n" +
+        "The reader has not added a dossier, so for the book AS A WHOLE you have only the outline - " +
+        "chapter titles, not their content. Do NOT reconstruct the book's thesis, argument or " +
+        "message from chapter titles; that is speculation dressed up as knowledge, and it is exactly " +
+        "what the reader does not want.\n" +
+        "When the question is about the whole book (not about the excerpt below): say plainly that " +
+        "without a dossier you cannot answer it from the book, and that the reader can add one in the " +
+        "book's details. You MAY then add what you know about this SPECIFIC book from your own general " +
+        "knowledge - but only if you genuinely recognise it, and only clearly marked as your own " +
+        "knowledge rather than the book's text. Never invent a book you do not actually recognise. " +
+        "Keep this short; do not pad it into a long outline-based summary.\n" +
+        "Questions about the excerpt below are unaffected - answer those from the excerpt as normal."
     );
   }
   return parts.join("\n\n");
@@ -145,7 +158,13 @@ function bookBlock(input: ChatAboutBookInput): string {
  * in which case caching silently does nothing - which is fine, there is nothing
  * worth saving.
  */
-export async function chatAboutBook(input: ChatAboutBookInput): Promise<string> {
+export interface ChatAboutBookResult {
+  text: string;
+  /** Token usage for cost accounting (see aiCostRpu). */
+  usage: TokenUsage;
+}
+
+export async function chatAboutBook(input: ChatAboutBookInput): Promise<ChatAboutBookResult> {
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: CHAT_INSTRUCTIONS },
     { type: "text", text: bookBlock(input), cache_control: { type: "ephemeral", ttl: "5m" } }
@@ -169,7 +188,16 @@ export async function chatAboutBook(input: ChatAboutBookInput): Promise<string> 
     messages
   });
 
-  return extractText(response.content);
+  const u = response.usage;
+  return {
+    text: extractText(response.content),
+    usage: {
+      inputTokens: u.input_tokens,
+      outputTokens: u.output_tokens,
+      cacheCreationInputTokens: u.cache_creation_input_tokens ?? 0,
+      cacheReadInputTokens: u.cache_read_input_tokens ?? 0
+    }
+  };
 }
 
 /**

@@ -117,7 +117,8 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		tags: [],
 		coverUrl: null,
 		progress: null,
-		hasDossier: false
+		hasDossier: false,
+		aiCostUsd: 0
 	};
 	const defaultLoan: LoanResponse = {
 		id: 'loan1',
@@ -126,7 +127,7 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		borrowedAt: '2026-07-13T00:00:00.000Z'
 	};
 	const defaultUpload: UploadEpubResult = defaultBook;
-	const defaultChatReply: ChatReply = { text: 'Antwort', dossierUsed: true };
+	const defaultChatReply: ChatReply = { text: 'Antwort', dossierUsed: true, costUsd: 0.04 };
 	const defaultAnnotation: Annotation = {
 		id: 'a1',
 		bookId: 'b1',

@@ -224,7 +224,8 @@ describe('processor reactors', () => {
 				tags: [],
 				coverUrl: null,
 				progress: null,
-				hasDossier: false
+				hasDossier: false,
+				aiCostUsd: 0
 			})
 		});
 		const { deps, domain } = makeDeps({ http: http.impl });
@@ -484,7 +485,7 @@ describe('processor reactors', () => {
 			const messages = [{ role: 'user' as const, content: 'Wer ist die Hauptfigur?' }];
 			const res = await createProcessor(deps).chatAboutBook('b1', messages, 'Ein markierter Satz', 0.5);
 
-			expect(res).toEqual({ text: 'Antwort', dossierUsed: true });
+			expect(res).toEqual({ text: 'Antwort', dossierUsed: true, costUsd: 0.04 });
 			const call = http.calls.find((c) => c.method === 'chatAboutBook');
 			expect(call?.args).toEqual(['b1', messages, 'Ein markierter Satz', 0.5]);
 		});

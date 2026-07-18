@@ -1,5 +1,6 @@
 import { authorizeBookAccess } from "../domain/bookRpu.js";
 import { bookOutline, contextWindow } from "../domain/bookTextRpu.js";
+import { chatCostUsd } from "../domain/aiCostRpu.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
 import * as r2 from "../providers/x/r2.js";
 import * as claude from "../providers/x/claude.js";
@@ -14,7 +15,9 @@ export interface ChatAboutBookInput {
   messages: unknown;
 }
 
-export type ChatAboutBookBody = { text: string; dossierUsed: boolean } | { error: string };
+export type ChatAboutBookBody =
+  | { text: string; dossierUsed: boolean; costUsd: number }
+  | { error: string };
 
 interface ValidTurn {
   role: "user" | "assistant";
@@ -87,8 +90,9 @@ export async function chatAboutBook(
 
   const dossier = await r2.getText(dossierKey(userId, book.currentFileHash));
 
+  let result: claude.ChatAboutBookResult;
   try {
-    const text = await claude.chatAboutBook({
+    result = await claude.chatAboutBook({
       title: book.title,
       author: book.author,
       outline: bookOutline(bookText),
@@ -97,9 +101,20 @@ export async function chatAboutBook(
       context: selection ? contextWindow(bookText, selection, progressPercent) : null,
       messages
     });
-    return ok(200, { text, dossierUsed: dossier !== null });
   } catch (err) {
     console.error("[chat] Claude call failed:", err);
     return ok(502, { error: "chat_failed" });
   }
+
+  const costUsd = chatCostUsd(result.usage);
+  // The answer already succeeded, so a failed cost write must not turn it into
+  // an error - the reader would lose the reply over a bookkeeping hiccup. Log
+  // and carry on; the per-call cost still rides back in the response.
+  try {
+    await bookRepo.addAiCost(book.id, costUsd);
+  } catch (err) {
+    console.error("[chat] could not record AI cost:", err);
+  }
+
+  return ok(200, { text: result.text, dossierUsed: dossier !== null, costUsd });
 }

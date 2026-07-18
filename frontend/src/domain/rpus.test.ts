@@ -85,7 +85,8 @@ describe('toBookDetail', () => {
 		tags: [],
 		coverUrl: null,
 		progress: null,
-		hasDossier: false
+		hasDossier: false,
+		aiCostUsd: 0
 	};
 	it('marks isLocal true when loaned', () => {
 		const loans: Loan[] = [

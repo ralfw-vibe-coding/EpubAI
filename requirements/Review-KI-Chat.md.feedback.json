@@ -12,10 +12,10 @@
       "prefix": "tzen\"/„Nachschlagen\" sind weg, dafür drei Icons plus Abbrechen:\n\n| Funktion | Icon |\n|---|---|\n| Übersetzen | `Languages` |\n| Nachschlagen | `BookOpenText` |\n| ",
       "quote": "**Chat zur Selektion** (neu) | `MessageCircleQuestion`",
       "quotePreview": "**Chat zur Selektion** (neu) | `MessageCircleQuestion`",
-      "resolution": "",
+      "resolution": "Icon vereinheitlicht: Selektions-Chat und Buch-Chat nutzen jetzt beide MessagesSquare; MessageCircleQuestion entfernt.",
       "startLine": 17,
       "startOffset": 561,
-      "status": "commented",
+      "status": "approved",
       "suffix": " |\n\nTouch-Ziele sind 36×36 (vorher kleiner), `aria-label`s sind geblieben.\n\n**Zu prüfen:** Sind die Icons auf dem iPhone eindeutig genug ohne Text? Besonders `B",
       "thread": [
         {
@@ -24,9 +24,16 @@
           "createdBy": "reviewer",
           "id": "th-mrp2y6ps",
           "type": "comment"
+        },
+        {
+          "body": "Selektionsleiste zeigt jetzt dasselbe Chat-Icon (MessagesSquare) wie der Buch-Chat. aria-label unterscheidet weiterhin ('Chat zur Selektion' vs 'Chat zum Buch'). Live bestätigt.",
+          "createdAt": "2026-07-17T16:36:14.577732Z",
+          "createdBy": "assistant",
+          "id": "th-fb-mrp2y6ps-rdx",
+          "type": "redaction"
         }
       ],
-      "updatedAt": "2026-07-17T15:15:41.824Z"
+      "updatedAt": "2026-07-18T06:20:03.766Z"
     },
     {
       "anchorHash": "fa0f5fac080476fc",
@@ -40,10 +47,10 @@
       "prefix": "ch habe sie im Code verifiziert (Icons, aria-labels, Größen) und alles andere live. **Das ist der eine Punkt, den nur du prüfen kannst.**\n\n## 2. Chat zum Buch\n\n",
       "quote": "Neues Icon MessagesSquare in der Reader-Toolbar, neben Inhaltsverzeichnis/Notizen/Einstellungen.",
       "quotePreview": "Neues Icon MessagesSquare in der Reader-Toolbar, neben Inhaltsverzeichnis/Notizen/Einstellungen.",
-      "resolution": "",
+      "resolution": "Siehe oben: beide Einstiege nutzen dasselbe Icon (MessagesSquare).",
       "startLine": 27,
       "startOffset": 1248,
-      "status": "commented",
+      "status": "approved",
       "suffix": "n.\n\n**Zu prüfen:** Gehört der Einstieg dorthin, oder erwartest du ihn woanders?\n\n## 3. Dossier-Upload (Buchdetails)\n\nBereich „Dossier\" mit Erklärsatz, Upload ei",
       "thread": [
         {
@@ -52,9 +59,16 @@
           "createdBy": "reviewer",
           "id": "th-mrp2yuc6",
           "type": "comment"
+        },
+        {
+          "body": "Erledigt zusammen mit dem vorigen Punkt.",
+          "createdAt": "2026-07-17T16:36:14.577732Z",
+          "createdBy": "assistant",
+          "id": "th-fb-mrp2yuc6-rdx",
+          "type": "redaction"
         }
       ],
-      "updatedAt": "2026-07-17T15:16:12.438Z"
+      "updatedAt": "2026-07-18T06:22:27.522Z"
     },
     {
       "anchorHash": "1ff4eae8e7ab90b9",
@@ -68,10 +82,10 @@
       "prefix": "gebaut:** der Generieren-Button. Du hattest in der Durchstich-Liste nur den Upload genannt — und ohne Generierung entfallen die $1,42 pro Buch komplett.\n\n## 4. ",
       "quote": "Chat ohne Dossier — funktioniert, sagt aber was er nicht weiß",
       "quotePreview": "Chat ohne Dossier — funktioniert, sagt aber was er nicht weiß",
-      "resolution": "",
+      "resolution": "Chat-Prompt umgebaut: ohne Dossier keine Rekonstruktion der These aus Kapiteltiteln mehr; stattdessen klarer Hinweis + Angebot, ein Dossier zu ergänzen; eigenes Wissen nur explizit markiert.",
       "startLine": 39,
       "startOffset": 1955,
-      "status": "commented",
+      "status": "approved",
       "suffix": "\n\nLive getestet, Frage „Worum geht es in diesem Buch? Und was genau steht in Kapitel 4?\" **ohne** Dossier:\n\n> „Zur Gesamtthese des Buchs kann ich nur aus dem Ti",
       "thread": [
         {
@@ -80,9 +94,16 @@
           "createdBy": "reviewer",
           "id": "th-mrp32ypz",
           "type": "comment"
+        },
+        {
+          "body": "Live geprüft: Antwort ohne Dossier führt jetzt mit 'das wäre Spekulation', markiert die Gliederungs-Interpretation als solche und trennt eigenes Wissen ('nicht aus dem Buchtext') sauber ab. Kürzer als vorher, aber der Struktur-Absatz bleibt (explizit als Interpretation gekennzeichnet) — sag Bescheid, falls er ganz weg soll.",
+          "createdAt": "2026-07-17T16:36:14.577732Z",
+          "createdBy": "assistant",
+          "id": "th-fb-mrp32ypz-rdx",
+          "type": "redaction"
         }
       ],
-      "updatedAt": "2026-07-17T15:19:24.743Z"
+      "updatedAt": "2026-07-18T06:20:15.009Z"
     },
     {
       "anchorHash": "3189d3763876ec80",
@@ -108,9 +129,16 @@
           "createdBy": "reviewer",
           "id": "th-mrp368zc",
           "type": "comment"
+        },
+        {
+          "body": "Danke — bleibt unverändert.",
+          "createdAt": "2026-07-17T16:36:14.577732Z",
+          "createdBy": "assistant",
+          "id": "th-fb-mrp368zc-rdx",
+          "type": "redaction"
         }
       ],
-      "updatedAt": "2026-07-17T15:21:58.008Z"
+      "updatedAt": "2026-07-17T16:36:14.577732Z"
     },
     {
       "anchorHash": "ff1ac1d157f31314",
@@ -124,10 +152,10 @@
       "prefix": "rschaftskritische Streitschrift […] das sind Positionen des Autors, keine gesicherten Fakten.\"\n\n**Zu prüfen:** Genau das wolltest du bei einem Buch wie Meyen, o",
       "quote": "nervt der Disclaimer bei jeder Antwort?",
       "quotePreview": "nervt der Disclaimer bei jeder Antwort?",
-      "resolution": "",
+      "resolution": "Dossier-Prompt (dossierprompt.txt) neutralisiert: keine Einordnung/Wertung/Disclaimer mehr, reine Zusammenfassung entlang der großen Kapitel. Neue Regel 'WHAT THIS DOSSIER IS NOT' verbietet Einordnung ausdrücklich.",
       "startLine": 55,
       "startOffset": 3121,
-      "status": "commented",
+      "status": "approved",
       "suffix": "ort?\n\n## 6. Kontext-Chat (Selektion)\n\nGetestet mit einer Selektion, die absichtlich Zeilenumbrüche mittendrin hat — so liefert epub.js sie wirklich, und daran w",
       "thread": [
         {
@@ -136,9 +164,16 @@
           "createdBy": "reviewer",
           "id": "th-mrp37skw",
           "type": "comment"
+        },
+        {
+          "body": "dossierprompt.txt umgeschrieben: Abschnitte KERNAUSSAGE (mit 'wogegen argumentiert') und GRENZEN/Disclaimer entfernt, PERSONEN/POSITIONEN neutralisiert. Hinweis: das bereits hochgeladene Meyen-Dossier ist noch mein altes handgeschriebenes (mit Disclaimer) — der Prompt steuert künftige Generierung. Ich kann das Beispiel neu erstellen, wenn du willst.",
+          "createdAt": "2026-07-17T16:36:14.577732Z",
+          "createdBy": "assistant",
+          "id": "th-fb-mrp37skw-rdx",
+          "type": "redaction"
         }
       ],
-      "updatedAt": "2026-07-17T15:23:10.064Z"
+      "updatedAt": "2026-07-18T06:22:36.263Z"
     },
     {
       "anchorHash": "eb9837463ad218b5",
@@ -148,11 +183,19 @@
       "createdBy": "reviewer",
       "endLine": 63,
       "endOffset": 3672,
+      "followUps": [
+        {
+          "comment": "kann das eingabefeld mit jeder zeile wachsenn (mindestens bis zu einem maximum wie 5 zeilen)?",
+          "createdAt": "2026-07-18T06:21:00.632Z",
+          "createdBy": "reviewer",
+          "id": "fu-mrpzafdk"
+        }
+      ],
       "id": "fb-mrp39c6f",
       "prefix": "s dem **umgebenden** Fenster und trennt die Quellen sauber:\n\n> „im Anschluss an Werner Hofmann (den er **laut Dossier** in Kapitel 3 ausführlicher entfaltet)\"\n\n",
       "quote": "Zu prüfen: ±10.000 Zeichen pro Seite — reicht das bei deinen Sachbüchern, oder schneidet es Argumente ab?",
       "quotePreview": "Zu prüfen: ±10.000 Zeichen pro Seite — reicht das bei deinen Sachbüchern, oder schneidet es Argument",
-      "resolution": "",
+      "resolution": "Shift-Enter umgesetzt: Chat-Eingabe ist jetzt ein Textfeld, Enter sendet, Umschalt+Enter macht eine neue Zeile. Kontextfenster bleibt ±10.000 Zeichen (Konstante).",
       "startLine": 63,
       "startOffset": 3567,
       "status": "commented",
@@ -164,9 +207,23 @@
           "createdBy": "reviewer",
           "id": "th-mrp39c6f",
           "type": "comment"
+        },
+        {
+          "body": "Eingabe von <input> auf <textarea> mit Tastatur-Logik umgestellt; Placeholder weist auf Umschalt+Enter hin. Live bestätigt. Das Kontextfenster (±10.000) ist eine Konstante, an der ich drehen kann — schwer prüfbar von außen, stimmt.",
+          "createdAt": "2026-07-17T16:36:14.577732Z",
+          "createdBy": "assistant",
+          "id": "th-fb-mrp39c6f-rdx",
+          "type": "redaction"
+        },
+        {
+          "body": "kann das eingabefeld mit jeder zeile wachsenn (mindestens bis zu einem maximum wie 5 zeilen)?",
+          "createdAt": "2026-07-18T06:21:00.632Z",
+          "createdBy": "reviewer",
+          "id": "fu-mrpzafdk",
+          "type": "steer"
         }
       ],
-      "updatedAt": "2026-07-17T15:24:22.119Z"
+      "updatedAt": "2026-07-18T06:21:00.632Z"
     },
     {
       "anchorHash": "9d640e2f17788194",
@@ -176,11 +233,19 @@
       "createdBy": "reviewer",
       "endLine": 65,
       "endOffset": 3807,
+      "followUps": [
+        {
+          "comment": "\"Dieser Chat: ≈ $0,03“ soll oben hinter \"Chat zur Textstelle“ klein, nicht fett in klammern stehen, zb „Chat zur Textstelle (≈ $0,03)“.\n\nDito bei „Chat zum Buch“.",
+          "createdAt": "2026-07-18T06:19:44.690Z",
+          "createdBy": "reviewer",
+          "id": "fu-mrpz8ss2"
+        }
+      ],
       "id": "fb-mrp3ac10",
       "prefix": "cht das bei deinen Sachbüchern, oder schneidet es Argumente ab? Ist eine Konstante, ich kann dran drehen (±20.000 kostet ~$0,04 statt ~$0,02 pro Frage).\n\n## 7. ",
       "quote": "Kosten — gemessen, nicht geschätzt",
       "quotePreview": "Kosten — gemessen, nicht geschätzt",
-      "resolution": "",
+      "resolution": "Kostenanzeige eingebaut: je Chat (im Sheet) und kumuliert pro Buch (Buchdetails).",
       "startLine": 65,
       "startOffset": 3773,
       "status": "commented",
@@ -192,9 +257,23 @@
           "createdBy": "reviewer",
           "id": "th-mrp3ac10",
           "type": "comment"
+        },
+        {
+          "body": "Neu: pro Chat-Antwort liefert das Backend costUsd; das Sheet zeigt 'Dieser Chat: ≈ $X'. Pro Buch wird kumuliert (ai_cost_usd in der DB), Buchdetails zeigen 'KI-Kosten dieses Buchs bisher: ≈ $Y'. Live bestätigt ($0,01 im Chat, $0,04 am Buch).",
+          "createdAt": "2026-07-17T16:36:14.577732Z",
+          "createdBy": "assistant",
+          "id": "th-fb-mrp3ac10-rdx",
+          "type": "redaction"
+        },
+        {
+          "body": "\"Dieser Chat: ≈ $0,03“ soll oben hinter \"Chat zur Textstelle“ klein, nicht fett in klammern stehen, zb „Chat zur Textstelle (≈ $0,03)“.\n\nDito bei „Chat zum Buch“.",
+          "createdAt": "2026-07-18T06:19:44.690Z",
+          "createdBy": "reviewer",
+          "id": "fu-mrpz8ss2",
+          "type": "steer"
         }
       ],
-      "updatedAt": "2026-07-17T15:25:08.580Z"
+      "updatedAt": "2026-07-18T06:19:44.690Z"
     },
     {
       "anchorHash": "92a6f0d7de80ef8e",
@@ -208,10 +287,10 @@
       "prefix": " Fehler/0 Warnungen\n- Coverage: Backend 92 %, Frontend 99 % (Schwelle 80 %)\n- Extraktion: ~25–50 ms pro Buch, läuft inline beim Upload\n\n## 10. Offene Punkte\n\n- ",
       "quote": "• Kostenanzeige (Punkt aus einer früheren Runde, nicht in der Durchstich-Liste) — soll sie rein?",
       "quotePreview": "• Kostenanzeige (Punkt aus einer früheren Runde, nicht in der Durchstich-Liste) — soll sie rein?",
-      "resolution": "",
+      "resolution": "Umgesetzt wie gewünscht: je Chat und kumuliert pro Buch.",
       "startLine": 98,
       "startOffset": 5352,
-      "status": "commented",
+      "status": "approved",
       "suffix": "ein?\n- **Bild-Transkription** — bei Keen-artigen Büchern fehlen Tabellen/Diagramme weiterhin. Der Prompt verhindert, dass das Modell sie erfindet. Bewusst zurüc",
       "thread": [
         {
@@ -220,9 +299,16 @@
           "createdBy": "reviewer",
           "id": "th-mrp3b7p1",
           "type": "comment"
+        },
+        {
+          "body": "Beide Ebenen live bestätigt. Übersetzen/Nachschlagen fließen bewusst nicht ein (nicht buchbezogen).",
+          "createdAt": "2026-07-17T16:36:14.577732Z",
+          "createdBy": "assistant",
+          "id": "th-fb-mrp3b7p1-rdx",
+          "type": "redaction"
         }
       ],
-      "updatedAt": "2026-07-17T15:25:49.621Z"
+      "updatedAt": "2026-07-18T06:25:27.452Z"
     },
     {
       "anchorHash": "a3c16ba05979850f",
@@ -236,10 +322,10 @@
       "prefix": "ranskription** — bei Keen-artigen Büchern fehlen Tabellen/Diagramme weiterhin. Der Prompt verhindert, dass das Modell sie erfindet. Bewusst zurückgestellt.\n- **",
       "quote": "Chat-Verlauf ist Sitzungs-lokal, beim Schließen weg (so entschieden).",
       "quotePreview": "Chat-Verlauf ist Sitzungs-lokal, beim Schließen weg (so entschieden).",
-      "resolution": "",
+      "resolution": "Umgesetzt: Selektions-Chat startet weiterhin bei jedem Öffnen neu; Buch-Chat läuft jetzt standardmäßig weiter (bleibt beim Schließen erhalten) und hat einen 'Leeren'-Knopf.",
       "startLine": 100,
       "startOffset": 5621,
-      "status": "commented",
+      "status": "approved",
       "suffix": "en).\n- **Streaming** — Antworten erscheinen am Stück nach ~10 s. Bei längeren Antworten könnte das zu lang wirken.\n",
       "thread": [
         {
@@ -248,9 +334,16 @@
           "createdBy": "reviewer",
           "id": "th-mrp3cd3n",
           "type": "comment"
+        },
+        {
+          "body": "Live bestätigt: Buch-Chat nach Schließen+Wiederöffnen noch vorhanden; 'Leeren' im Header (nur beim Buch-Chat mit Nachrichten). Selektions-Chat bleibt sitzungsflüchtig.",
+          "createdAt": "2026-07-17T16:41:31.187455Z",
+          "createdBy": "assistant",
+          "id": "th-fb-mrp3cd3n-rdx",
+          "type": "redaction"
         }
       ],
-      "updatedAt": "2026-07-17T15:26:43.283Z"
+      "updatedAt": "2026-07-18T06:25:22.668Z"
     },
     {
       "anchorHash": "b4f532917aeb6908",
@@ -276,13 +369,48 @@
           "createdBy": "reviewer",
           "id": "th-mrp3cuc9",
           "type": "comment"
+        },
+        {
+          "body": "Verstanden — kein Streaming vorerst. Bleibt als möglicher späterer Schritt notiert.",
+          "createdAt": "2026-07-17T16:41:31.187455Z",
+          "createdBy": "assistant",
+          "id": "th-fb-mrp3cuc9-rdx",
+          "type": "redaction"
         }
       ],
-      "updatedAt": "2026-07-17T15:27:05.625Z"
+      "updatedAt": "2026-07-17T16:41:31.187455Z"
+    },
+    {
+      "anchorHash": "dfc863e3f49fcc0e",
+      "comment": "die kostenanzeige ist jetzt überall grundsätzlich drin. aber sie soll anders positioniert werden (s.a. andere kommentare).\n\nfür das ganze buch soll \"KI-Kosten dieses Buchs bisher: ≈ $0,03 (Chats; grobe Richtung)“ so formuliert werden: \"KI-Kosten: ≈ $0,03 (Chats)“. Platzierung hinter \"Status: auf diesem Gerät“, zb „Status: auf diesem Gerät / KI-Kosten: ≈ $0,03 (Chats)\"",
+      "contextLength": 160,
+      "createdAt": "2026-07-18T06:25:08.448Z",
+      "createdBy": "reviewer",
+      "endLine": 81,
+      "endOffset": 4297,
+      "id": "fb-mrpzfqlc",
+      "prefix": "age | ~$0,02 | **~$0,04** |\n| Ersparnis durchs Caching | ~$0,004/Frage | ~$0,015/Frage |\n\nImmer noch 20–40× billiger als der Volltext-Ansatz ($0,74/Frage). Die ",
+      "quote": "Kostenanzeige",
+      "quotePreview": "Kostenanzeige",
+      "resolution": "",
+      "startLine": 81,
+      "startOffset": 4284,
+      "status": "commented",
+      "suffix": " selbst ist **nicht** gebaut — stand nicht in deiner Durchstich-Liste.\n\n## 8. Was ich beim Bauen gefunden habe\n\n**Ein echter Kostenbug, von den Tests gefangen.*",
+      "thread": [
+        {
+          "body": "die kostenanzeige ist jetzt überall grundsätzlich drin. aber sie soll anders positioniert werden (s.a. andere kommentare).\n\nfür das ganze buch soll \"KI-Kosten dieses Buchs bisher: ≈ $0,03 (Chats; grobe Richtung)“ so formuliert werden: \"KI-Kosten: ≈ $0,03 (Chats)“. Platzierung hinter \"Status: auf diesem Gerät“, zb „Status: auf diesem Gerät / KI-Kosten: ≈ $0,03 (Chats)\"",
+          "createdAt": "2026-07-18T06:25:08.448Z",
+          "createdBy": "reviewer",
+          "id": "th-mrpzfqlc",
+          "type": "comment"
+        }
+      ],
+      "updatedAt": "2026-07-18T06:25:08.448Z"
     }
   ],
   "file": "Review-KI-Chat.md",
   "sourcePath": "/Users/ralfw/Repositories/08 Vibe Coding/EpubAI/requirements/Review-KI-Chat.md",
-  "updatedAt": "2026-07-17T15:27:05.625Z",
+  "updatedAt": "2026-07-18T06:25:27.452Z",
   "version": 1
 }

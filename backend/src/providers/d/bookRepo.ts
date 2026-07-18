@@ -13,6 +13,8 @@ interface BookRow {
   current_file_hash: string;
   processing_status: ProcessingStatus;
   dossier_uploaded_at: Date | null;
+  // pg returns `numeric` as a string, never a JS number - parsed in toBook.
+  ai_cost_usd: string;
 }
 
 function toBook(row: BookRow): Book {
@@ -26,12 +28,13 @@ function toBook(row: BookRow): Book {
     addedAt: row.added_at.toISOString(),
     currentFileHash: row.current_file_hash,
     processingStatus: row.processing_status,
-    dossierUploadedAt: row.dossier_uploaded_at ? row.dossier_uploaded_at.toISOString() : null
+    dossierUploadedAt: row.dossier_uploaded_at ? row.dossier_uploaded_at.toISOString() : null,
+    aiCostUsd: Number(row.ai_cost_usd ?? 0)
   };
 }
 
 const SELECT_FIELDS =
-  "id, user_id, title, author, tags, cover_url, added_at, current_file_hash, processing_status, dossier_uploaded_at";
+  "id, user_id, title, author, tags, cover_url, added_at, current_file_hash, processing_status, dossier_uploaded_at, ai_cost_usd";
 
 export async function findByUserAndHash(userId: string, fileHash: string): Promise<Book | null> {
   const result = await pool.query<BookRow>(
@@ -102,6 +105,15 @@ export async function update(bookId: string, patch: BookMetadataPatch): Promise<
 
 export async function remove(bookId: string): Promise<void> {
   await pool.query("delete from book where id = $1", [bookId]);
+}
+
+/**
+ * Adds a chat call's cost onto the book's running total. Incremented in the DB
+ * (`ai_cost_usd + $1`) rather than read-modify-written, so concurrent chats on
+ * the same book can't lose each other's cost.
+ */
+export async function addAiCost(bookId: string, usd: number): Promise<void> {
+  await pool.query("update book set ai_cost_usd = ai_cost_usd + $1 where id = $2", [usd, bookId]);
 }
 
 /**

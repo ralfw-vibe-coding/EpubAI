@@ -35,6 +35,8 @@ export interface Book {
   // Public projections only ever expose the derived `hasDossier` boolean
   // (see BookSummary) - the timestamp itself is an implementation detail.
   dossierUploadedAt: string | null;
+  // Cumulative Claude chat cost for this book, in USD (Requirements 4.6).
+  aiCostUsd: number;
 }
 
 export interface BookFile {
@@ -70,6 +72,8 @@ export interface BookSummary {
   processingStatus: ProcessingStatus;
   /** True once a dossier has been uploaded (dossier_uploaded_at is not null). */
   hasDossier: boolean;
+  /** Cumulative Claude chat cost for this book, in USD - a rough spend figure. */
+  aiCostUsd: number;
 }
 
 export interface DetectedMeta {

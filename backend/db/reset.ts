@@ -1,10 +1,17 @@
 // Wipes everything in the database DATABASE_URL points at (all tables,
 // emptied but left structurally intact - no need to re-run migrate
 // afterward) and every object in the R2_BUCKET. Meant for resetting the
-// dedicated test database/bucket between test runs - never point this at
-// production. Always asks for interactive confirmation first; refuses to
-// run non-interactively (no stdin) so it can never fire from a script by
-// accident.
+// dedicated test database/bucket between test runs.
+//
+// Two guards, both always on:
+//   - refuses to run non-interactively (no stdin), so it can never fire from
+//     a script by accident;
+//   - when it is NOT clearly pointed at test - either because EPUBAI_ENV
+//     selected an overlay (`.env.production`), or because `.env` was hand-
+//     edited to non-test values - it requires typing the exact R2_BUCKET
+//     name. A bucket name is something you cannot type correctly by accident,
+//     which is the whole point: it replaces the old, semantically awkward
+//     "ich bin sicher, das ist keine produktion" phrase with a real check.
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import pg from "pg";
@@ -82,24 +89,32 @@ async function resetR2(): Promise<void> {
 }
 
 async function main() {
-  console.log("=== EpubAI Test-Umgebung zurücksetzen ===");
-  console.log(`Datenbank: ${describeDatabaseTarget(env.DATABASE_URL)}`);
+  const overlay = process.env.EPUBAI_ENV;
+  console.log("=== EpubAI-Umgebung zurücksetzen ===");
+  console.log(`Datenbank: ${describeDatabaseTarget(env.DATABASE_URL)}${overlay ? `   [${overlay.toUpperCase()}]` : ""}`);
   console.log(`R2-Bucket: ${env.R2_BUCKET}`);
   console.log("");
   console.log("Das leert ALLE Tabellen (Nutzer, Bücher, Notizen, Ausleihen) in dieser");
   console.log("Datenbank und löscht ALLE Dateien im R2-Bucket oben. Unwiderruflich.");
   console.log("");
 
+  // Not clearly test = either an explicit overlay was selected, or `.env` was
+  // hand-edited to non-test values. Either way, demand the exact bucket name -
+  // a target you cannot name correctly unless you actually mean it.
   const looksLikeTest = /test/i.test(env.DATABASE_URL) || /test/i.test(env.R2_BUCKET);
-  if (!looksLikeTest) {
-    console.log("ACHTUNG: Weder DATABASE_URL noch R2_BUCKET enthalten \"test\" im Namen.");
+  if (overlay || !looksLikeTest) {
+    console.log(
+      overlay
+        ? `ACHTUNG: EPUBAI_ENV=${overlay} - das ist NICHT die Standard-Testumgebung.`
+        : 'ACHTUNG: Weder DATABASE_URL noch R2_BUCKET enthalten "test" im Namen.'
+    );
     console.log("Das könnte die echte Produktionsumgebung sein!");
     console.log("");
-    const reallyConfirmed = await confirm(
-      'Tippe genau "ich bin sicher, das ist keine produktion" zum Fortfahren: ',
-      "ich bin sicher, das ist keine produktion"
+    const nameConfirmed = await confirm(
+      `Zum Fortfahren tippe exakt den Bucket-Namen "${env.R2_BUCKET}": `,
+      env.R2_BUCKET
     );
-    if (!reallyConfirmed) {
+    if (!nameConfirmed) {
       console.log("Abgebrochen.");
       return;
     }

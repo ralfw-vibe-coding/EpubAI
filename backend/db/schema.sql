@@ -42,6 +42,12 @@ create index if not exists book_user_id_idx on book(user_id);
 -- `hasDossier` from "is not null" rather than storing that flag redundantly.
 alter table book add column if not exists dossier_uploaded_at timestamptz;
 
+-- Cumulative Claude API cost this book has run up, in USD, so the reader can
+-- see the rough spend (Requirements 4.6). Only the book-grounded chat feeds
+-- this - translate/lookup are per-selection and not attributed to a book.
+-- numeric (not float) because it's money; every chat adds its call cost.
+alter table book add column if not exists ai_cost_usd numeric(12, 6) not null default 0;
+
 -- Enforces the "same hash + same user -> duplicate" rule at the storage
 -- layer too, on top of the application-level check in uploadEpub.
 create unique index if not exists book_user_hash_idx on book(user_id, current_file_hash);

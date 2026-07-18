@@ -40,6 +40,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     currentFileHash: "hash-1",
     processingStatus: "ready",
     dossierUploadedAt: null,
+    aiCostUsd: 0,
     ...overrides
   };
 }

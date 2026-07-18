@@ -18,6 +18,8 @@ export interface CatalogBook {
 	progress: { percent: number; page: number | null; totalPages: number | null } | null;
 	/** True once a dossier has been uploaded (background knowledge for the book chat). */
 	hasDossier: boolean;
+	/** Cumulative Claude chat cost for this book, in USD - a rough spend figure. */
+	aiCostUsd: number;
 }
 
 /** A local loan: the book's EPUB is present in OPFS on this device. */

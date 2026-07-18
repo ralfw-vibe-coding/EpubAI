@@ -16,7 +16,6 @@
 		Check,
 		Languages,
 		BookOpenText,
-		MessageCircleQuestion,
 		MessagesSquare
 	} from 'lucide-svelte';
 	import type { Annotation, AnnotationColor } from '../../../domain/types';
@@ -149,11 +148,29 @@
 		error: string | null;
 		/** From the latest reply; null until the first answer arrives. */
 		dossierUsed: boolean | null;
+		/** Running Claude cost of this chat session, summed over its replies (USD). */
+		sessionCostUsd: number;
+	} | null>(null);
+
+	// The book-wide chat continues across close/reopen within the reading
+	// session (a running conversation about the book); the selection chat always
+	// starts fresh. Held separately so closing the sheet doesn't discard it - and
+	// the reader can wipe it via "Leeren".
+	let bookConversation = $state<{
+		messages: ChatMessage[];
+		dossierUsed: boolean | null;
+		sessionCostUsd: number;
 	} | null>(null);
 
 	/** Chat replies are Markdown too (same backend prompts as translate/lookup) — render like `aiResultHtml`. */
 	function chatMessageHtml(content: string): string {
 		return DOMPurify.sanitize(marked.parse(content, { async: false }));
+	}
+
+	/** Rough USD figure for the cost read-outs — cents, German decimal comma, small floor. */
+	function formatUsd(amount: number): string {
+		if (amount < 0.005) return '< $0,01';
+		return '$' + amount.toFixed(2).replace('.', ',');
 	}
 
 	function openContextChat() {
@@ -165,23 +182,42 @@
 			input: '',
 			loading: false,
 			error: null,
-			dossierUsed: null
+			dossierUsed: null,
+			sessionCostUsd: 0
 		};
 	}
 
 	function openBookChat() {
+		// Resume the running book conversation if there is one.
 		chat = {
 			kind: 'book',
 			selectionExcerpt: null,
-			messages: [],
+			messages: bookConversation?.messages ?? [],
 			input: '',
 			loading: false,
 			error: null,
-			dossierUsed: null
+			dossierUsed: bookConversation?.dossierUsed ?? null,
+			sessionCostUsd: bookConversation?.sessionCostUsd ?? 0
 		};
 	}
 
+	/** Wipe the running book conversation (the "Leeren" button). */
+	function clearBookChat() {
+		bookConversation = null;
+		if (chat && chat.kind === 'book') {
+			chat = { ...chat, messages: [], dossierUsed: null, sessionCostUsd: 0, error: null };
+		}
+	}
+
 	function closeChat() {
+		// Book chat continues next time it's opened; the selection chat does not.
+		if (chat && chat.kind === 'book') {
+			bookConversation = {
+				messages: chat.messages,
+				dossierUsed: chat.dossierUsed,
+				sessionCostUsd: chat.sessionCostUsd
+			};
+		}
 		chat = null;
 	}
 
@@ -205,7 +241,8 @@
 				...chat,
 				messages: [...chat.messages, { role: 'assistant', content: reply.text }],
 				loading: false,
-				dossierUsed: reply.dossierUsed
+				dossierUsed: reply.dossierUsed,
+				sessionCostUsd: chat.sessionCostUsd + reply.costUsd
 			};
 		} catch {
 			if (!chat) return;
@@ -655,7 +692,7 @@
 						aria-label="Chat zur Selektion"
 						class="flex h-9 w-9 flex-none items-center justify-center text-[var(--color-accent-700)]"
 					>
-						<MessageCircleQuestion size={18} />
+						<MessagesSquare size={18} />
 					</button>
 					<button
 						onclick={() => (selection = null)}
@@ -979,9 +1016,20 @@
 				<span class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">
 					{chat.kind === 'context' ? 'Chat zur Textstelle' : 'Chat zum Buch'}
 				</span>
-				<button onclick={closeChat} aria-label="Schließen" class="text-[var(--color-accent-700)]">
-					<X size={20} />
-				</button>
+				<div class="flex items-center gap-3">
+					{#if chat.kind === 'book' && chat.messages.length > 0}
+						<button
+							onclick={clearBookChat}
+							disabled={chat.loading}
+							class="text-xs text-[var(--color-neutral-700)] underline disabled:opacity-45"
+						>
+							Leeren
+						</button>
+					{/if}
+					<button onclick={closeChat} aria-label="Schließen" class="text-[var(--color-accent-700)]">
+						<X size={20} />
+					</button>
+				</div>
 			</div>
 
 			{#if chat.selectionExcerpt}
@@ -1028,6 +1076,12 @@
 				</p>
 			{/if}
 
+			{#if chat.sessionCostUsd > 0}
+				<p class="flex-none pt-1 text-right text-xs text-[var(--color-neutral-700)]">
+					Dieser Chat: ≈ {formatUsd(chat.sessionCostUsd)}
+				</p>
+			{/if}
+
 			{#if chat.error}
 				<p class="mt-1 flex-none bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
 					{chat.error}
@@ -1039,15 +1093,22 @@
 					e.preventDefault();
 					void sendChatMessage();
 				}}
-				class="mt-2 flex flex-none items-center gap-2"
+				class="mt-2 flex flex-none items-end gap-2"
 			>
-				<input
+				<textarea
 					bind:value={chat.input}
-					type="text"
-					placeholder="Frage stellen…"
+					rows="1"
+					placeholder="Frage stellen… (Umschalt+Enter für neue Zeile)"
 					disabled={chat.loading}
-					class="min-w-0 flex-1 border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)]"
-				/>
+					onkeydown={(e) => {
+						// Enter sends; Shift+Enter inserts a newline (multi-line prompts).
+						if (e.key === 'Enter' && !e.shiftKey) {
+							e.preventDefault();
+							if (chat && !chat.loading && chat.input.trim()) void sendChatMessage();
+						}
+					}}
+					class="max-h-32 min-h-[2.5rem] min-w-0 flex-1 resize-y border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)]"
+				></textarea>
 				<button
 					type="submit"
 					disabled={chat.loading || !chat.input.trim()}

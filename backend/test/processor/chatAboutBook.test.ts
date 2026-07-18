@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/providers/d/bookRepo.js", () => ({
-  findById: vi.fn()
+  findById: vi.fn(),
+  addAiCost: vi.fn()
 }));
 vi.mock("../../src/providers/x/r2.js", () => ({
   getText: vi.fn()
@@ -18,6 +19,7 @@ import { chatAboutBook } from "../../src/processor/chatAboutBook.js";
 import * as bookRepo from "../../src/providers/d/bookRepo.js";
 import * as r2 from "../../src/providers/x/r2.js";
 import * as claude from "../../src/providers/x/claude.js";
+import type { TokenUsage } from "../../src/domain/aiCostRpu.js";
 import { ensureBookText } from "../../src/processor/shared/bookText.js";
 import { sign } from "../../src/providers/x/jwt.js";
 import type { Book } from "../../src/domain/types.js";
@@ -56,13 +58,21 @@ const BOOK_TEXT = [
 const token = () => `Bearer ${sign({ userId: "user-1" })}`;
 const askAbout = (content: string) => [{ role: "user" as const, content }];
 
+const noUsage: TokenUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheCreationInputTokens: 0,
+  cacheReadInputTokens: 0
+};
+const reply = (text: string, usage: Partial<TokenUsage> = {}) => ({ text, usage: { ...noUsage, ...usage } });
+
 describe("chatAboutBook reactor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocked(bookRepo.findById).mockResolvedValue(makeBook());
     mocked(ensureBookText).mockResolvedValue(BOOK_TEXT);
     mocked(r2.getText).mockResolvedValue(null);
-    mocked(claude.chatAboutBook).mockResolvedValue("Die Antwort.");
+    mocked(claude.chatAboutBook).mockResolvedValue(reply("Die Antwort."));
   });
 
   describe("validation", () => {
@@ -118,7 +128,7 @@ describe("chatAboutBook reactor", () => {
       const result = await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("Worum geht es?") });
 
       expect(result.status).toBe(200);
-      expect(result.body).toEqual({ text: "Die Antwort.", dossierUsed: false });
+      expect(result.body).toEqual({ text: "Die Antwort.", dossierUsed: false, costUsd: 0 });
 
       const call = mocked(claude.chatAboutBook).mock.calls[0]![0];
       expect(call.selection).toBeNull();
@@ -199,6 +209,26 @@ describe("chatAboutBook reactor", () => {
     it("reads the dossier from the book's own prefix", async () => {
       await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
       expect(r2.getText).toHaveBeenCalledWith("user-1/hash-1-dossier.txt");
+    });
+  });
+
+  describe("cost", () => {
+    it("computes the call cost, adds it to the book, and returns it", async () => {
+      mocked(claude.chatAboutBook).mockResolvedValue(reply("Antwort", { inputTokens: 1_000_000 }));
+      const result = await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
+
+      // 1M uncached input tokens at the $2/1M intro rate.
+      expect((result.body as { costUsd: number }).costUsd).toBeCloseTo(2.0, 6);
+      expect(bookRepo.addAiCost).toHaveBeenCalledWith("book-1", expect.closeTo(2.0, 6));
+    });
+
+    it("still returns the answer when recording the cost fails", async () => {
+      // A bookkeeping hiccup must not cost the reader their reply.
+      mocked(bookRepo.addAiCost).mockRejectedValue(new Error("db down"));
+      const result = await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
+
+      expect(result.status).toBe(200);
+      expect((result.body as { text: string }).text).toBe("Die Antwort.");
     });
   });
 

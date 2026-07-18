@@ -92,7 +92,8 @@ export function toBookSummary(book: Book, coverUrl: string | null): BookSummary 
     coverUrl,
     fileHash: book.currentFileHash,
     processingStatus: book.processingStatus,
-    hasDossier: book.dossierUploadedAt != null
+    hasDossier: book.dossierUploadedAt != null,
+    aiCostUsd: book.aiCostUsd
   };
 }
 
