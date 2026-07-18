@@ -52,6 +52,16 @@ alter table book add column if not exists ai_cost_usd numeric(12, 6) not null de
 -- layer too, on top of the application-level check in uploadEpub.
 create unique index if not exists book_user_hash_idx on book(user_id, current_file_hash);
 
+-- Archive flag (Requirements "Archiv"). Null means active; the public API
+-- derives the boolean `archived` from "is not null", same pattern as
+-- dossier_uploaded_at -> hasDossier.
+alter table book add column if not exists archived_at timestamptz;
+
+-- The uploaded file's name at upload time (extension stripped), captured once
+-- and never updated afterwards - used only to name the notes export download,
+-- so it stays stable even if the (editable) title later diverges from it.
+alter table book add column if not exists original_filename text;
+
 create table if not exists book_file (
   id uuid primary key default gen_random_uuid(),
   book_id uuid not null references book(id),

@@ -20,6 +20,10 @@ export interface CatalogBook {
 	hasDossier: boolean;
 	/** Cumulative Claude chat cost for this book, in USD - a rough spend figure. */
 	aiCostUsd: number;
+	/** True once the user has archived the book (hidden from the library by default). */
+	archived: boolean;
+	/** The uploaded file's name at upload time (extension stripped), or null for older books. */
+	originalFilename: string | null;
 }
 
 /** A local loan: the book's EPUB is present in OPFS on this device. */

@@ -1,6 +1,7 @@
 import type { DProvider } from '../domain/ports';
 import type { Annotation, Loan, ReadingProgress } from '../domain/types';
 import type {
+	AnnotationExport,
 	AuthStore,
 	ChatReply,
 	Clock,
@@ -118,7 +119,9 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		coverUrl: null,
 		progress: null,
 		hasDossier: false,
-		aiCostUsd: 0
+		aiCostUsd: 0,
+		archived: false,
+		originalFilename: null
 	};
 	const defaultLoan: LoanResponse = {
 		id: 'loan1',
@@ -137,6 +140,21 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		color: 'accent',
 		createdAt: '2026-07-13T00:00:00.000Z',
 		updatedAt: '2026-07-13T00:00:00.000Z'
+	};
+	const defaultAnnotationExport: AnnotationExport = {
+		schemaVersion: 1,
+		fileHash: 'h1',
+		bookTitle: 'T',
+		bookAuthor: 'A',
+		exportedAt: '2026-07-13T00:00:00.000Z',
+		annotations: [
+			{
+				cfiRange: 'epubcfi(/6/2!/4/2,/1:0,/1:10)',
+				excerpt: 'Ein markierter Satz',
+				note: null,
+				color: 'accent'
+			}
+		]
 	};
 
 	const impl: HttpClient = {
@@ -161,6 +179,10 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		chatAboutBook: record('chatAboutBook', defaultChatReply),
 		uploadDossier: record('uploadDossier', { ...defaultBook, hasDossier: true }),
 		deleteDossier: record('deleteDossier', undefined as void),
+		archiveBook: record('archiveBook', { ...defaultBook, archived: true }),
+		unarchiveBook: record('unarchiveBook', { ...defaultBook, archived: false }),
+		exportAnnotations: record('exportAnnotations', defaultAnnotationExport),
+		importAnnotations: record('importAnnotations', { imported: 1, skipped: 0 }),
 		...overrides
 	};
 	return { impl, calls };

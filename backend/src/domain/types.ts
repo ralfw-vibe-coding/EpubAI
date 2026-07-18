@@ -37,6 +37,14 @@ export interface Book {
   dossierUploadedAt: string | null;
   // Cumulative Claude chat cost for this book, in USD (Requirements 4.6).
   aiCostUsd: number;
+  // ISO timestamp of when the book was archived, or null when it's active.
+  // Public projections only ever expose the derived `archived` boolean (see
+  // BookSummary) - the timestamp itself is an implementation detail.
+  archivedAt: string | null;
+  // The uploaded file's name at upload time (extension stripped), or null for
+  // books uploaded before this field existed. Used only to name the notes
+  // export download - never re-derived from the (editable) title.
+  originalFilename: string | null;
 }
 
 export interface BookFile {
@@ -74,6 +82,10 @@ export interface BookSummary {
   hasDossier: boolean;
   /** Cumulative Claude chat cost for this book, in USD - a rough spend figure. */
   aiCostUsd: number;
+  /** True when the book has been archived (archived_at is not null). */
+  archived: boolean;
+  /** The uploaded file's name at upload time (extension stripped), or null for older books. */
+  originalFilename: string | null;
 }
 
 export interface DetectedMeta {

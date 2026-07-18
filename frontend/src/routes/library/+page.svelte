@@ -4,6 +4,7 @@
 	import { Check } from 'lucide-svelte';
 	import type { BookDetail, CatalogBook } from '../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../portal/runtime';
+	import { filterBooks, tagsFrom, visibleBooks } from './filterBooks';
 
 	let books = $state<BookDetail[]>([]);
 	let loading = $state(true);
@@ -36,12 +37,19 @@
 	// Aktive Tags werden ODER-verknüpft (Buch muss mindestens einen tragen).
 	let activeTags = $state<Set<string>>(new Set());
 
-	let allTags = $derived(
-		Array.from(new Set(books.flatMap((b) => b.tags))).sort((a, b) => a.localeCompare(b, 'de'))
-	);
-	let filteredBooks = $derived(
-		activeTags.size === 0 ? books : books.filter((b) => b.tags.some((t) => activeTags.has(t)))
-	);
+	// Suche (Titel/Autor, Teilstring, Groß-/Kleinschreibung egal) - UND mit den
+	// aktiven Tags kombiniert.
+	let searchQuery = $state('');
+
+	// Archiv einschließen: standardmäßig aus - archivierte Bücher sind dann
+	// weder in der Liste noch in den Tag-Chips sichtbar. Reihenfolge wichtig:
+	// erst Archiv-Einbeziehung (-> sichtbare Menge), DANN allTags aus dieser
+	// Menge ableiten, DANN Suche+Tags darauf anwenden.
+	let includeArchived = $state(false);
+
+	let visible = $derived(visibleBooks(books, includeArchived));
+	let allTags = $derived(tagsFrom(visible));
+	let filteredBooks = $derived(filterBooks(visible, searchQuery, activeTags));
 
 	function toggleTag(tag: string) {
 		const next = new Set(activeTags);
@@ -214,6 +222,37 @@
 	{:else if books.length === 0}
 		<p class="text-[var(--color-neutral-700)]">Noch keine Bücher im Katalog.</p>
 	{:else}
+		<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+			<input
+				type="search"
+				bind:value={searchQuery}
+				placeholder="Suche nach Titel oder Autor…"
+				aria-label="Suche nach Titel oder Autor"
+				class="w-full border border-[var(--color-divider)] bg-[var(--color-surface)] px-3 py-1.5 text-sm sm:max-w-xs"
+			/>
+			<label class="flex flex-none items-center gap-2 text-sm text-[var(--color-neutral-700)]">
+				<input type="checkbox" bind:checked={includeArchived} class="h-4 w-4" />
+				Archiv einschließen
+			</label>
+		</div>
+
+		{#if allTags.length > 0}
+			<div class="mb-4 flex gap-2 overflow-x-auto pb-1">
+				{#each allTags as tag (tag)}
+					<button
+						onclick={() => toggleTag(tag)}
+						class="flex-none whitespace-nowrap border border-[var(--color-divider)] px-3 py-1 text-xs font-semibold {activeTags.has(
+							tag
+						)
+							? 'bg-[var(--color-accent)] text-[var(--color-bg)]'
+							: 'bg-[var(--color-surface)]'}"
+					>
+						{tag}
+					</button>
+				{/each}
+			</div>
+		{/if}
+
 		<div class="mb-4 flex items-center justify-between gap-4">
 			<h2 class="sr-only">Ansicht</h2>
 			<div class="seg flex border border-[var(--color-divider)]">
@@ -236,25 +275,8 @@
 			</div>
 		</div>
 
-		{#if allTags.length > 0}
-			<div class="mb-4 flex gap-2 overflow-x-auto pb-1">
-				{#each allTags as tag (tag)}
-					<button
-						onclick={() => toggleTag(tag)}
-						class="flex-none whitespace-nowrap border border-[var(--color-divider)] px-3 py-1 text-xs font-semibold {activeTags.has(
-							tag
-						)
-							? 'bg-[var(--color-accent)] text-[var(--color-bg)]'
-							: 'bg-[var(--color-surface)]'}"
-					>
-						{tag}
-					</button>
-				{/each}
-			</div>
-		{/if}
-
 		{#if filteredBooks.length === 0}
-			<p class="text-[var(--color-neutral-700)]">Keine Bücher mit diesen Tags.</p>
+			<p class="text-[var(--color-neutral-700)]">Keine Bücher gefunden.</p>
 		{:else if viewMode === 'cover'}
 			<div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
 				{#each filteredBooks as book (book.id)}

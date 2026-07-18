@@ -46,6 +46,7 @@ export interface BookDraft {
   tags: string[];
   processingStatus: ProcessingStatus;
   coverKey: string | null;
+  originalFilename: string | null;
 }
 
 /**
@@ -64,6 +65,7 @@ export function buildBookDraft(input: {
   coverKey?: string | null;
   tags?: string[];
   processingStatus?: ProcessingStatus;
+  originalFilename?: string | null;
 }): BookDraft {
   const title = normalizeText(input.title) ?? "Untitled";
   const author = normalizeText(input.author) ?? "Unknown";
@@ -73,7 +75,8 @@ export function buildBookDraft(input: {
     fileHash: input.fileHash,
     tags: input.tags ?? [],
     processingStatus: input.processingStatus ?? "ready",
-    coverKey: input.coverKey ?? null
+    coverKey: input.coverKey ?? null,
+    originalFilename: normalizeText(input.originalFilename ?? undefined) ?? null
   };
 }
 
@@ -93,7 +96,9 @@ export function toBookSummary(book: Book, coverUrl: string | null): BookSummary 
     fileHash: book.currentFileHash,
     processingStatus: book.processingStatus,
     hasDossier: book.dossierUploadedAt != null,
-    aiCostUsd: book.aiCostUsd
+    aiCostUsd: book.aiCostUsd,
+    archived: book.archivedAt != null,
+    originalFilename: book.originalFilename
   };
 }
 

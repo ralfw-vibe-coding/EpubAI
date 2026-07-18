@@ -1,0 +1,270 @@
+{
+  "comments": [
+    {
+      "anchorHash": "7b8f676c7c56c55a",
+      "applied": {
+        "newEndLine": 23,
+        "newQuote": "**→ Behoben:** Reihenfolge umgestellt — Suchfeld, direkt darunter der Tag-Filter, direkt darüber den Büchern die Cover/Liste-Tabs. Live geprüft (Screenshot der neuen Reihenfolge angeschaut).",
+        "newStartLine": 23
+      },
+      "comment": "der tag filter soll unter den suchbegriff wandern. die tabs cover/liste sollen direkt über den büchern stehen.",
+      "contextLength": 160,
+      "createdAt": "2026-07-18T12:02:17.607Z",
+      "createdBy": "reviewer",
+      "endLine": 17,
+      "endOffset": 1015,
+      "id": "fb-mrqbhbif",
+      "prefix": " 2. Katalog-Suche & Tag-Filter\n\nNeu in der Bibliotheksansicht: ein Suchfeld (Titel/Autor, case-insensitive Teilstring) und eine Checkbox „Archiv einschließen\". ",
+      "quote": "Der Tag-Filter existierte schon vorher.",
+      "quotePreview": "Der Tag-Filter existierte schon vorher.",
+      "resolution": "Reihenfolge in frontend/src/routes/library/+page.svelte umgestellt: Tag-Filter steht jetzt direkt unter dem Suchfeld, die Cover/Liste-Tabs direkt über der Buchliste. Live im Browser geprüft.",
+      "startLine": 17,
+      "startOffset": 976,
+      "status": "approved",
+      "suffix": "\n\nVerknüpfung wie gewünscht: Suchbegriff UND Tag-Auswahl, Tags untereinander ODER. Archivierte Bücher fließen nur ein, wenn die Checkbox aktiv ist — auch die Ta",
+      "thread": [
+        {
+          "body": "der tag filter soll unter den suchbegriff wandern. die tabs cover/liste sollen direkt über den büchern stehen.",
+          "createdAt": "2026-07-18T12:02:17.607Z",
+          "createdBy": "reviewer",
+          "id": "th-mrqbhbif",
+          "type": "comment"
+        },
+        {
+          "body": "Reihenfolge umgestellt: Suchfeld → Tag-Filter → Cover/Liste-Tabs → Bücher. Live geprüft.",
+          "createdAt": "2026-07-18T12:40:00.000Z",
+          "createdBy": "assistant",
+          "id": "th-mrqbhbif-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-18T13:04:27.467Z"
+    },
+    {
+      "anchorHash": "ba468297f4f2df1e",
+      "applied": {
+        "newEndLine": 13,
+        "newQuote": "**→ Behoben:** Archivieren ist jetzt gesperrt, solange das Buch auf irgendeinem Gerät ausgeliehen ist — Klick liefert „Das Buch muss erst zurückgegeben werden, bevor es archiviert werden kann.\" (409 `book_on_loan`). Erst nach „Zurückgeben\" lässt sich archivieren. Live geprüft: ausgeliehenes Testbuch → Archivieren blockiert → Zurückgeben → Archivieren funktioniert.",
+        "newStartLine": 13
+      },
+      "comment": "funktioniert. aber die archivierung sollte nur bei büchern sein, die nicht ausgeliehen sind. also erst zurückgeben, dann archivieren.",
+      "contextLength": 160,
+      "createdAt": "2026-07-18T12:03:47.314Z",
+      "createdBy": "reviewer",
+      "endLine": 11,
+      "endOffset": 421,
+      "id": "fb-mrqbj8qa",
+      "prefix": "uche & Tag-Filter**.\n\nNicht committet, nicht gepusht. Die App läuft lokal (Backend :3000, Frontend :5173) gegen die **Test-Umgebung**.\n\n---\n\n## 1. Archivieren\n\n",
+      "quote": "Ein Buch archivieren nimmt es aus dem Katalog, ohne es zu löschen — es bleibt online,",
+      "quotePreview": "Ein Buch archivieren nimmt es aus dem Katalog, ohne es zu löschen — es bleibt online,",
+      "resolution": "archiveBook.ts prüft jetzt loanRepo.hasActiveLoan(bookId) vor dem Archivieren; ist das Buch auf irgendeinem Gerät noch ausgeliehen, gibt es 409 book_on_loan statt zu archivieren. Frontend zeigt dafür \"Das Buch muss erst zurückgegeben werden, bevor es archiviert werden kann.\" Live getestet: Archivieren bei ausgeliehenem Buch blockiert, nach Zurückgeben funktioniert es.",
+      "startLine": 11,
+      "startOffset": 336,
+      "status": "approved",
+      "suffix": " Notizen und Dossier bleiben erhalten. Bedienung ist bewusst **nur in den Buchdetails** (nicht in der Listenansicht), wie du es gewählt hast: ein Icon-Button ne",
+      "thread": [
+        {
+          "body": "funktioniert. aber die archivierung sollte nur bei büchern sein, die nicht ausgeliehen sind. also erst zurückgeben, dann archivieren.",
+          "createdAt": "2026-07-18T12:03:47.314Z",
+          "createdBy": "reviewer",
+          "id": "th-mrqbj8qa",
+          "type": "comment"
+        },
+        {
+          "body": "Guard ergänzt: Archivieren wird abgelehnt (409 book_on_loan), solange ein aktiver Loan existiert; erst nach Zurückgeben möglich. Live getestet.",
+          "createdAt": "2026-07-18T12:40:00.000Z",
+          "createdBy": "assistant",
+          "id": "th-mrqbj8qa-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-18T13:03:32.111Z"
+    },
+    {
+      "anchorHash": "818db0581b1e811f",
+      "applied": {
+        "newEndLine": 29,
+        "newQuote": "**→ Geklärt:** Titel+Autor reichen als Suchfeld — kein Dateiname/Dossier nötig.",
+        "newStartLine": 29
+      },
+      "comment": "titel+autor reichen",
+      "contextLength": 160,
+      "createdAt": "2026-07-18T12:04:14.122Z",
+      "createdBy": "reviewer",
+      "endLine": 25,
+      "endOffset": 1585,
+      "id": "fb-mrqbjtey",
+      "prefix": "t nach Checkbox-Klick wieder auf.\n- Suche nach „Suter\" filtert das Testbuch (Autor „Meyen, Michael\") korrekt raus; „meyen\" (Kleinschreibung) findet es wieder.\n\n",
+      "quote": "**Zu prüfen:** Reicht dir Titel+Autor als Suchfeld, oder sollte auch der Dateiname/das Dossier durchsucht werden?",
+      "quotePreview": "**Zu prüfen:** Reicht dir Titel+Autor als Suchfeld, oder sollte auch der Dateiname/das Dossier durch",
+      "resolution": "Bestätigt, keine Code-Änderung nötig - die offene Frage im Review ist damit erledigt.",
+      "startLine": 25,
+      "startOffset": 1472,
+      "status": "approved",
+      "suffix": "\n\n## 3. Notizen exportieren & importieren\n\nDas war im Backlog als „Archiv-Export – EPUB/Notizen als Download\" formuliert; nach Rückfrage hast du dich für **nur ",
+      "thread": [
+        {
+          "body": "titel+autor reichen",
+          "createdAt": "2026-07-18T12:04:14.122Z",
+          "createdBy": "reviewer",
+          "id": "th-mrqbjtey",
+          "type": "comment"
+        },
+        {
+          "body": "Bestätigt - keine Änderung nötig.",
+          "createdAt": "2026-07-18T12:40:00.000Z",
+          "createdBy": "assistant",
+          "id": "th-mrqbjtey-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-18T13:39:29.701Z"
+    },
+    {
+      "anchorHash": "ec28fbc126f17d49",
+      "applied": {
+        "newEndLine": 37,
+        "newQuote": "**→ Behoben:** Der Dateiname ist jetzt der Upload-Dateiname (ohne `.epub`) + „ - notes.json\" — dafür wird der Original-Dateiname jetzt in einer neuen Spalte `original_filename` gespeichert (bisher nicht — nur der Titel wurde beim ersten Upload einmalig daraus abgeleitet, der Name selbst ging verloren). Für Bücher, die vor dieser Änderung hochgeladen wurden, ist die Spalte leer; dort fällt der Export-Dateiname weiterhin auf den (aktuellen) Titel zurück. Live geprüft: Export eines alten Buchs → Titel-Fallback; ein frischer Upload → Original-Dateiname korrekt gespeichert und genutzt.",
+        "newStartLine": 37
+      },
+      "comment": "der dateiname sollte so lauten wie der des buches beim upload plus „ - notes.json“. (wird der dateiname gespeichert?)",
+      "contextLength": 160,
+      "createdAt": "2026-07-18T12:05:53.893Z",
+      "createdBy": "reviewer",
+      "endLine": 33,
+      "endOffset": 2152,
+      "id": "fb-mrqblyed",
+      "prefix": "nt-Kopie ohne Mehrwert gegenüber dem Original).\n\nExport/Import liegt in den Buchdetails unter einem neuen Abschnitt „Notizen\", getrennt vom „Dossier\"-Bereich:\n\n",
+      "quote": "- **Exportieren** lädt eine JSON-Datei mit allen Notizen zu diesem Buch herunter (`fileHash`, Titel/Autor nur zur Anzeige, `cfiRange`/Zitat/Notiztext/Farbe je Notiz).",
+      "quotePreview": "- **Exportieren** lädt eine JSON-Datei mit allen Notizen zu diesem Buch herunter (`fileHash`, Titel/",
+      "resolution": "Der Original-Dateiname wurde bisher nirgends gespeichert (nur einmalig zur Titel-Ableitung benutzt). Neue Spalte book.original_filename, beim Upload gesetzt (Dateiname ohne .epub-Endung), unabhängig vom späteren editierbaren Titel. Export-Button nutzt jetzt `${originalFilename ?? title} - notes.json`. Für Bücher von vor dieser Änderung (Spalte leer) bleibt der Titel als Fallback. Migration gegen Test gelaufen, live mit einem frischen Upload verifiziert (originalFilename korrekt gesetzt) und mit einem alten Buch (Fallback auf Titel).",
+      "startLine": 33,
+      "startOffset": 1986,
+      "status": "approved",
+      "suffix": "\n- **Importieren** liest eine solche Datei ein. Der `fileHash` im Export ist **ausschließlich** der Content-Hash des Buches (sha256 über die reinen Datei-Bytes ",
+      "thread": [
+        {
+          "body": "der dateiname sollte so lauten wie der des buches beim upload plus „ - notes.json“. (wird der dateiname gespeichert?)",
+          "createdAt": "2026-07-18T12:05:53.893Z",
+          "createdBy": "reviewer",
+          "id": "th-mrqblyee",
+          "type": "comment"
+        },
+        {
+          "body": "Original-Dateiname war bisher nicht gespeichert - neue Spalte original_filename ergänzt (Migration gelaufen), Upload setzt sie, Export nutzt sie für den Download-Namen (mit Titel-Fallback für alte Bücher). Live verifiziert.",
+          "createdAt": "2026-07-18T12:40:00.000Z",
+          "createdBy": "assistant",
+          "id": "th-mrqblyed-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-18T13:05:23.983Z"
+    },
+    {
+      "anchorHash": "c78784a99f4afcf8",
+      "applied": {
+        "newEndLine": 60,
+        "newQuote": "**„Notizen eines Buches werden mit ‚Diese Notizen passen nicht zu diesem Buch.' abgelehnt\" → konnte ich nicht reproduzieren.** Ich habe genau dein Szenario nachgestellt: aktuellen Stand deines Testbuchs exportiert, `fileHash` im Export mit dem aktuellen Stand des Buchs verglichen (identisch), und die Datei unverändert wieder importiert — sowohl per curl als auch per simuliertem Datei-Upload in der echten UI. Beide Male akzeptiert (kein hash_mismatch).",
+        "newStartLine": 60
+      },
+      "comment": "es wird die notizendatei eines anderes buches korrekt beim import abgelehnt.\ndie notizen des buches werden akzeptiert. aber es werden keine wirklich importiert: \"0 Notizen importiert, 3 übersprungen“.",
+      "contextLength": 160,
+      "createdAt": "2026-07-18T12:08:17.924Z",
+      "createdBy": "reviewer",
+      "endLine": 34,
+      "endOffset": 2529,
+      "followUps": [
+        {
+          "comment": "die notizen eines buches werden beim import mit \"Diese Notizen passen nicht zu diesem Buch.“ abgelehnt.",
+          "createdAt": "2026-07-18T13:07:05.124Z",
+          "createdBy": "reviewer",
+          "id": "fu-mrqdsn50"
+        }
+      ],
+      "id": "fb-mrqbp1j8",
+      "prefix": "ortieren** lädt eine JSON-Datei mit allen Notizen zu diesem Buch herunter (`fileHash`, Titel/Autor nur zur Anzeige, `cfiRange`/Zitat/Notiztext/Farbe je Notiz).\n",
+      "quote": "- **Importieren** liest eine solche Datei ein. Der `fileHash` im Export ist **ausschließlich** der Content-Hash des Buches (sha256 über die reinen Datei-Bytes — kein Dateiname, keine Metadaten), also genau das, was du wolltest: Notizen wandern mit dem Buch, nicht mit dem Dateinamen. Passt der Hash nicht zum aktuellen Buch, wird der Import mit einer klaren Meldung abgelehnt.",
+      "quotePreview": "- **Importieren** liest eine solche Datei ein. Der `fileHash` im Export ist **ausschließlich** der C",
+      "resolution": "Konnte den hash_mismatch nicht reproduzieren: dein Testbuch frisch exportiert, fileHash gegen den aktuellen Stand des Buchs verglichen (identisch), Datei unverändert re-importiert - sowohl per curl als auch per simuliertem Datei-Upload in der echten UI. Beide Male akzeptiert. Der Hash eines Buchs ändert sich im Code nirgends nach dem Upload, daher kann ich mir die Ablehnung bei dir aktuell nicht erklären - möglicherweise eine ältere Export-Datei aus dem Downloads-Ordner erwischt. Bitte beim nächsten Auftreten die genaue Datei/den Zeitpunkt des Exports nennen.",
+      "startLine": 34,
+      "startOffset": 2153,
+      "status": "approved",
+      "suffix": "\n\n**Live per curl gegen das Testbuch durchgespielt** (Browser-Automatisierung kann den nativen Datei-Dialog nicht zuverlässig ansteuern, daher diese Route + Cod",
+      "thread": [
+        {
+          "body": "es wird die notizendatei eines anderes buches korrekt beim import abgelehnt.\ndie notizen des buches werden akzeptiert. aber es werden keine wirklich importiert: \"0 Notizen importiert, 3 übersprungen“.",
+          "createdAt": "2026-07-18T12:08:17.924Z",
+          "createdBy": "reviewer",
+          "id": "th-mrqbp1j8",
+          "type": "comment"
+        },
+        {
+          "body": "Kein Bug - der Test reimportierte eigene, schon vorhandene Notizen ins selbe Buch (korrektes Duplikat-Skip). Das eigentliche Cross-Book-Szenario live geprüft: funktioniert ({imported: 3, skipped: 0}). Erfolgsmeldung für den Alle-Duplikate-Fall klarer formuliert, damit es nicht wie ein Fehlschlag wirkt.",
+          "createdAt": "2026-07-18T12:40:00.000Z",
+          "createdBy": "assistant",
+          "id": "th-mrqbp1j8-r1",
+          "type": "redaction"
+        },
+        {
+          "body": "die notizen eines buches werden beim import mit \"Diese Notizen passen nicht zu diesem Buch.“ abgelehnt.",
+          "createdAt": "2026-07-18T13:07:05.124Z",
+          "createdBy": "reviewer",
+          "id": "fu-mrqdsn50",
+          "type": "steer"
+        },
+        {
+          "body": "Konnte den hash_mismatch nicht reproduzieren (frischer Export + sofortiger Re-Import, curl und echte UI, beide Male akzeptiert). Bitte bei erneutem Auftreten genaue Datei/Zeitpunkt nennen.",
+          "createdAt": "2026-07-18T13:20:00.000Z",
+          "createdBy": "assistant",
+          "id": "th-mrqbp1j8-r2",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-18T13:40:39.773Z"
+    },
+    {
+      "anchorHash": "3156437ee8b8bce7",
+      "applied": {
+        "newEndLine": 58,
+        "newQuote": "**„Import funktioniert mal, aber ich sehe keine Notizen im Buch\" → echter Bug, behoben.** Die Erfolgsmeldung (\"N importiert\") kam vom Backend korrekt zurück, aber die neu importierten Notizen wurden nie in den lokalen Cache übernommen, aus dem der Reader die Markierungen tatsächlich anzeigt (der gleiche Cache, den `syncAnnotations()` beim App-Start befüllt).",
+        "newStartLine": 58
+      },
+      "comment": "irgendwie funktioniert der import mal. dann wird gesagt „n importiert“. aber ich sehe keine notizen im buch.",
+      "contextLength": 160,
+      "createdAt": "2026-07-18T13:10:25.238Z",
+      "createdBy": "reviewer",
+      "endLine": 38,
+      "endOffset": 3284,
+      "id": "fb-mrqdwxjq",
+      "prefix": " (aktuellen) Titel zurück. Live geprüft: Export eines alten Buchs → Titel-Fallback; ein frischer Upload → Original-Dateiname korrekt gespeichert und genutzt.\n- ",
+      "quote": "**Importieren**",
+      "quotePreview": "**Importieren**",
+      "resolution": "Echter Bug gefunden und behoben: der Import-Reactor im Frontend hat nach einem erfolgreichen Import (imported > 0) nie den lokalen Annotation-Cache aktualisiert, aus dem der Reader die Markierungen anzeigt (frontend/src/processor/reactors/importAnnotations.ts). Backend hatte die Notizen korrekt gespeichert, nur der lokale Cache wusste nichts davon. Fix: nach einem Import mit imported > 0 wird jetzt automatisch derselbe Sync ausgelöst, den syncAnnotations() beim App-Start macht (GET /annotations -> lokalen Cache ersetzen). Bei \"alles Duplikat\" (imported = 0) entfällt der zusätzliche Request. Live verifiziert: Notiz per simuliertem Datei-Upload in dein echtes Testbuch importiert, im Netzwerk-Log direkt danach automatisch ein GET /annotations mit der neuen Notiz in der Antwort. Testnotiz danach wieder gelöscht. 2 neue Frontend-Tests ergänzt.",
+      "startLine": 38,
+      "startOffset": 3269,
+      "status": "approved",
+      "suffix": " liest eine solche Datei ein. Der `fileHash` im Export ist **ausschließlich** der Content-Hash des Buches (sha256 über die reinen Datei-Bytes — kein Dateiname, ",
+      "thread": [
+        {
+          "body": "irgendwie funktioniert der import mal. dann wird gesagt „n importiert“. aber ich sehe keine notizen im buch.",
+          "createdAt": "2026-07-18T13:10:25.238Z",
+          "createdBy": "reviewer",
+          "id": "th-mrqdwxjq",
+          "type": "comment"
+        },
+        {
+          "body": "Bug bestätigt und behoben: Import-Reactor synct jetzt den lokalen Annotation-Cache nach einem erfolgreichen Import (imported > 0). Live verifiziert per simuliertem Datei-Upload in dein Testbuch; 2 neue Tests ergänzt.",
+          "createdAt": "2026-07-18T13:20:00.000Z",
+          "createdBy": "assistant",
+          "id": "th-mrqdwxjq-r1",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-18T13:40:35.573Z"
+    }
+  ],
+  "file": "Review-Archiv-Export-Suche.md",
+  "sourcePath": "/Users/ralfw/Repositories/08 Vibe Coding/EpubAI/requirements/Review-Archiv-Export-Suche.md",
+  "updatedAt": "2026-07-18T13:40:39.773Z",
+  "version": 1
+}

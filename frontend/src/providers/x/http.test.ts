@@ -544,4 +544,121 @@ describe('createHttpClient', () => {
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
 		await expect(http.deleteDossier('b1')).rejects.toBeInstanceOf(HttpError);
 	});
+
+	it('archives a book', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			jsonResponse({
+				id: 'b1',
+				title: 'T',
+				author: 'A',
+				fileHash: 'h1',
+				processingStatus: 'ready',
+				tags: [],
+				coverUrl: null,
+				progress: null,
+				hasDossier: false,
+				aiCostUsd: 0,
+				archived: true
+			})
+		);
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.archiveBook('b1');
+
+		expect(res.archived).toBe(true);
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1/archive');
+		expect(opts.method).toBe('POST');
+	});
+
+	it('throws on a failed archiveBook', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not_found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.archiveBook('b1')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('unarchives a book', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			jsonResponse({
+				id: 'b1',
+				title: 'T',
+				author: 'A',
+				fileHash: 'h1',
+				processingStatus: 'ready',
+				tags: [],
+				coverUrl: null,
+				progress: null,
+				hasDossier: false,
+				aiCostUsd: 0,
+				archived: false
+			})
+		);
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.unarchiveBook('b1');
+
+		expect(res.archived).toBe(false);
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1/unarchive');
+		expect(opts.method).toBe('POST');
+	});
+
+	it('throws on a failed unarchiveBook', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not_found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.unarchiveBook('b1')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('exports annotations for a book', async () => {
+		const exportBody = {
+			schemaVersion: 1,
+			fileHash: 'h1',
+			bookTitle: 'T',
+			bookAuthor: 'A',
+			exportedAt: '2026-07-13T00:00:00.000Z',
+			annotations: [
+				{ cfiRange: 'epubcfi(/6/2!/4/2,/1:0,/1:10)', excerpt: 'Satz', note: null, color: 'accent' }
+			]
+		};
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(exportBody));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.exportAnnotations('b1');
+
+		expect(res).toEqual(exportBody);
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1/annotations/export');
+		expect(opts.method ?? 'GET').toBe('GET');
+	});
+
+	it('throws on a failed exportAnnotations', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not_found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.exportAnnotations('b1')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('imports annotations for a book', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ imported: 2, skipped: 1 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const payload = { schemaVersion: 1, fileHash: 'h1', annotations: [] };
+		const res = await http.importAnnotations('b1', payload);
+
+		expect(res).toEqual({ imported: 2, skipped: 1 });
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1/annotations/import');
+		expect(opts.method).toBe('POST');
+		expect(JSON.parse(opts.body)).toEqual(payload);
+	});
+
+	it('throws with hash_mismatch on a failed importAnnotations', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'hash_mismatch' }, { ok: false, status: 409 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.importAnnotations('b1', {})).rejects.toBeInstanceOf(HttpError);
+		await expect(http.importAnnotations('b1', {})).rejects.toThrow('hash_mismatch');
+	});
 });

@@ -94,10 +94,18 @@ describe("uploadEpub reactor", () => {
     const [epubKey] = (r2.uploadObject as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(epubKey).toMatch(/^user-1\/[0-9a-f]{64}\.epub$/);
 
-    // Book created with the detected metadata, no tags, no cover.
+    // Book created with the detected metadata, no tags, no cover, and the
+    // upload filename (extension stripped) stored for the notes export
+    // download - independent of the detected title, which may differ.
     expect(bookRepo.insert).toHaveBeenCalledWith(
       "user-1",
-      expect.objectContaining({ title: "Helgoland", author: "Carlo Rovelli", tags: [], coverKey: null })
+      expect.objectContaining({
+        title: "Helgoland",
+        author: "Carlo Rovelli",
+        tags: [],
+        coverKey: null,
+        originalFilename: "helgoland"
+      })
     );
     expect(bookFileRepo.insert).toHaveBeenCalledWith(
       expect.objectContaining({ bookId: "new-book", sizeBytes: buf.length })

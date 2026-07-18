@@ -1,5 +1,6 @@
 import type { Annotation, CatalogBook } from '../../domain/types';
 import type {
+	AnnotationExport,
 	AuthStore,
 	BookMetadataPatch,
 	ChatMessage,
@@ -326,6 +327,45 @@ export function createHttpClient(
 				headers: authHeaders()
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
+		},
+
+		async archiveBook(bookId: string): Promise<CatalogBook> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/archive`, {
+				method: 'POST',
+				headers: authHeaders()
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as CatalogBook;
+		},
+
+		async unarchiveBook(bookId: string): Promise<CatalogBook> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/unarchive`, {
+				method: 'POST',
+				headers: authHeaders()
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as CatalogBook;
+		},
+
+		async exportAnnotations(bookId: string): Promise<AnnotationExport> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/annotations/export`, {
+				headers: authHeaders()
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as AnnotationExport;
+		},
+
+		async importAnnotations(
+			bookId: string,
+			payload: unknown
+		): Promise<{ imported: number; skipped: number }> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/annotations/import`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify(payload)
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as { imported: number; skipped: number };
 		}
 	};
 }

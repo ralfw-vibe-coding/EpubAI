@@ -225,7 +225,9 @@ describe('processor reactors', () => {
 				coverUrl: null,
 				progress: null,
 				hasDossier: false,
-				aiCostUsd: 0
+				aiCostUsd: 0,
+				archived: false,
+				originalFilename: null
 			})
 		});
 		const { deps, domain } = makeDeps({ http: http.impl });
@@ -543,6 +545,103 @@ describe('processor reactors', () => {
 			});
 			const { deps } = makeDeps({ http: http.impl });
 			await expect(createProcessor(deps).deleteDossier('b1')).rejects.toThrow('not_found');
+		});
+
+		it('archiveBook delegates to http with the book id', async () => {
+			const { deps, http } = makeDeps();
+			const res = await createProcessor(deps).archiveBook('b1');
+
+			expect(res.archived).toBe(true);
+			const call = http.calls.find((c) => c.method === 'archiveBook');
+			expect(call?.args).toEqual(['b1']);
+		});
+
+		it('archiveBook throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				archiveBook: async () => {
+					throw new Error('not_found');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).archiveBook('b1')).rejects.toThrow('not_found');
+		});
+
+		it('unarchiveBook delegates to http with the book id', async () => {
+			const { deps, http } = makeDeps();
+			const res = await createProcessor(deps).unarchiveBook('b1');
+
+			expect(res.archived).toBe(false);
+			const call = http.calls.find((c) => c.method === 'unarchiveBook');
+			expect(call?.args).toEqual(['b1']);
+		});
+
+		it('unarchiveBook throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				unarchiveBook: async () => {
+					throw new Error('not_found');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).unarchiveBook('b1')).rejects.toThrow('not_found');
+		});
+
+		it('exportAnnotations delegates to http with the book id', async () => {
+			const { deps, http } = makeDeps();
+			const res = await createProcessor(deps).exportAnnotations('b1');
+
+			expect(res.schemaVersion).toBe(1);
+			const call = http.calls.find((c) => c.method === 'exportAnnotations');
+			expect(call?.args).toEqual(['b1']);
+		});
+
+		it('exportAnnotations throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				exportAnnotations: async () => {
+					throw new Error('not_found');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).exportAnnotations('b1')).rejects.toThrow('not_found');
+		});
+
+		it('importAnnotations delegates to http with the book id and payload', async () => {
+			const { deps, http } = makeDeps();
+			const payload = { schemaVersion: 1, fileHash: 'h1', annotations: [] };
+			const res = await createProcessor(deps).importAnnotations('b1', payload);
+
+			expect(res).toEqual({ imported: 1, skipped: 0 });
+			const call = http.calls.find((c) => c.method === 'importAnnotations');
+			expect(call?.args).toEqual(['b1', payload]);
+		});
+
+		it('importAnnotations throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				importAnnotations: async () => {
+					throw new Error('hash_mismatch');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).importAnnotations('b1', {})).rejects.toThrow('hash_mismatch');
+		});
+
+		it('importAnnotations re-syncs the local annotation cache when something was actually imported, so the reader sees the new highlights', async () => {
+			const { deps, http, domain } = makeDeps();
+			const res = await createProcessor(deps).importAnnotations('b1', {});
+
+			expect(res.imported).toBeGreaterThan(0);
+			expect(http.calls.some((c) => c.method === 'getAllAnnotations')).toBe(true);
+			// fakeHttp's default getAllAnnotations returns one annotation for book "b1" -
+			// after the sync it must actually be in the local cache the reader reads from.
+			await expect(domain.annotationsFor('b1')).resolves.toEqual([expect.objectContaining({ id: 'a1' })]);
+		});
+
+		it('importAnnotations skips the re-sync when nothing was actually imported (all duplicates)', async () => {
+			const http = fakeHttp({ importAnnotations: async () => ({ imported: 0, skipped: 3 }) });
+			const { deps } = makeDeps({ http: http.impl });
+
+			await createProcessor(deps).importAnnotations('b1', {});
+
+			expect(http.calls.some((c) => c.method === 'getAllAnnotations')).toBe(false);
 		});
 	});
 });

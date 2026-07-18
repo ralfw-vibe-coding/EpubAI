@@ -24,6 +24,8 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     processingStatus: "ready",
     dossierUploadedAt: null,
     aiCostUsd: 0,
+    archivedAt: null,
+    originalFilename: null,
     ...overrides
   };
 }
@@ -78,7 +80,8 @@ describe("buildBookDraft", () => {
       fileHash: "hash1",
       tags: [],
       processingStatus: "ready",
-      coverKey: null
+      coverKey: null,
+      originalFilename: null
     });
   });
 
@@ -97,6 +100,18 @@ describe("buildBookDraft", () => {
     const draft = buildBookDraft({ title: "T", author: "A", fileHash: "hash1", processingStatus: "failed" });
     expect(draft.processingStatus).toBe("failed");
   });
+
+  it("normalizes and carries through originalFilename", () => {
+    const draft = buildBookDraft({ title: "T", author: "A", fileHash: "hash1", originalFilename: "  Some Book  " });
+    expect(draft.originalFilename).toBe("Some Book");
+  });
+
+  it("defaults originalFilename to null when omitted or blank", () => {
+    expect(buildBookDraft({ title: "T", author: "A", fileHash: "hash1" }).originalFilename).toBeNull();
+    expect(
+      buildBookDraft({ title: "T", author: "A", fileHash: "hash1", originalFilename: "   " }).originalFilename
+    ).toBeNull();
+  });
 });
 
 describe("toBookSummary", () => {
@@ -111,7 +126,9 @@ describe("toBookSummary", () => {
       fileHash: "abc123",
       processingStatus: "ready",
       hasDossier: false,
-      aiCostUsd: 0
+      aiCostUsd: 0,
+      archived: false,
+      originalFilename: null
     });
   });
 

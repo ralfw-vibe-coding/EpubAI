@@ -54,6 +54,26 @@ export interface BookMetadataPatch {
 	tags?: string[];
 }
 
+/**
+ * The full export payload for a book's annotations (GET /books/:id/annotations/export).
+ * `fileHash` is the only field the import endpoint actually matches on;
+ * `bookTitle`/`bookAuthor` are for display only. Shape mirrors the backend
+ * contract exactly so the raw parsed JSON round-trips through import as-is.
+ */
+export interface AnnotationExport {
+	schemaVersion: 1;
+	fileHash: string;
+	bookTitle: string;
+	bookAuthor: string;
+	exportedAt: string;
+	annotations: Array<{
+		cfiRange: string;
+		excerpt: string;
+		note: string | null;
+		color: string;
+	}>;
+}
+
 /** HTTP client to the backend. Mirrors the backend contract exactly. */
 export interface HttpClient {
 	requestLoginCode(email: string): Promise<LoginRequestResult>;
@@ -108,6 +128,18 @@ export interface HttpClient {
 	uploadDossier(bookId: string, text: string): Promise<CatalogBook>;
 	/** Remove a book's dossier. Idempotent. */
 	deleteDossier(bookId: string): Promise<void>;
+	/** Archive a book (hides it from the library by default). Idempotent. */
+	archiveBook(bookId: string): Promise<CatalogBook>;
+	/** Un-archive a book. Idempotent. */
+	unarchiveBook(bookId: string): Promise<CatalogBook>;
+	/** Export all of a book's annotations as a portable JSON payload. */
+	exportAnnotations(bookId: string): Promise<AnnotationExport>;
+	/**
+	 * Import a previously exported annotations payload back into a book. `payload`
+	 * is whatever the client parsed from the chosen file, passed through as-is —
+	 * validation (shape, file-hash match) happens on the backend.
+	 */
+	importAnnotations(bookId: string, payload: unknown): Promise<{ imported: number; skipped: number }>;
 }
 
 /** Stores the auth session (token + userId) and the backend auth header. */

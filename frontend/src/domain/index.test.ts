@@ -13,7 +13,9 @@ const book: CatalogBook = {
 	coverUrl: null,
 	progress: null,
 	hasDossier: false,
-	aiCostUsd: 0
+	aiCostUsd: 0,
+	archived: false,
+	originalFilename: null
 };
 
 describe('createReaderDomain', () => {

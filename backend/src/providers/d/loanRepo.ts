@@ -40,6 +40,19 @@ export async function deleteByBookId(bookId: string): Promise<void> {
 }
 
 /**
+ * True if any device currently has this book on loan (not yet returned).
+ * A book belongs to exactly one user, so this doesn't need to be scoped by
+ * userId - archiveBook already checks ownership before calling this. Used to
+ * block archiving a book that's still checked out (must be returned first).
+ */
+export async function hasActiveLoan(bookId: string): Promise<boolean> {
+  const result = await pool.query("select 1 from loan where book_id = $1 and returned_at is null limit 1", [
+    bookId
+  ]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
  * Marks the active (not yet returned) loan for this book/user/device as
  * returned. Keeps the row for history instead of deleting it. Returns the
  * updated loan, or null if no matching active loan exists.

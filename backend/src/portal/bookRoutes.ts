@@ -7,6 +7,10 @@ import { uploadEpub } from "../processor/uploadEpub.js";
 import { getBookFile } from "../processor/getBookFile.js";
 import { uploadDossier } from "../processor/uploadDossier.js";
 import { deleteDossier } from "../processor/deleteDossier.js";
+import { archiveBook } from "../processor/archiveBook.js";
+import { unarchiveBook } from "../processor/unarchiveBook.js";
+import { exportAnnotations } from "../processor/exportAnnotations.js";
+import { importAnnotations } from "../processor/importAnnotations.js";
 
 // Portal: pure HTTP-to-Reactor translation, no business logic.
 //
@@ -72,6 +76,26 @@ export async function registerBookRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete<{ Params: { id: string } }>("/books/:id/dossier", async (request, reply) => {
     const result = await deleteDossier(request.headers.authorization, request.params.id);
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.post<{ Params: { id: string } }>("/books/:id/archive", async (request, reply) => {
+    const result = await archiveBook(request.headers.authorization, request.params.id);
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.post<{ Params: { id: string } }>("/books/:id/unarchive", async (request, reply) => {
+    const result = await unarchiveBook(request.headers.authorization, request.params.id);
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.get<{ Params: { id: string } }>("/books/:id/annotations/export", async (request, reply) => {
+    const result = await exportAnnotations(request.headers.authorization, request.params.id);
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.post<{ Params: { id: string } }>("/books/:id/annotations/import", async (request, reply) => {
+    const result = await importAnnotations(request.headers.authorization, request.params.id, request.body);
     return reply.code(result.status).send(result.body);
   });
 }

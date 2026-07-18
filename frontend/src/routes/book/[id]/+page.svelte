@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { Pencil, Trash2, Upload, FileText } from 'lucide-svelte';
+	import { Pencil, Trash2, Upload, FileText, Archive, ArchiveRestore, Download } from 'lucide-svelte';
 	import type { BookDetail } from '../../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../../portal/runtime';
 	import BookMetaFields from '$lib/BookMetaFields.svelte';
@@ -57,6 +57,31 @@
 	let dossierInput = $state<HTMLInputElement | undefined>(undefined);
 	let dossierBusy = $state(false);
 	let dossierError = $state<string | null>(null);
+
+	// Archive toggle: mirrors the delete button's placement/style, no confirm
+	// step needed since it is fully reversible.
+	let archiveBusy = $state(false);
+
+	// Notizen (annotations) export/import: export triggers a pure client-side
+	// Blob download (no server involvement beyond the GET); import reads the
+	// chosen file as text, JSON.parse's it, and hands the parsed object to
+	// importAnnotations as-is (Vertrag: backend does all validation).
+	let notesInput = $state<HTMLInputElement | undefined>(undefined);
+	let notesBusy = $state(false);
+	let notesError = $state<string | null>(null);
+	let notesResult = $state<string | null>(null);
+
+	// Backend error codes (machine strings via HttpError.message) mapped to
+	// clear German copy, same pattern as BORROW_ERROR_MESSAGES below.
+	const IMPORT_ERROR_MESSAGES: Record<string, string> = {
+		hash_mismatch: 'Diese Notizen passen nicht zu diesem Buch.',
+		invalid_input: 'Ungültige Datei.',
+		too_many_annotations: 'Diese Datei enthält zu viele Notizen.'
+	};
+
+	const ARCHIVE_ERROR_MESSAGES: Record<string, string> = {
+		book_on_loan: 'Das Buch muss erst zurückgegeben werden, bevor es archiviert werden kann.'
+	};
 
 	onMount(async () => {
 		if (!isAuthenticated()) {
@@ -157,6 +182,80 @@
 			dossierError = e instanceof Error ? e.message : 'Dossier konnte nicht gelöscht werden.';
 		} finally {
 			dossierBusy = false;
+		}
+	}
+
+	async function toggleArchive() {
+		if (archiveBusy || !detail) return;
+		archiveBusy = true;
+		error = null;
+		try {
+			const updated = detail.archived
+				? await getProcessor().unarchiveBook(bookId)
+				: await getProcessor().archiveBook(bookId);
+			if (detail) detail = { ...detail, ...updated };
+		} catch (e) {
+			const code = e instanceof Error ? e.message : '';
+			error = ARCHIVE_ERROR_MESSAGES[code] ?? 'Archivieren fehlgeschlagen.';
+		} finally {
+			archiveBusy = false;
+		}
+	}
+
+	async function exportNotes() {
+		if (notesBusy || !detail) return;
+		notesBusy = true;
+		notesError = null;
+		notesResult = null;
+		try {
+			const payload = await getProcessor().exportAnnotations(bookId);
+			const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${detail.originalFilename ?? detail.title} - notes.json`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			notesError = e instanceof Error ? e.message : 'Notizen konnten nicht exportiert werden.';
+		} finally {
+			notesBusy = false;
+		}
+	}
+
+	function pickNotesFile() {
+		notesError = null;
+		notesResult = null;
+		notesInput?.click();
+	}
+
+	async function onNotesFileChosen(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = ''; // allow re-choosing the same file name after an error
+		if (!file || notesBusy) return;
+		notesBusy = true;
+		notesError = null;
+		notesResult = null;
+		try {
+			const text = await file.text();
+			let payload: unknown;
+			try {
+				payload = JSON.parse(text);
+			} catch {
+				notesError = 'Ungültige Datei.';
+				return;
+			}
+			const res = await getProcessor().importAnnotations(bookId, payload);
+			notesResult =
+				res.imported === 0 && res.skipped > 0
+					? 'Alle Notizen aus dieser Datei sind bereits vorhanden – nichts Neues zu importieren.'
+					: `${res.imported} Notizen importiert, ${res.skipped} übersprungen`;
+		} catch (e) {
+			const code = e instanceof Error ? e.message : '';
+			notesError = IMPORT_ERROR_MESSAGES[code] ?? 'Notizen konnten nicht importiert werden.';
+		} finally {
+			notesBusy = false;
 		}
 	}
 
@@ -279,6 +378,19 @@
 								<Trash2 size={18} />
 							{/if}
 						</button>
+						<button
+							onclick={toggleArchive}
+							disabled={archiveBusy}
+							aria-label={detail.archived ? 'Buch aktivieren' : 'Buch archivieren'}
+							title={detail.archived ? 'Aktivieren' : 'Archivieren'}
+							class="flex h-[18px] w-[18px] flex-none items-center justify-center text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)] disabled:opacity-45"
+						>
+							{#if detail.archived}
+								<ArchiveRestore size={18} />
+							{:else}
+								<Archive size={18} />
+							{/if}
+						</button>
 					</div>
 					<p class="mt-1 text-[var(--color-neutral-700)]">{detail.author}</p>
 					{#if detail.tags.length > 0}
@@ -292,6 +404,9 @@
 					{/if}
 					<p class="mt-2 text-xs text-[var(--color-neutral-700)]">
 						Status: {detail.isLocal ? 'auf diesem Gerät' : 'nicht ausgeliehen'}
+						{#if detail.archived}
+							&nbsp;/&nbsp; archiviert
+						{/if}
 						{#if detail.aiCostUsd > 0}
 							&nbsp;/&nbsp; KI-Kosten: ≈ {formatUsd(detail.aiCostUsd)} (Chats)
 						{/if}
@@ -406,6 +521,45 @@
 			{#if dossierError}
 				<p class="mt-2 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
 					{dossierError}
+				</p>
+			{/if}
+		</div>
+
+		<div class="mt-8 border-t-2 border-[var(--color-divider)] pt-4">
+			<h2 class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">Notizen</h2>
+			<p class="mt-1 text-xs text-[var(--color-neutral-700)]">
+				Markierungen und Notizen zu diesem Buch als Datei sichern oder aus einer zuvor exportierten
+				Datei wiederherstellen.
+			</p>
+			<input
+				bind:this={notesInput}
+				onchange={onNotesFileChosen}
+				type="file"
+				accept=".json,application/json"
+				class="hidden"
+			/>
+			<div class="mt-2 flex items-center gap-3">
+				<button
+					onclick={exportNotes}
+					disabled={notesBusy}
+					class="flex items-center gap-1.5 border border-[var(--color-divider)] px-3 py-1.5 text-sm text-[var(--color-text)] disabled:opacity-45"
+				>
+					<Download size={16} /> Exportieren
+				</button>
+				<button
+					onclick={pickNotesFile}
+					disabled={notesBusy}
+					class="flex items-center gap-1.5 border border-[var(--color-divider)] px-3 py-1.5 text-sm text-[var(--color-text)] disabled:opacity-45"
+				>
+					<Upload size={16} /> {notesBusy ? 'Wird verarbeitet…' : 'Importieren'}
+				</button>
+			</div>
+			{#if notesResult}
+				<p class="mt-2 text-sm text-[var(--color-neutral-700)]">{notesResult}</p>
+			{/if}
+			{#if notesError}
+				<p class="mt-2 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
+					{notesError}
 				</p>
 			{/if}
 		</div>

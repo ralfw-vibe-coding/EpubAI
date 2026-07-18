@@ -2,7 +2,16 @@ import type { Annotation, AnnotationColor, AnnotationSummary } from "./types.js"
 
 const MAX_EXCERPT_LENGTH = 2000;
 
-const ANNOTATION_COLORS: readonly AnnotationColor[] = ["accent", "orange", "yellow", "green", "blue", "purple"];
+// Exported so annotationExportRpu.ts can validate colors on import without
+// duplicating the list of the 6 allowed slugs.
+export const ANNOTATION_COLORS: readonly AnnotationColor[] = [
+  "accent",
+  "orange",
+  "yellow",
+  "green",
+  "blue",
+  "purple"
+];
 
 export interface AnnotationDraft {
   cfiRange: string;

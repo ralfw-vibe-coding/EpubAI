@@ -26,6 +26,8 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     processingStatus: "ready",
     dossierUploadedAt: null,
     aiCostUsd: 0,
+    archivedAt: null,
+    originalFilename: null,
     ...overrides
   };
 }
@@ -67,7 +69,9 @@ describe("listBooks reactor", () => {
             fileHash: "hash-1",
             processingStatus: "ready",
             hasDossier: false,
-            aiCostUsd: 0
+            aiCostUsd: 0,
+            archived: false,
+            originalFilename: null
           }
         ]
       }

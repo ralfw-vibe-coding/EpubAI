@@ -12,11 +12,11 @@ Der Walking Skeleton (Login, Katalog, Ausleihen, Lesen, Blättern) läuft und wu
 - [x] **Notizen & Markierungen** – anlegen/bearbeiten/löschen, Sync bei App-Start
 - [x] **Übersetzung & Worterklärung** – für markierte Textstellen im Reader
 - [x] **Deployment** – Deno Deploy, echte Domains catalog./reader.epubai.com
-- [ ] **KI-Grundlage** – Volltext-Extraktion beim Upload, Prompt Caching
-- [ ] **Chat/Q&A pro Buch** – Fragen zum Buchinhalt
+- [x] **KI-Grundlage** – Volltext-Extraktion beim Upload, Prompt Caching
+- [x] **Chat/Q&A pro Buch** – Fragen zum Buchinhalt (Kontext- und Buch-Chat, optionales Dossier, Kostenanzeige)
 - [ ] **Service Worker & Offline-App-Shell** – App selbst offline startbar, nicht nur Bücher
-- [ ] **Archiv-Export** – EPUB/Notizen als Download
-- [ ] **Katalog-Suche & Tag-Filter** – über die bisherige einfache Liste hinaus
+- [x] **Archiv-Export** – Notizen als Download (Archivieren separat, EPUB-Download bewusst nicht gebaut)
+- [x] **Katalog-Suche & Tag-Filter** – über die bisherige einfache Liste hinaus
 - [x] **Duplikat-Erkennung im Upload-UI** – sichtbarer Hinweis statt nur Backend-Check (als Teil von Katalog-Pflege mitgeliefert)
 
 ## Erstmal ausgeschlossen

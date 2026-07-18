@@ -1,6 +1,7 @@
 import type { Annotation, AnnotationColor, BookDetail, CatalogBook, Loan, ReadingProgress } from '../domain/types';
 import type { ReactorDeps } from './deps';
 import type {
+	AnnotationExport,
 	BookMetadataPatch,
 	ChatMessage,
 	ChatReply,
@@ -8,12 +9,15 @@ import type {
 	Session,
 	UploadEpubResult
 } from './ports';
+import { archiveBook } from './reactors/archiveBook';
 import { borrowBook } from './reactors/borrowBook';
 import { chatAboutBook } from './reactors/chatAboutBook';
 import { createAnnotation } from './reactors/createAnnotation';
 import { deleteAnnotation } from './reactors/deleteAnnotation';
 import { deleteBook } from './reactors/deleteBook';
 import { deleteDossier } from './reactors/deleteDossier';
+import { exportAnnotations } from './reactors/exportAnnotations';
+import { importAnnotations } from './reactors/importAnnotations';
 import { loadAnnotations } from './reactors/loadAnnotations';
 import { loadCatalog } from './reactors/loadCatalog';
 import { lookupSelection } from './reactors/lookupSelection';
@@ -26,6 +30,7 @@ import { setTranslationLanguage } from './reactors/setTranslationLanguage';
 import { signOut } from './reactors/signOut';
 import { syncAnnotations } from './reactors/syncAnnotations';
 import { translateSelection } from './reactors/translateSelection';
+import { unarchiveBook } from './reactors/unarchiveBook';
 import { updateAnnotationColor } from './reactors/updateAnnotationColor';
 import { updateAnnotationNote } from './reactors/updateAnnotationNote';
 import { updateBookMetadata } from './reactors/updateBookMetadata';
@@ -94,7 +99,12 @@ export function createProcessor(deps: ReactorDeps) {
 		): Promise<ChatReply> => chatAboutBook(deps, bookId, messages, selection, progressPercent),
 		uploadDossier: (bookId: string, text: string): Promise<CatalogBook> =>
 			uploadDossier(deps, bookId, text),
-		deleteDossier: (bookId: string): Promise<void> => deleteDossier(deps, bookId)
+		deleteDossier: (bookId: string): Promise<void> => deleteDossier(deps, bookId),
+		archiveBook: (bookId: string): Promise<CatalogBook> => archiveBook(deps, bookId),
+		unarchiveBook: (bookId: string): Promise<CatalogBook> => unarchiveBook(deps, bookId),
+		exportAnnotations: (bookId: string): Promise<AnnotationExport> => exportAnnotations(deps, bookId),
+		importAnnotations: (bookId: string, payload: unknown): Promise<{ imported: number; skipped: number }> =>
+			importAnnotations(deps, bookId, payload)
 	};
 }
 

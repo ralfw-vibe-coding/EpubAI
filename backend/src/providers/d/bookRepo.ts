@@ -15,6 +15,8 @@ interface BookRow {
   dossier_uploaded_at: Date | null;
   // pg returns `numeric` as a string, never a JS number - parsed in toBook.
   ai_cost_usd: string;
+  archived_at: Date | null;
+  original_filename: string | null;
 }
 
 function toBook(row: BookRow): Book {
@@ -29,12 +31,14 @@ function toBook(row: BookRow): Book {
     currentFileHash: row.current_file_hash,
     processingStatus: row.processing_status,
     dossierUploadedAt: row.dossier_uploaded_at ? row.dossier_uploaded_at.toISOString() : null,
-    aiCostUsd: Number(row.ai_cost_usd ?? 0)
+    aiCostUsd: Number(row.ai_cost_usd ?? 0),
+    archivedAt: row.archived_at ? row.archived_at.toISOString() : null,
+    originalFilename: row.original_filename
   };
 }
 
 const SELECT_FIELDS =
-  "id, user_id, title, author, tags, cover_url, added_at, current_file_hash, processing_status, dossier_uploaded_at, ai_cost_usd";
+  "id, user_id, title, author, tags, cover_url, added_at, current_file_hash, processing_status, dossier_uploaded_at, ai_cost_usd, archived_at, original_filename";
 
 export async function findByUserAndHash(userId: string, fileHash: string): Promise<Book | null> {
   const result = await pool.query<BookRow>(
@@ -59,10 +63,19 @@ export async function listByUser(userId: string): Promise<Book[]> {
 
 export async function insert(userId: string, draft: BookDraft): Promise<Book> {
   const result = await pool.query<BookRow>(
-    `insert into book (user_id, title, author, tags, cover_url, current_file_hash, processing_status)
-     values ($1, $2, $3, $4, $5, $6, $7)
+    `insert into book (user_id, title, author, tags, cover_url, current_file_hash, processing_status, original_filename)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
      returning ${SELECT_FIELDS}`,
-    [userId, draft.title, draft.author, draft.tags, draft.coverKey, draft.fileHash, draft.processingStatus]
+    [
+      userId,
+      draft.title,
+      draft.author,
+      draft.tags,
+      draft.coverKey,
+      draft.fileHash,
+      draft.processingStatus,
+      draft.originalFilename
+    ]
   );
   return toBook(result.rows[0]);
 }
@@ -126,6 +139,20 @@ export async function setDossierUploadedAt(bookId: string, uploadedAt: Date | nu
   const result = await pool.query<BookRow>(
     `update book set dossier_uploaded_at = $1 where id = $2 returning ${SELECT_FIELDS}`,
     [uploadedAt, bookId]
+  );
+  return toBook(result.rows[0]);
+}
+
+/**
+ * Sets or clears the archive timestamp (pass a Date to archive, null to
+ * unarchive). One function for both directions since they're the same
+ * single-column write - `archived` is derived from this timestamp being
+ * non-null (see toBookSummary).
+ */
+export async function setArchivedAt(bookId: string, archivedAt: Date | null): Promise<Book> {
+  const result = await pool.query<BookRow>(
+    `update book set archived_at = $1 where id = $2 returning ${SELECT_FIELDS}`,
+    [archivedAt, bookId]
   );
   return toBook(result.rows[0]);
 }

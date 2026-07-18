@@ -39,6 +39,15 @@ export async function listByUser(userId: string): Promise<Annotation[]> {
   return result.rows.map(toAnnotation);
 }
 
+/** A user's annotations for one specific book (used by export/import). */
+export async function listByBookAndUser(bookId: string, userId: string): Promise<Annotation[]> {
+  const result = await pool.query<AnnotationRow>(
+    `select ${SELECT_FIELDS} from annotation where book_id = $1 and user_id = $2 order by created_at desc`,
+    [bookId, userId]
+  );
+  return result.rows.map(toAnnotation);
+}
+
 export async function findById(annotationId: string): Promise<Annotation | null> {
   const result = await pool.query<AnnotationRow>(
     `select ${SELECT_FIELDS} from annotation where id = $1`,

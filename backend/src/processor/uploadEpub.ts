@@ -113,7 +113,8 @@ export async function uploadEpub(
     fileHash,
     coverKey,
     tags: [],
-    processingStatus
+    processingStatus,
+    originalFilename: fallbackTitle
   });
 
   let book;
