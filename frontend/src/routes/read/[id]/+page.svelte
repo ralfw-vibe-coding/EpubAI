@@ -527,11 +527,30 @@
 		if (document.visibilityState === 'hidden') void save();
 	}
 
+	// A page turn otherwise happens instantly, easy to miss entirely on a quick
+	// swipe. This is deliberately NOT a page-curl/flip - just a thin bar
+	// sweeping across the pane, timed so the actual page swap lands roughly
+	// when the bar passes the middle, giving a "before/after" feel without
+	// simulating a real page. Direction matches the swipe that caused it: a
+	// leftward drag ("next") sweeps right-to-left, a rightward drag ("prev")
+	// sweeps left-to-right.
+	const PAGE_TURN_SWEEP_MS = 320;
+	const PAGE_TURN_SWAP_DELAY_MS = 140;
+	let pageTurnAnim = $state<'next' | 'prev' | null>(null);
+
+	function triggerPageTurn(direction: 'next' | 'prev', turn: () => void) {
+		pageTurnAnim = direction;
+		setTimeout(turn, PAGE_TURN_SWAP_DELAY_MS);
+		setTimeout(() => {
+			pageTurnAnim = null;
+		}, PAGE_TURN_SWEEP_MS);
+	}
+
 	function next() {
-		void rendition?.next();
+		triggerPageTurn('next', () => void rendition?.next());
 	}
 	function prev() {
-		void rendition?.prev();
+		triggerPageTurn('prev', () => void rendition?.prev());
 	}
 
 	// Touch swipe navigation (buttons remain as a fallback).
@@ -713,6 +732,10 @@
 		onclick={onMarginClick}
 	>
 		<div bind:this={viewer} class="h-full w-full"></div>
+
+		{#if pageTurnAnim}
+			<div class="page-turn-sweep {pageTurnAnim}"></div>
+		{/if}
 
 		{#if loading}
 			<div class="absolute inset-0 grid place-items-center text-[var(--color-neutral-700)]">
@@ -1179,3 +1202,40 @@
 	{/if}
 </div>
 </div>
+
+<style>
+	/* Page-turn cue (see triggerPageTurn) - a bar sweeping the full height of
+	   the reading pane, not a page-curl/flip simulation. */
+	.page-turn-sweep {
+		position: absolute;
+		inset: 0 auto 0 0;
+		width: 3px;
+		background: var(--color-accent);
+		box-shadow: 0 0 12px 2px var(--color-accent);
+		opacity: 0.7;
+		pointer-events: none;
+		z-index: 15;
+	}
+	.page-turn-sweep.next {
+		animation: page-turn-sweep-rtl 320ms ease-in-out;
+	}
+	.page-turn-sweep.prev {
+		animation: page-turn-sweep-ltr 320ms ease-in-out;
+	}
+	@keyframes page-turn-sweep-rtl {
+		from {
+			left: 100%;
+		}
+		to {
+			left: 0%;
+		}
+	}
+	@keyframes page-turn-sweep-ltr {
+		from {
+			left: 0%;
+		}
+		to {
+			left: 100%;
+		}
+	}
+</style>
