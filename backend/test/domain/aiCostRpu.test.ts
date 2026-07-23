@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatCostUsd, type TokenUsage } from "../../src/domain/aiCostRpu.js";
+import { chatCostUsd, estimateDossierCostUsd, type TokenUsage } from "../../src/domain/aiCostRpu.js";
 
 const usage = (u: Partial<TokenUsage>): TokenUsage => ({
   inputTokens: 0,
@@ -40,5 +40,40 @@ describe("chatCostUsd", () => {
     const cached = chatCostUsd(usage({ cacheReadInputTokens: 8000 }));
     const uncached = chatCostUsd(usage({ inputTokens: 8000 }));
     expect(cached * 10).toBeCloseTo(uncached, 9);
+  });
+});
+
+describe("estimateDossierCostUsd", () => {
+  it("is not zero for an empty text, since the estimated output still costs something", () => {
+    expect(estimateDossierCostUsd("")).toBeGreaterThan(0);
+  });
+
+  it("counts zero input tokens for an empty (or whitespace-only) text", () => {
+    // With no input words, the whole estimate is just the fixed output guess.
+    const empty = estimateDossierCostUsd("");
+    const whitespace = estimateDossierCostUsd("   \n\t  ");
+    expect(empty).toBeCloseTo(whitespace, 9);
+  });
+
+  it("grows roughly linearly with word count", () => {
+    const words = (n: number) => Array.from({ length: n }, () => "Wort").join(" ");
+    const small = estimateDossierCostUsd(words(1000));
+    const large = estimateDossierCostUsd(words(10000));
+    // Same fixed output cost in both, so the *difference* scales ~10x with the input.
+    const fixedOutputCost = estimateDossierCostUsd("");
+    const smallInputCost = small - fixedOutputCost;
+    const largeInputCost = large - fixedOutputCost;
+    expect(largeInputCost).toBeGreaterThan(0);
+    expect(largeInputCost / smallInputCost).toBeCloseTo(10, 1);
+    expect(large).toBeGreaterThan(small);
+  });
+
+  it("is a plausible order of magnitude for a real book (~60.000 words)", () => {
+    const words = Array.from({ length: 60_000 }, () => "Wort").join(" ");
+    const cost = estimateDossierCostUsd(words);
+    // 60.000 words * 3.9 tokens/word * $2/1M plus a small fixed output cost -
+    // comfortably within a wide, "grobe Richtung" bound.
+    expect(cost).toBeGreaterThan(0.3);
+    expect(cost).toBeLessThan(1.0);
   });
 });

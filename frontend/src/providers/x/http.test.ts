@@ -545,6 +545,25 @@ describe('createHttpClient', () => {
 		await expect(http.deleteDossier('b1')).rejects.toBeInstanceOf(HttpError);
 	});
 
+	it('fetches the full dossier text', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ text: '# Dossier\n\nInhalt.' }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.getDossier('b1');
+
+		expect(res).toEqual({ text: '# Dossier\n\nInhalt.' });
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1/dossier');
+		expect(opts.method ?? 'GET').toBe('GET');
+	});
+
+	it('throws on a failed getDossier', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not_found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.getDossier('b1')).rejects.toBeInstanceOf(HttpError);
+	});
+
 	it('archives a book', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(
 			jsonResponse({
@@ -609,6 +628,60 @@ describe('createHttpClient', () => {
 			.mockResolvedValue(jsonResponse({ error: 'not_found' }, { ok: false, status: 404 }));
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
 		await expect(http.unarchiveBook('b1')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('estimates the dossier generation cost', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ estimatedUsd: 0.42 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.estimateDossierCost('b1');
+
+		expect(res).toEqual({ estimatedUsd: 0.42 });
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1/dossier/estimate');
+		expect(opts.method ?? 'GET').toBe('GET');
+	});
+
+	it('throws on a failed estimateDossierCost', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'text_missing' }, { ok: false, status: 502 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.estimateDossierCost('b1')).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('generates a dossier and returns the updated book plus its cost', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			jsonResponse({
+				id: 'b1',
+				title: 'T',
+				author: 'A',
+				fileHash: 'h1',
+				processingStatus: 'ready',
+				tags: [],
+				coverUrl: null,
+				progress: null,
+				hasDossier: true,
+				aiCostUsd: 2.1,
+				archived: false,
+				generationCostUsd: 2.0
+			})
+		);
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.generateDossier('b1');
+
+		expect(res.hasDossier).toBe(true);
+		expect(res.generationCostUsd).toBe(2.0);
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b1/dossier/generate');
+		expect(opts.method).toBe('POST');
+	});
+
+	it('throws on a failed generateDossier', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'generation_failed' }, { ok: false, status: 502 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.generateDossier('b1')).rejects.toBeInstanceOf(HttpError);
 	});
 
 	it('exports annotations for a book', async () => {

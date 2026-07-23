@@ -329,6 +329,14 @@ export function createHttpClient(
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 		},
 
+		async getDossier(bookId: string): Promise<{ text: string }> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/dossier`, {
+				headers: authHeaders()
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as { text: string };
+		},
+
 		async archiveBook(bookId: string): Promise<CatalogBook> {
 			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/archive`, {
 				method: 'POST',
@@ -336,6 +344,23 @@ export function createHttpClient(
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 			return (await res.json()) as CatalogBook;
+		},
+
+		async estimateDossierCost(bookId: string): Promise<{ estimatedUsd: number }> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/dossier/estimate`, {
+				headers: authHeaders()
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as { estimatedUsd: number };
+		},
+
+		async generateDossier(bookId: string): Promise<CatalogBook & { generationCostUsd: number }> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/dossier/generate`, {
+				method: 'POST',
+				headers: authHeaders()
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as CatalogBook & { generationCostUsd: number };
 		},
 
 		async unarchiveBook(bookId: string): Promise<CatalogBook> {

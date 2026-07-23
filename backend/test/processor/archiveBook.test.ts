@@ -33,6 +33,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     aiCostUsd: 0,
     archivedAt: null,
     originalFilename: null,
+    dossierCostUsd: 0,
     ...overrides
   };
 }

@@ -128,8 +128,14 @@ export interface HttpClient {
 	uploadDossier(bookId: string, text: string): Promise<CatalogBook>;
 	/** Remove a book's dossier. Idempotent. */
 	deleteDossier(bookId: string): Promise<void>;
+	/** Fetch the full dossier text (uploaded or generated) for viewing. */
+	getDossier(bookId: string): Promise<{ text: string }>;
 	/** Archive a book (hides it from the library by default). Idempotent. */
 	archiveBook(bookId: string): Promise<CatalogBook>;
+	/** Rough USD estimate for generating a dossier via AI, before committing to the actual call. */
+	estimateDossierCost(bookId: string): Promise<{ estimatedUsd: number }>;
+	/** Has Claude write the dossier from the book's own text; returns the updated book plus what it cost. */
+	generateDossier(bookId: string): Promise<CatalogBook & { generationCostUsd: number }>;
 	/** Un-archive a book. Idempotent. */
 	unarchiveBook(bookId: string): Promise<CatalogBook>;
 	/** Export all of a book's annotations as a portable JSON payload. */

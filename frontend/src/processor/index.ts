@@ -16,7 +16,10 @@ import { createAnnotation } from './reactors/createAnnotation';
 import { deleteAnnotation } from './reactors/deleteAnnotation';
 import { deleteBook } from './reactors/deleteBook';
 import { deleteDossier } from './reactors/deleteDossier';
+import { getDossier } from './reactors/getDossier';
+import { estimateDossierCost } from './reactors/estimateDossierCost';
 import { exportAnnotations } from './reactors/exportAnnotations';
+import { generateDossier } from './reactors/generateDossier';
 import { importAnnotations } from './reactors/importAnnotations';
 import { loadAnnotations } from './reactors/loadAnnotations';
 import { loadCatalog } from './reactors/loadCatalog';
@@ -100,8 +103,13 @@ export function createProcessor(deps: ReactorDeps) {
 		uploadDossier: (bookId: string, text: string): Promise<CatalogBook> =>
 			uploadDossier(deps, bookId, text),
 		deleteDossier: (bookId: string): Promise<void> => deleteDossier(deps, bookId),
+		getDossier: (bookId: string): Promise<{ text: string }> => getDossier(deps, bookId),
 		archiveBook: (bookId: string): Promise<CatalogBook> => archiveBook(deps, bookId),
 		unarchiveBook: (bookId: string): Promise<CatalogBook> => unarchiveBook(deps, bookId),
+		estimateDossierCost: (bookId: string): Promise<{ estimatedUsd: number }> =>
+			estimateDossierCost(deps, bookId),
+		generateDossier: (bookId: string): Promise<CatalogBook & { generationCostUsd: number }> =>
+			generateDossier(deps, bookId),
 		exportAnnotations: (bookId: string): Promise<AnnotationExport> => exportAnnotations(deps, bookId),
 		importAnnotations: (bookId: string, payload: unknown): Promise<{ imported: number; skipped: number }> =>
 			importAnnotations(deps, bookId, payload)

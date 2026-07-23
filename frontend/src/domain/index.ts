@@ -138,6 +138,12 @@ export function createReaderDomain(d: DProvider) {
 		/** Replace the whole local annotation cache with a freshly synced set. */
 		async recordAnnotationSync(annotations: Annotation[]): Promise<void> {
 			await d.replaceAllAnnotations(annotations);
+		},
+
+		/** Highlight/note counts per book, keyed by bookId — one bulk query for the whole catalog. */
+		async annotationCounts(): Promise<Map<string, { highlightCount: number; noteCount: number }>> {
+			const rows = await d.annotationCountsByBook();
+			return new Map(rows.map((r) => [r.bookId, { highlightCount: r.highlightCount, noteCount: r.noteCount }]));
 		}
 	};
 }

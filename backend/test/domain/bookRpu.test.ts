@@ -26,6 +26,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     aiCostUsd: 0,
     archivedAt: null,
     originalFilename: null,
+    dossierCostUsd: 0,
     ...overrides
   };
 }
@@ -128,7 +129,8 @@ describe("toBookSummary", () => {
       hasDossier: false,
       aiCostUsd: 0,
       archived: false,
-      originalFilename: null
+      originalFilename: null,
+      dossierCostUsd: 0
     });
   });
 

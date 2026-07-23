@@ -11,6 +11,9 @@ import { archiveBook } from "../processor/archiveBook.js";
 import { unarchiveBook } from "../processor/unarchiveBook.js";
 import { exportAnnotations } from "../processor/exportAnnotations.js";
 import { importAnnotations } from "../processor/importAnnotations.js";
+import { estimateDossierCost } from "../processor/estimateDossierCost.js";
+import { generateDossier } from "../processor/generateDossier.js";
+import { getDossier } from "../processor/getDossier.js";
 
 // Portal: pure HTTP-to-Reactor translation, no business logic.
 //
@@ -71,6 +74,21 @@ export async function registerBookRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { id: string } }>("/books/:id/dossier", async (request, reply) => {
     const body = (request.body ?? {}) as { text?: unknown };
     const result = await uploadDossier(request.headers.authorization, request.params.id, { text: body.text });
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.get<{ Params: { id: string } }>("/books/:id/dossier", async (request, reply) => {
+    const result = await getDossier(request.headers.authorization, request.params.id);
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.get<{ Params: { id: string } }>("/books/:id/dossier/estimate", async (request, reply) => {
+    const result = await estimateDossierCost(request.headers.authorization, request.params.id);
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.post<{ Params: { id: string } }>("/books/:id/dossier/generate", async (request, reply) => {
+    const result = await generateDossier(request.headers.authorization, request.params.id);
     return reply.code(result.status).send(result.body);
   });
 

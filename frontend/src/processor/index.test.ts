@@ -91,6 +91,64 @@ describe('processor reactors', () => {
 		expect((await p.openBookDetail('b1')).isLocal).toBe(true);
 	});
 
+	it('loadCatalog enriches each book with its local highlight/note counts, defaulting to 0', async () => {
+		const { deps, domain } = makeDeps();
+		const p = createProcessor(deps);
+		expect((await p.loadCatalog())[0]).toMatchObject({ highlightCount: 0, noteCount: 0 });
+
+		await domain.saveAnnotation({
+			id: 'a1',
+			bookId: 'b1',
+			cfiRange: 'cfi',
+			excerpt: 'x',
+			note: null,
+			color: 'accent',
+			createdAt: 'c1',
+			updatedAt: 'c1'
+		});
+		await domain.saveAnnotation({
+			id: 'a2',
+			bookId: 'b1',
+			cfiRange: 'cfi2',
+			excerpt: 'y',
+			note: 'Eine Notiz',
+			color: 'accent',
+			createdAt: 'c2',
+			updatedAt: 'c2'
+		});
+
+		expect((await p.loadCatalog())[0]).toMatchObject({ highlightCount: 1, noteCount: 1 });
+	});
+
+	it('openBookDetail enriches the one book with its local highlight/note counts, defaulting to 0', async () => {
+		const { deps, domain } = makeDeps();
+		const p = createProcessor(deps);
+		expect(await p.openBookDetail('b1')).toMatchObject({ highlightCount: 0, noteCount: 0 });
+
+		await domain.saveAnnotation({
+			id: 'a1',
+			bookId: 'b1',
+			cfiRange: 'cfi',
+			excerpt: 'x',
+			note: null,
+			color: 'accent',
+			createdAt: 'c1',
+			updatedAt: 'c1'
+		});
+		await domain.saveAnnotation({
+			id: 'a2',
+			bookId: 'other-book',
+			cfiRange: 'cfi2',
+			excerpt: 'y',
+			note: 'Eine Notiz',
+			color: 'accent',
+			createdAt: 'c2',
+			updatedAt: 'c2'
+		});
+
+		expect(await p.openBookDetail('b1')).toMatchObject({ highlightCount: 1, noteCount: 0 });
+	});
+
 	it('borrowBook downloads to OPFS and records the loan (correct order)', async () => {
 		const { deps, http, files, domain } = makeDeps();
 		const loan = await createProcessor(deps).borrowBook('b1', 'Titel');
@@ -227,7 +285,10 @@ describe('processor reactors', () => {
 				hasDossier: false,
 				aiCostUsd: 0,
 				archived: false,
-				originalFilename: null
+				originalFilename: null,
+				highlightCount: 0,
+				noteCount: 0,
+				dossierCostUsd: 0
 			})
 		});
 		const { deps, domain } = makeDeps({ http: http.impl });
@@ -547,6 +608,24 @@ describe('processor reactors', () => {
 			await expect(createProcessor(deps).deleteDossier('b1')).rejects.toThrow('not_found');
 		});
 
+		it('getDossier delegates to http with the book id', async () => {
+			const { deps, http } = makeDeps();
+			const res = await createProcessor(deps).getDossier('b1');
+			expect(res).toEqual({ text: '# Dossier\n\nInhalt.' });
+			const call = http.calls.find((c) => c.method === 'getDossier');
+			expect(call?.args).toEqual(['b1']);
+		});
+
+		it('getDossier throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				getDossier: async () => {
+					throw new Error('not_found');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).getDossier('b1')).rejects.toThrow('not_found');
+		});
+
 		it('archiveBook delegates to http with the book id', async () => {
 			const { deps, http } = makeDeps();
 			const res = await createProcessor(deps).archiveBook('b1');
@@ -642,6 +721,45 @@ describe('processor reactors', () => {
 			await createProcessor(deps).importAnnotations('b1', {});
 
 			expect(http.calls.some((c) => c.method === 'getAllAnnotations')).toBe(false);
+		});
+
+		it('estimateDossierCost delegates to http with the book id', async () => {
+			const { deps, http } = makeDeps();
+			const res = await createProcessor(deps).estimateDossierCost('b1');
+
+			expect(res).toEqual({ estimatedUsd: 1.2 });
+			const call = http.calls.find((c) => c.method === 'estimateDossierCost');
+			expect(call?.args).toEqual(['b1']);
+		});
+
+		it('estimateDossierCost throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				estimateDossierCost: async () => {
+					throw new Error('text_missing');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).estimateDossierCost('b1')).rejects.toThrow('text_missing');
+		});
+
+		it('generateDossier delegates to http with the book id', async () => {
+			const { deps, http } = makeDeps();
+			const res = await createProcessor(deps).generateDossier('b1');
+
+			expect(res.hasDossier).toBe(true);
+			expect(res.generationCostUsd).toBe(1.15);
+			const call = http.calls.find((c) => c.method === 'generateDossier');
+			expect(call?.args).toEqual(['b1']);
+		});
+
+		it('generateDossier throws when the backend call fails', async () => {
+			const http = fakeHttp({
+				generateDossier: async () => {
+					throw new Error('generation_failed');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).generateDossier('b1')).rejects.toThrow('generation_failed');
 		});
 	});
 });

@@ -17,6 +17,8 @@ interface BookRow {
   ai_cost_usd: string;
   archived_at: Date | null;
   original_filename: string | null;
+  // pg returns `numeric` as a string, never a JS number - parsed in toBook.
+  dossier_cost_usd: string;
 }
 
 function toBook(row: BookRow): Book {
@@ -33,12 +35,13 @@ function toBook(row: BookRow): Book {
     dossierUploadedAt: row.dossier_uploaded_at ? row.dossier_uploaded_at.toISOString() : null,
     aiCostUsd: Number(row.ai_cost_usd ?? 0),
     archivedAt: row.archived_at ? row.archived_at.toISOString() : null,
-    originalFilename: row.original_filename
+    originalFilename: row.original_filename,
+    dossierCostUsd: Number(row.dossier_cost_usd ?? 0)
   };
 }
 
 const SELECT_FIELDS =
-  "id, user_id, title, author, tags, cover_url, added_at, current_file_hash, processing_status, dossier_uploaded_at, ai_cost_usd, archived_at, original_filename";
+  "id, user_id, title, author, tags, cover_url, added_at, current_file_hash, processing_status, dossier_uploaded_at, ai_cost_usd, archived_at, original_filename, dossier_cost_usd";
 
 export async function findByUserAndHash(userId: string, fileHash: string): Promise<Book | null> {
   const result = await pool.query<BookRow>(
@@ -127,6 +130,14 @@ export async function remove(bookId: string): Promise<void> {
  */
 export async function addAiCost(bookId: string, usd: number): Promise<void> {
   await pool.query("update book set ai_cost_usd = ai_cost_usd + $1 where id = $2", [usd, bookId]);
+}
+
+/**
+ * Adds a dossier generation call's cost onto its own running total, separate
+ * from ai_cost_usd (chat-only) - same increment-in-the-DB pattern as addAiCost.
+ */
+export async function addDossierCost(bookId: string, usd: number): Promise<void> {
+  await pool.query("update book set dossier_cost_usd = dossier_cost_usd + $1 where id = $2", [usd, bookId]);
 }
 
 /**

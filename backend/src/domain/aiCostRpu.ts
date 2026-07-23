@@ -35,3 +35,20 @@ export function chatCostUsd(usage: TokenUsage): number {
     usage.cacheReadInputTokens * CACHE_READ_PER_TOKEN
   );
 }
+
+// Grobe Schätzung VOR der Generierung, ohne die Datei tatsächlich abzurufen wäre
+// keine Ersparnis (ensureBookText muss ohnehin gerufen werden) - die Schätzung
+// nutzt den bereits geladenen Volltext direkt. Deutsche Prosa liegt bei ~3,9
+// Tokens/Wort (empirisch gemessen, siehe chatAboutBook-Historie); der Zieltext
+// laut Dossier-Prompt ist 1.200-2.000 Wörter, geschätzte Obergrenze 2.000
+// Wörter Output für die Kostenschätzung.
+const ESTIMATED_OUTPUT_WORDS = 2000;
+const TOKENS_PER_WORD_ESTIMATE = 3.9;
+
+/** Rough USD estimate for a dossier generation call, before it is made. */
+export function estimateDossierCostUsd(bookText: string): number {
+  const wordCount = bookText.trim().split(/\s+/).filter(Boolean).length;
+  const estimatedInputTokens = wordCount * TOKENS_PER_WORD_ESTIMATE;
+  const estimatedOutputTokens = ESTIMATED_OUTPUT_WORDS * TOKENS_PER_WORD_ESTIMATE;
+  return estimatedInputTokens * INPUT_PER_TOKEN + estimatedOutputTokens * OUTPUT_PER_TOKEN;
+}

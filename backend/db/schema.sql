@@ -62,6 +62,11 @@ alter table book add column if not exists archived_at timestamptz;
 -- so it stays stable even if the (editable) title later diverges from it.
 alter table book add column if not exists original_filename text;
 
+-- Cumulative cost of Claude-generated dossiers for this book, in USD, kept
+-- separate from ai_cost_usd (which is chat-only) so the reader can see what
+-- chats cost vs. what dossier generation cost, rather than one mixed figure.
+alter table book add column if not exists dossier_cost_usd numeric(12, 6) not null default 0;
+
 create table if not exists book_file (
   id uuid primary key default gen_random_uuid(),
   book_id uuid not null references book(id),

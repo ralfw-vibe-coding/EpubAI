@@ -133,6 +133,8 @@ export function createDProvider(): DProvider {
 		allAnnotationsForBook: (bookId: string) => call<Annotation[]>('allAnnotationsForBook', bookId),
 		deleteAnnotation: (id: string) => call<void>('deleteAnnotation', id),
 		replaceAllAnnotations: (annotations: Annotation[]) =>
-			call<void>('replaceAllAnnotations', annotations)
+			call<void>('replaceAllAnnotations', annotations),
+		annotationCountsByBook: () =>
+			call<{ bookId: string; highlightCount: number; noteCount: number }[]>('annotationCountsByBook')
 	};
 }

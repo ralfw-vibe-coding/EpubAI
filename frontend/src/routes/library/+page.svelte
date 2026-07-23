@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { Check } from 'lucide-svelte';
+	import { Check, Highlighter, StickyNote } from 'lucide-svelte';
 	import type { BookDetail, CatalogBook } from '../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../portal/runtime';
 	import { filterBooks, tagsFrom, visibleBooks } from './filterBooks';
@@ -200,6 +200,25 @@
 		</span>
 	{/snippet}
 
+	{#snippet annotationCounts(book: CatalogBook)}
+		{#if book.highlightCount > 0 || book.noteCount > 0}
+			<div class="mt-1 flex items-center gap-2 text-xs text-[var(--color-neutral-700)]">
+				{#if book.highlightCount > 0}
+					<span class="flex items-center gap-0.5">
+						<Highlighter size={12} />
+						{book.highlightCount}
+					</span>
+				{/if}
+				{#if book.noteCount > 0}
+					<span class="flex items-center gap-0.5">
+						<StickyNote size={12} />
+						{book.noteCount}
+					</span>
+				{/if}
+			</div>
+		{/if}
+	{/snippet}
+
 	{#snippet progressDisplay(book: CatalogBook)}
 		{#if book.progress}
 			<div class="mt-1.5">
@@ -302,6 +321,7 @@
 						</div>
 						<p class="mt-2 truncate text-sm font-medium">{book.title}</p>
 						<p class="truncate text-xs text-[var(--color-neutral-700)]">{book.author}</p>
+						{@render annotationCounts(book)}
 						{#if book.tags.length > 0}
 							<div class="mt-1 flex flex-wrap gap-1">
 								{#each book.tags as tag (tag)}
@@ -352,6 +372,7 @@
 							<div class="min-w-0 flex-1">
 								<p class="truncate font-medium">{book.title}</p>
 								<p class="truncate text-sm text-[var(--color-neutral-700)]">{book.author}</p>
+								{@render annotationCounts(book)}
 								{#if book.tags.length > 0}
 									<div class="mt-1 flex flex-wrap gap-1">
 										{#each book.tags as tag (tag)}

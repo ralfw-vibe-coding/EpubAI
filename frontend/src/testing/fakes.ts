@@ -53,6 +53,16 @@ export function fakeDProvider(): DProvider {
 		async replaceAllAnnotations(all) {
 			annotations.clear();
 			for (const a of all) annotations.set(a.id, a);
+		},
+		async annotationCountsByBook() {
+			const counts = new Map<string, { highlightCount: number; noteCount: number }>();
+			for (const a of annotations.values()) {
+				const c = counts.get(a.bookId) ?? { highlightCount: 0, noteCount: 0 };
+				if (a.note === null) c.highlightCount++;
+				else c.noteCount++;
+				counts.set(a.bookId, c);
+			}
+			return [...counts.entries()].map(([bookId, c]) => ({ bookId, ...c }));
 		}
 	};
 }
@@ -121,7 +131,10 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		hasDossier: false,
 		aiCostUsd: 0,
 		archived: false,
-		originalFilename: null
+		originalFilename: null,
+		highlightCount: 0,
+		noteCount: 0,
+		dossierCostUsd: 0
 	};
 	const defaultLoan: LoanResponse = {
 		id: 'loan1',
@@ -179,8 +192,11 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		chatAboutBook: record('chatAboutBook', defaultChatReply),
 		uploadDossier: record('uploadDossier', { ...defaultBook, hasDossier: true }),
 		deleteDossier: record('deleteDossier', undefined as void),
+		getDossier: record('getDossier', { text: '# Dossier\n\nInhalt.' }),
 		archiveBook: record('archiveBook', { ...defaultBook, archived: true }),
 		unarchiveBook: record('unarchiveBook', { ...defaultBook, archived: false }),
+		estimateDossierCost: record('estimateDossierCost', { estimatedUsd: 1.2 }),
+		generateDossier: record('generateDossier', { ...defaultBook, hasDossier: true, generationCostUsd: 1.15 }),
 		exportAnnotations: record('exportAnnotations', defaultAnnotationExport),
 		importAnnotations: record('importAnnotations', { imported: 1, skipped: 0 }),
 		...overrides

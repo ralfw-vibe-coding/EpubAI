@@ -37,4 +37,6 @@ export interface DProvider {
 	 * annotations still exist, so we wipe and reinsert rather than merge.
 	 */
 	replaceAllAnnotations(annotations: Annotation[]): Promise<void>;
+	/** Highlight/note counts per book across the whole local annotation cache, one bulk query for the catalog. */
+	annotationCountsByBook(): Promise<{ bookId: string; highlightCount: number; noteCount: number }[]>;
 }

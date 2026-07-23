@@ -15,7 +15,10 @@ const book: CatalogBook = {
 	hasDossier: false,
 	aiCostUsd: 0,
 	archived: false,
-	originalFilename: null
+	originalFilename: null,
+	highlightCount: 0,
+	noteCount: 0,
+	dossierCostUsd: 0
 };
 
 describe('createReaderDomain', () => {
@@ -189,6 +192,27 @@ describe('createReaderDomain', () => {
 			await domain.recordAnnotationSync([fresh]);
 			const all = await domain.annotationsFor('b1');
 			expect(all).toEqual([fresh]);
+		});
+
+		describe('annotationCounts', () => {
+			it('returns an empty map when no annotations are cached', async () => {
+				const domain = createReaderDomain(fakeDProvider());
+				expect(await domain.annotationCounts()).toEqual(new Map());
+			});
+
+			it('splits highlights (note === null) from notes (note !== null) per book', async () => {
+				const domain = createReaderDomain(fakeDProvider());
+				await domain.saveAnnotation({ ...ann, id: 'a1', bookId: 'b1', note: null });
+				await domain.saveAnnotation({ ...ann, id: 'a2', bookId: 'b1', note: null });
+				await domain.saveAnnotation({ ...ann, id: 'a3', bookId: 'b1', note: 'Eine Notiz' });
+				await domain.saveAnnotation({ ...ann, id: 'a4', bookId: 'b2', note: 'Andere Notiz' });
+
+				const counts = await domain.annotationCounts();
+
+				expect(counts.get('b1')).toEqual({ highlightCount: 2, noteCount: 1 });
+				expect(counts.get('b2')).toEqual({ highlightCount: 0, noteCount: 1 });
+				expect(counts.get('b3')).toBeUndefined();
+			});
 		});
 	});
 });

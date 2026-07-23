@@ -24,6 +24,12 @@ export interface CatalogBook {
 	archived: boolean;
 	/** The uploaded file's name at upload time (extension stripped), or null for older books. */
 	originalFilename: string | null;
+	/** Number of locally cached annotations without a note ("Markierungen") for this book. */
+	highlightCount: number;
+	/** Number of locally cached annotations with a note ("Notizen") for this book. */
+	noteCount: number;
+	/** Cumulative cost of Claude-generated dossiers for this book, in USD. */
+	dossierCostUsd: number;
 }
 
 /** A local loan: the book's EPUB is present in OPFS on this device. */

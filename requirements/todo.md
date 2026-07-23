@@ -1,3 +1,0 @@
-- Markierungen und Notizen zum Buch in den Buchdetails anzeigen.
-- Suchen in den Markierungen und Notizen in den Buchdetails.
--

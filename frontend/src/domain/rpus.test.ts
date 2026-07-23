@@ -88,7 +88,10 @@ describe('toBookDetail', () => {
 		hasDossier: false,
 		aiCostUsd: 0,
 		archived: false,
-		originalFilename: null
+		originalFilename: null,
+		highlightCount: 0,
+		noteCount: 0,
+		dossierCostUsd: 0
 	};
 	it('marks isLocal true when loaned', () => {
 		const loans: Loan[] = [

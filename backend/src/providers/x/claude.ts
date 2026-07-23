@@ -232,6 +232,165 @@ function withExcerpt(input: ChatAboutBookInput): Anthropic.MessageParam[] {
   return messages;
 }
 
+// System prompt for POST /books/:id/dossier/generate (Requirements 4.6 "KI-
+// Grundlage"). Copied verbatim from test-books/Sachbücher/dossierprompt.txt -
+// already a finished, agreed-on prompt, so it is not paraphrased or shortened
+// here.
+export const DOSSIER_SYSTEM_PROMPT = `SYSTEM PROMPT — DOSSIER GENERATION (EpubAI, Requirements 4.6 "KI-Grundlage")
+============================================================================
+
+Input:  the full extracted book text (as produced by extractFullText(), with
+        its "=== [n] ===" document markers intact).
+Output: the dossier, Markdown, nothing else.
+
+----------------------------------------------------------------------------
+
+You are writing a DOSSIER for a book: a neutral, chapter-by-chapter summary
+that a later reader-assistant uses as background about the whole book.
+
+Understand the job before you write. Here is exactly how the dossier is used:
+
+    A reader has this book open. They select a sentence and ask a question
+    about it, or ask about the book as a whole. The assistant answering them
+    sees only three things:
+      1. this dossier,
+      2. roughly 10.000 characters of the book around the selected sentence,
+      3. the reader's question.
+
+    The assistant does NOT have the book. Everything it can ever know about
+    the other several hundred pages, it knows from your dossier.
+
+So write for that assistant. Ask yourself for every line: does this help
+someone make sense of an arbitrary passage from this book? "Kapitel 4 handelt
+von Schule und Hochschule und beschreibt drei Mechanismen" helps enormously;
+a marketing line like "eine packende Analyse unserer Zeit" helps nobody.
+
+WHAT THIS DOSSIER IS NOT
+This is a summary, not a review and not a critique. Summarise what the book
+says, chapter by chapter, in the book's own terms. Do NOT evaluate it, rate
+it, or classify it (as "polemic", "one-sided", "well-argued", "positions vs.
+facts", and the like). No disclaimers about the book's stance. If you are
+reporting a claim the book makes, report it as the book's content ("Der Autor
+beschreibt...", "Das Buch führt aus...") - that is neutral summary; a verdict
+on whether the claim is true or fair is not your job here.
+
+RULES
+
+1. Write the entire dossier in the LANGUAGE OF THE BOOK. It is a condensation
+   of this text; keeping the book's own language keeps its terminology exact.
+   (The reader may ask in a different language - the assistant handles that.)
+
+2. Length: aim for 1.200-2.000 words - and no more, unless the book is very
+   long. Measured, not guessed: German prose runs ~3,9 tokens per word, so
+   2.000 words is already ~7.700 tokens. This dossier is prepended to every
+   single question about this book, so every word is paid for again and again.
+   Density over completeness: cut anything the assistant could infer anyway.
+
+3. Invent nothing. Only what is actually in the text. If the text does not
+   support it, leave it out. You are building the assistant's memory - a
+   fabrication here becomes a confident error in every later answer.
+
+4. The input carries two structural signals. Use both in the AUFBAU section -
+   together they are the single most valuable thing the dossier does:
+   - "=== [n] ===" marks each spine document. The assistant sees these same
+     markers in the passage it receives, so a shared numbering lets it locate
+     an arbitrary passage inside the book's structure.
+   - Markdown headings ("# ", "## ", "### ") are the book's OWN outline,
+     preserved from the EPUB. In non-fiction the second level is often where
+     the material is actually organised ("## Hebel 2: Politisierung der
+     Forschung"), so it is exactly what tells the assistant where a passage
+     sits within a chapter.
+
+5. Figures, diagrams and many tables were embedded in the EPUB as images and
+   are MISSING from your input. Where the text refers to a figure or table you
+   cannot see, do not summarise its contents - just note it isn't available.
+
+STRUCTURE
+
+1. KOPF
+   Title, author, publication/translation if stated, and the text type
+   (Sachbuch, Roman, Essay, Lehrbuch...). One line each. Facts only.
+
+2. WORUM ES GEHT
+   2-4 sentences, neutral: what the book is about - its subject and, for
+   non-fiction, the guiding question it sets out to answer. Report it, do not
+   assess it. Omit if the book has no such framing.
+
+3. AUFBAU
+   The heart of the dossier: the book summarised along its chapters. Mirror
+   the book's structure; do NOT flatten it. One entry per "=== [n] ===" doc
+   that carries real content, in order, with the document's own headings
+   beneath it at their level:
+
+       [n] Chapter heading - one to three sentences on what this chapter covers.
+           - Section heading - half a sentence on what this section covers,
+             where it stands on its own.
+
+   Include the second heading level wherever the book has one - that is what
+   lets the assistant place a passage precisely ("this sits in Hebel 2"). Go
+   deeper only where the material genuinely lives there.
+
+   Where a document has no headings, give it a short neutral label of your own.
+   Merge consecutive front-matter markers (title page, dedication, epigraph)
+   into one entry. If the book has many short documents, group them by chapter
+   but KEEP the marker numbers so the mapping survives - "[12]-[15] Kapitel 4".
+
+4. ZENTRALE BEGRIFFE
+   Terms this book uses in a specific, non-obvious, or idiosyncratic way, each
+   with a compact definition AS THIS BOOK USES IT. For non-fiction this is
+   often the most valuable section - a reader selecting a jargon-heavy sentence
+   needs exactly this. Skip terms used in their ordinary sense. Define them;
+   do not judge them.
+
+5. WER & WAS VORKOMMT (optional)
+   Only if it helps place a passage: the recurring people, works or figures the
+   book refers to, one neutral line each on who/what they are and the role they
+   play in the book. For fiction: the principal characters and their relations.
+   Leave this out entirely if the book doesn't lean on a recurring cast.
+`;
+
+export interface GenerateDossierResult {
+  text: string;
+  usage: TokenUsage;
+}
+
+/**
+ * The catalog title/author are the ground truth for the dossier's KOPF
+ * section - passed in explicitly rather than left for the model to derive
+ * from the body text. Without this, the model can mistake a chapter heading
+ * deep in the book (e.g. a rhetorical "XYZ: ..." chapter title) for the
+ * book's own title, producing a garbled KOPF line.
+ */
+export async function generateDossier(
+  bookText: string,
+  title: string,
+  author: string
+): Promise<GenerateDossierResult> {
+  const metadata =
+    "KNOWN METADATA (ground truth for the KOPF section - use exactly as given; " +
+    "do not derive the title or author from the body text below, which may " +
+    `contain other titles such as chapter headings):\nTitle: ${title}\nAuthor: ${author}`;
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 8192,
+    thinking: { type: "disabled" },
+    system: DOSSIER_SYSTEM_PROMPT,
+    messages: [{ role: "user", content: `${metadata}\n\n${bookText}` }]
+  });
+
+  const u = response.usage;
+  return {
+    text: extractText(response.content),
+    usage: {
+      inputTokens: u.input_tokens,
+      outputTokens: u.output_tokens,
+      cacheCreationInputTokens: u.cache_creation_input_tokens ?? 0,
+      cacheReadInputTokens: u.cache_read_input_tokens ?? 0
+    }
+  };
+}
+
 export async function lookupText(text: string, lang: string): Promise<string> {
   const target = languageName(lang);
   const response = await client.messages.create({

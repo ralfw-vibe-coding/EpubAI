@@ -22,6 +22,7 @@
 	import type { ChatMessage } from '../../../processor/ports';
 	import { getProcessor, getSession, isAuthenticated } from '../../../portal/runtime';
 	import { colorHex, HIGHLIGHT_COLORS, highlightStyles } from './colors';
+	import { isSwipeGesture } from './swipe';
 	import { AVAILABLE_LANGUAGES } from './languages';
 	import {
 		DEFAULT_PREFS,
@@ -429,6 +430,11 @@
 				if (!text) selection = null;
 			});
 
+			// Swipe-to-turn-page over the book's own content (see onContentTouchStart/
+			// onContentTouchEnd for why this can't just be a DOM listener on our container).
+			rendition.on('touchstart', onContentTouchStart);
+			rendition.on('touchend', onContentTouchEnd);
+
 			// Re-apply this book's stored highlights from the LOCAL cache (never a
 			// network call here — offline-first Reader). Added before display() so
 			// they attach as each section renders.
@@ -446,8 +452,13 @@
 				})
 				.catch(() => undefined);
 
-			// Resume at the stored position, or start at the beginning.
-			await rendition.display(progress?.cfi || undefined);
+			// A `?cfi=` query param (e.g. from the book detail page's annotations
+			// list, "open in reader") jumps straight to that spot; otherwise resume
+			// at the stored reading position, or start at the beginning. Same
+			// display() call either way - a deep-linked CFI is just as valid a
+			// target as a resumed one (both are real CFIs from this exact book).
+			const deepLinkCfi = $page.url.searchParams.get('cfi');
+			await rendition.display(deepLinkCfi || progress?.cfi || undefined);
 			if (progress) {
 				percent = progress.percent;
 				// Show the page numbers from the last session immediately; they'll be
@@ -524,13 +535,49 @@
 	}
 
 	// Touch swipe navigation (buttons remain as a fallback).
+	// Swiping over the page margin (our own container, outside the book's
+	// rendered iframe) - plain DOM touch events work fine here since there's
+	// no selectable text in the margin to interfere with.
 	let touchX = 0;
+	let touchY = 0;
+	let touchTime = 0;
 	function onTouchStart(e: TouchEvent) {
 		touchX = e.changedTouches[0].clientX;
+		touchY = e.changedTouches[0].clientY;
+		touchTime = Date.now();
 	}
 	function onTouchEnd(e: TouchEvent) {
-		const dx = e.changedTouches[0].clientX - touchX;
-		if (Math.abs(dx) < 40) return;
+		const t = e.changedTouches[0];
+		const dx = t.clientX - touchX;
+		const dy = t.clientY - touchY;
+		if (!isSwipeGesture(dx, dy, Date.now() - touchTime)) return;
+		if (dx < 0) next();
+		else prev();
+	}
+
+	// Swiping over the book's own rendered content lives in a separate iframe
+	// per section - touch events never bubble out of it to the container
+	// above, so this needs epub.js's own per-Contents event forwarding (same
+	// mechanism the 'selected'/'click' handlers below rely on). Guarded so it
+	// never fires as a side effect of selecting text: besides the quick/
+	// mostly-horizontal check, a swipe never fires if the touch ended with an
+	// active (non-empty) selection in that iframe - that gesture was
+	// selecting a passage, not turning the page.
+	let contentTouchX = 0;
+	let contentTouchY = 0;
+	let contentTouchTime = 0;
+	function onContentTouchStart(e: TouchEvent) {
+		const t = e.changedTouches[0];
+		contentTouchX = t.clientX;
+		contentTouchY = t.clientY;
+		contentTouchTime = Date.now();
+	}
+	function onContentTouchEnd(e: TouchEvent, contents: { window: Window }) {
+		const t = e.changedTouches[0];
+		const dx = t.clientX - contentTouchX;
+		const dy = t.clientY - contentTouchY;
+		if (!isSwipeGesture(dx, dy, Date.now() - contentTouchTime)) return;
+		if ((contents.window.getSelection()?.toString() ?? '') !== '') return;
 		if (dx < 0) next();
 		else prev();
 	}

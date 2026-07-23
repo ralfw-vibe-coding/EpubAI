@@ -198,6 +198,16 @@ const handlers: Record<string, Handler> = {
 			returnValue: 'resultRows'
 		}) as unknown as Annotation[];
 	},
+	annotationCountsByBook(): { bookId: string; highlightCount: number; noteCount: number }[] {
+		return db!.exec({
+			sql: `SELECT bookId,
+			             SUM(CASE WHEN note IS NULL THEN 1 ELSE 0 END) AS highlightCount,
+			             SUM(CASE WHEN note IS NOT NULL THEN 1 ELSE 0 END) AS noteCount
+			      FROM Annotation GROUP BY bookId`,
+			rowMode: 'object',
+			returnValue: 'resultRows'
+		}) as unknown as { bookId: string; highlightCount: number; noteCount: number }[];
+	},
 	deleteAnnotation([id]: unknown[]): void {
 		db!.exec({ sql: 'DELETE FROM Annotation WHERE id = ?', bind: [id as string] });
 	},

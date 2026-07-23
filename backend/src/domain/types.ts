@@ -45,6 +45,9 @@ export interface Book {
   // books uploaded before this field existed. Used only to name the notes
   // export download - never re-derived from the (editable) title.
   originalFilename: string | null;
+  // Cumulative cost of Claude-generated dossiers for this book, in USD - kept
+  // separate from aiCostUsd (chat-only) so the two can be shown apart.
+  dossierCostUsd: number;
 }
 
 export interface BookFile {
@@ -86,6 +89,8 @@ export interface BookSummary {
   archived: boolean;
   /** The uploaded file's name at upload time (extension stripped), or null for older books. */
   originalFilename: string | null;
+  /** Cumulative cost of Claude-generated dossiers for this book, in USD. */
+  dossierCostUsd: number;
 }
 
 export interface DetectedMeta {

@@ -29,6 +29,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     aiCostUsd: 0,
     archivedAt: "2026-01-01T00:00:00.000Z",
     originalFilename: null,
+    dossierCostUsd: 0,
     ...overrides
   };
 }
