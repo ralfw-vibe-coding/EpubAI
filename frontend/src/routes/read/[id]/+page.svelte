@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick } from 'svelte';
+	import { slide } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import ePub, { type Book, type NavItem, type Rendition } from 'epubjs';
@@ -50,6 +51,40 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let percent = $state(0);
+
+	// Immersive reading: header/footer claim screen space the reader is
+	// otherwise all text. They auto-hide after a few seconds of inactivity and
+	// come back on a tap - same pattern as most reading apps' fullscreen mode.
+	const CHROME_AUTO_HIDE_MS = 3000;
+	const CHROME_TRANSITION_MS = 200;
+	let chromeVisible = $state(true);
+	let chromeHideTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function scheduleChromeHide() {
+		if (chromeHideTimer) clearTimeout(chromeHideTimer);
+		chromeHideTimer = setTimeout(() => {
+			chromeVisible = false;
+		}, CHROME_AUTO_HIDE_MS);
+	}
+
+	function showChrome() {
+		chromeVisible = true;
+		scheduleChromeHide();
+	}
+
+	// Hiding/showing the header/footer resizes the reading pane (they're
+	// normal flex-column siblings, not an overlay) - epub.js only re-measures
+	// its container on an explicit resize(), so nudge it once the slide
+	// transition has settled (mirrors setMargin's tick()+forceResize() pattern).
+	function toggleChrome() {
+		if (chromeVisible) {
+			chromeVisible = false;
+			if (chromeHideTimer) clearTimeout(chromeHideTimer);
+		} else {
+			showChrome();
+		}
+		setTimeout(forceResize, CHROME_TRANSITION_MS + 20);
+	}
 	// Both stay null until book.locations.generate() has completed; the template
 	// shows nothing for the page read-out until then (see below).
 	let currentPage = $state<number | null>(null);
@@ -425,9 +460,16 @@
 			// elsewhere to deselect (collapsing the range) fires no event of its own,
 			// so the action bar would otherwise stay stuck. 'click' is forwarded for
 			// every tap regardless, so use it to notice the selection is now gone.
+			// A tap that isn't dismissing a selection toggles the immersive chrome
+			// instead - the same tap gesture would be surprising if it did both.
 			rendition.on('click', (_event: MouseEvent, contents: { window: Window }) => {
 				const text = contents.window.getSelection()?.toString().trim() ?? '';
-				if (!text) selection = null;
+				if (text) return;
+				if (selection) {
+					selection = null;
+				} else {
+					toggleChrome();
+				}
 			});
 
 			// Swipe-to-turn-page over the book's own content (see onContentTouchStart/
@@ -467,6 +509,7 @@
 				totalPages = progress.totalPages;
 			}
 			loading = false;
+			scheduleChromeHide();
 
 			// Build a location index in the background for a percentage + page read-out.
 			book.ready
@@ -544,6 +587,10 @@
 		setTimeout(() => {
 			pageTurnAnim = null;
 		}, PAGE_TURN_SWEEP_MS);
+		// Turning pages is activity too - if the chrome is already visible, keep
+		// it up a while longer rather than letting it vanish mid-flip. If it's
+		// already hidden, a swipe to turn the page shouldn't summon it back.
+		if (chromeVisible) scheduleChromeHide();
 	}
 
 	function next() {
@@ -669,6 +716,7 @@
 	onDestroy(() => {
 		document.removeEventListener('visibilitychange', onVisibility);
 		if (annotationErrorTimer) clearTimeout(annotationErrorTimer);
+		if (chromeHideTimer) clearTimeout(chromeHideTimer);
 		void save();
 		rendition?.destroy();
 		book?.destroy();
@@ -677,7 +725,9 @@
 
 <div class="min-h-dvh w-full bg-[var(--color-neutral-200)] flex justify-center">
 <div class="relative flex h-dvh w-full max-w-[520px] flex-col bg-[var(--color-neutral-100)]">
+	{#if chromeVisible}
 	<header
+		transition:slide={{ duration: CHROME_TRANSITION_MS }}
 		class="flex items-center justify-between border-b-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-4 py-2"
 	>
 		<button onclick={() => goto(`/book/${bookId}`)} class="flex-none text-sm text-[var(--color-accent-700)]">
@@ -715,6 +765,7 @@
 			</button>
 		</div>
 	</header>
+	{/if}
 
 	{#if error}
 		<p class="m-4 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">{error}</p>
@@ -795,7 +846,9 @@
 		{/if}
 	</div>
 
+	{#if chromeVisible}
 	<div
+		transition:slide={{ duration: CHROME_TRANSITION_MS }}
 		class="flex-none border-t-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
 	>
 		<div class="mb-2 h-1 w-full bg-[var(--color-neutral-300)]">
@@ -809,6 +862,7 @@
 			<button onclick={next} class="px-2 py-1 text-sm text-[var(--color-accent-700)]">Weiter →</button>
 		</div>
 	</div>
+	{/if}
 
 	{#if tocOpen}
 		<button
