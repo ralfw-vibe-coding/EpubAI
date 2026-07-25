@@ -29,6 +29,7 @@ import { openBookForReading, type OpenForReadingResult } from './reactors/openBo
 import { requestLoginCode } from './reactors/requestLoginCode';
 import { returnLoan } from './reactors/returnLoan';
 import { saveReadingProgress } from './reactors/saveReadingProgress';
+import { setDefaultFlashcardColor } from './reactors/setDefaultFlashcardColor';
 import { setTranslationLanguage } from './reactors/setTranslationLanguage';
 import { signOut } from './reactors/signOut';
 import { syncAnnotations } from './reactors/syncAnnotations';
@@ -83,10 +84,14 @@ export function createProcessor(deps: ReactorDeps) {
 			cfiRange: string,
 			excerpt: string,
 			note?: string,
-			color?: AnnotationColor
-		): Promise<Annotation> => createAnnotation(deps, bookId, cfiRange, excerpt, note, color),
-		updateAnnotationNote: (annotation: Annotation, note: string | null): Promise<Annotation> =>
-			updateAnnotationNote(deps, annotation, note),
+			color?: AnnotationColor,
+			tags?: string[]
+		): Promise<Annotation> => createAnnotation(deps, bookId, cfiRange, excerpt, note, color, tags),
+		updateAnnotationNote: (
+			annotation: Annotation,
+			note: string | null,
+			tags?: string[]
+		): Promise<Annotation> => updateAnnotationNote(deps, annotation, note, tags),
 		updateAnnotationColor: (annotation: Annotation, color: AnnotationColor): Promise<Annotation> =>
 			updateAnnotationColor(deps, annotation, color),
 		deleteAnnotation: (id: string): Promise<void> => deleteAnnotation(deps, id),
@@ -94,6 +99,8 @@ export function createProcessor(deps: ReactorDeps) {
 			translateSelection(deps, text, lang),
 		lookupSelection: (text: string, lang: string): Promise<string> => lookupSelection(deps, text, lang),
 		setTranslationLanguage: (lang: string): Promise<void> => setTranslationLanguage(deps, lang),
+		setDefaultFlashcardColor: (color: string): Promise<void> =>
+			setDefaultFlashcardColor(deps, color),
 		chatAboutBook: (
 			bookId: string,
 			messages: ChatMessage[],

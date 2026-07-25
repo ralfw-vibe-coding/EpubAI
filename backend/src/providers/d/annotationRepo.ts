@@ -10,11 +10,12 @@ interface AnnotationRow {
   excerpt: string;
   note: string | null;
   color: AnnotationColor;
+  tags: string[];
   created_at: Date;
   updated_at: Date;
 }
 
-const SELECT_FIELDS = "id, book_id, user_id, cfi_range, excerpt, note, color, created_at, updated_at";
+const SELECT_FIELDS = "id, book_id, user_id, cfi_range, excerpt, note, color, tags, created_at, updated_at";
 
 function toAnnotation(row: AnnotationRow): Annotation {
   return {
@@ -25,6 +26,7 @@ function toAnnotation(row: AnnotationRow): Annotation {
     excerpt: row.excerpt,
     note: row.note,
     color: row.color,
+    tags: row.tags ?? [],
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString()
   };
@@ -58,10 +60,10 @@ export async function findById(annotationId: string): Promise<Annotation | null>
 
 export async function insert(bookId: string, userId: string, draft: AnnotationDraft): Promise<Annotation> {
   const result = await pool.query<AnnotationRow>(
-    `insert into annotation (book_id, user_id, cfi_range, excerpt, note, color)
-     values ($1, $2, $3, $4, $5, $6)
+    `insert into annotation (book_id, user_id, cfi_range, excerpt, note, color, tags)
+     values ($1, $2, $3, $4, $5, $6, $7)
      returning ${SELECT_FIELDS}`,
-    [bookId, userId, draft.cfiRange, draft.excerpt, draft.note, draft.color]
+    [bookId, userId, draft.cfiRange, draft.excerpt, draft.note, draft.color, draft.tags]
   );
   return toAnnotation(result.rows[0]);
 }
@@ -69,11 +71,12 @@ export async function insert(bookId: string, userId: string, draft: AnnotationDr
 export interface AnnotationFieldUpdate {
   note?: string | null;
   color?: AnnotationColor;
+  tags?: string[];
 }
 
 /**
- * Updates only the given fields (note and/or color - cfiRange/excerpt are
- * immutable once created). Only fields present as keys on `fields` are
+ * Updates only the given fields (note, color, and/or tags - cfiRange/excerpt
+ * are immutable once created). Only fields present as keys on `fields` are
  * touched; e.g. passing `{ color: "yellow" }` leaves the existing note
  * untouched. Always bumps updated_at, even if neither field is present.
  */
@@ -88,6 +91,10 @@ export async function update(annotationId: string, fields: AnnotationFieldUpdate
   if ("color" in fields) {
     values.push(fields.color);
     sets.push(`color = $${values.length}`);
+  }
+  if ("tags" in fields) {
+    values.push(fields.tags);
+    sets.push(`tags = $${values.length}`);
   }
   sets.push("updated_at = now()");
 

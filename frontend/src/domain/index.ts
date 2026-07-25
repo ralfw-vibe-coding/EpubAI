@@ -108,9 +108,10 @@ export function createReaderDomain(d: DProvider) {
 		async editAnnotationNote(
 			annotation: Annotation,
 			note: string | null,
+			tags: string[],
 			now: string
 		): Promise<Annotation> {
-			const updated = withEditedNote(annotation, note, now);
+			const updated = withEditedNote(annotation, note, tags, now);
 			await d.saveAnnotation(updated);
 			return updated;
 		},

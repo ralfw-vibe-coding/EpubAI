@@ -16,9 +16,10 @@ export async function createAnnotation(
 	cfiRange: string,
 	excerpt: string,
 	note?: string,
-	color?: string
+	color?: string,
+	tags?: string[]
 ): Promise<Annotation> {
-	const created = await deps.http.createAnnotation(bookId, cfiRange, excerpt, note, color);
+	const created = await deps.http.createAnnotation(bookId, cfiRange, excerpt, note, color, tags);
 	await deps.domain.saveAnnotation(created);
 	return created;
 }

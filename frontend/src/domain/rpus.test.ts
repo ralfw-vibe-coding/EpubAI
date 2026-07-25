@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isBookLocal, makeLoan, makeProgress, toBookDetail, withEditedColor } from './rpus';
+import {
+	isBookLocal,
+	makeLoan,
+	makeProgress,
+	toBookDetail,
+	withEditedColor,
+	withEditedNote
+} from './rpus';
 import type { Annotation, CatalogBook, Loan, ReadingProgress } from './types';
 
 describe('makeLoan', () => {
@@ -58,6 +65,7 @@ describe('withEditedColor', () => {
 		excerpt: 'markiert',
 		note: 'eine Notiz',
 		color: 'accent',
+		tags: [],
 		createdAt: 'c1',
 		updatedAt: 'c1'
 	};
@@ -72,6 +80,54 @@ describe('withEditedColor', () => {
 		expect(updated.excerpt).toBe(ann.excerpt);
 		expect(updated.note).toBe(ann.note);
 		expect(updated.createdAt).toBe(ann.createdAt);
+	});
+
+	it('returns a fresh plain tags array, never an alias of the input (a Svelte $state proxy would break postMessage to the SQLite worker)', () => {
+		const withTags = { ...ann, tags: ['flashcard'] };
+		const updated = withEditedColor(withTags, 'green', 'c2');
+		expect(updated.tags).toEqual(['flashcard']);
+		expect(updated.tags).not.toBe(withTags.tags);
+	});
+});
+
+describe('withEditedNote', () => {
+	const ann: Annotation = {
+		id: 'a1',
+		bookId: 'b1',
+		cfiRange: 'epubcfi(/6/2!/4,/1:0,/1:9)',
+		excerpt: 'markiert',
+		note: null,
+		color: 'accent',
+		tags: [],
+		createdAt: 'c1',
+		updatedAt: 'c1'
+	};
+
+	it('sets the note and tags and re-stamps updatedAt', () => {
+		expect(withEditedNote(ann, 'Eine Notiz', ['flashcard'], 'c2')).toEqual({
+			...ann,
+			note: 'Eine Notiz',
+			tags: ['flashcard'],
+			updatedAt: 'c2'
+		});
+	});
+
+	it('collapses an empty/whitespace note to null while keeping tags', () => {
+		const updated = withEditedNote(ann, '   ', ['vokabel'], 'c2');
+		expect(updated.note).toBeNull();
+		expect(updated.tags).toEqual(['vokabel']);
+	});
+
+	it('replaces the tags array wholesale (can clear to empty)', () => {
+		const withTags = { ...ann, tags: ['a', 'b'] };
+		expect(withEditedNote(withTags, 'x', [], 'c2').tags).toEqual([]);
+	});
+
+	it('returns a fresh plain tags array, never an alias of the input (a Svelte $state proxy would break postMessage to the SQLite worker)', () => {
+		const uiTags = ['flashcard', 'vokabel'];
+		const updated = withEditedNote(ann, 'x', uiTags, 'c2');
+		expect(updated.tags).toEqual(uiTags);
+		expect(updated.tags).not.toBe(uiTags);
 	});
 });
 

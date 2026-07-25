@@ -4,6 +4,7 @@ import {
   parseColor,
   parseCreateAnnotation,
   parseNote,
+  parseTags,
   toAnnotationSummary
 } from "../../src/domain/annotationRpu.js";
 import type { Annotation } from "../../src/domain/types.js";
@@ -17,6 +18,7 @@ function makeAnnotation(overrides: Partial<Annotation> = {}): Annotation {
     excerpt: "Some highlighted text",
     note: null,
     color: "accent",
+    tags: [],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...overrides
@@ -24,11 +26,11 @@ function makeAnnotation(overrides: Partial<Annotation> = {}): Annotation {
 }
 
 describe("parseCreateAnnotation", () => {
-  it("accepts a valid cfiRange + excerpt with no note, defaulting color to accent", () => {
+  it("accepts a valid cfiRange + excerpt with no note, defaulting color to accent and tags to empty", () => {
     const result = parseCreateAnnotation({ cfiRange: "  cfi-1  ", excerpt: "  Some text  " });
     expect(result).toEqual({
       valid: true,
-      draft: { cfiRange: "cfi-1", excerpt: "Some text", note: null, color: "accent" }
+      draft: { cfiRange: "cfi-1", excerpt: "Some text", note: null, color: "accent", tags: [] }
     });
   });
 
@@ -36,7 +38,7 @@ describe("parseCreateAnnotation", () => {
     const result = parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text", note: "  my note  " });
     expect(result).toEqual({
       valid: true,
-      draft: { cfiRange: "cfi-1", excerpt: "text", note: "my note", color: "accent" }
+      draft: { cfiRange: "cfi-1", excerpt: "text", note: "my note", color: "accent", tags: [] }
     });
   });
 
@@ -44,7 +46,7 @@ describe("parseCreateAnnotation", () => {
     const result = parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text", note: "   " });
     expect(result).toEqual({
       valid: true,
-      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "accent" }
+      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "accent", tags: [] }
     });
   });
 
@@ -52,7 +54,21 @@ describe("parseCreateAnnotation", () => {
     const result = parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text", color: "yellow" });
     expect(result).toEqual({
       valid: true,
-      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "yellow" }
+      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "yellow", tags: [] }
+    });
+  });
+
+  it("accepts and normalizes explicit tags", () => {
+    const result = parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text", tags: ["  #Vocab  ", "Chapter-1"] });
+    expect(result).toEqual({
+      valid: true,
+      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "accent", tags: ["vocab", "chapter-1"] }
+    });
+  });
+
+  it("rejects invalid tags", () => {
+    expect(parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text", tags: "not-an-array" })).toEqual({
+      valid: false
     });
   });
 
@@ -160,6 +176,53 @@ describe("parseColor", () => {
   });
 });
 
+describe("parseTags", () => {
+  it("defaults omitted to an empty array", () => {
+    expect(parseTags(undefined)).toEqual({ valid: true, tags: [] });
+  });
+
+  it("accepts an empty array", () => {
+    expect(parseTags([])).toEqual({ valid: true, tags: [] });
+  });
+
+  it("trims, lowercases, and strips a leading '#' from each tag", () => {
+    expect(parseTags(["  Vocab  ", "#Chapter-1", "  #Spacey  "])).toEqual({
+      valid: true,
+      tags: ["vocab", "chapter-1", "spacey"]
+    });
+  });
+
+  it("drops blank tags (empty or whitespace-only, including a lone '#')", () => {
+    expect(parseTags(["valid", "   ", "", "#"])).toEqual({ valid: true, tags: ["valid"] });
+  });
+
+  it("removes duplicates after normalization", () => {
+    expect(parseTags(["Vocab", "#vocab", " vocab "])).toEqual({ valid: true, tags: ["vocab"] });
+  });
+
+  it("rejects a non-array value", () => {
+    expect(parseTags("not-an-array")).toEqual({ valid: false });
+    expect(parseTags(42)).toEqual({ valid: false });
+    expect(parseTags({})).toEqual({ valid: false });
+    expect(parseTags(null)).toEqual({ valid: false });
+  });
+
+  it("rejects an array containing a non-string item", () => {
+    expect(parseTags(["valid", 42])).toEqual({ valid: false });
+    expect(parseTags([null])).toEqual({ valid: false });
+  });
+
+  it("rejects a tag longer than 40 chars", () => {
+    const tooLong = "a".repeat(41);
+    expect(parseTags([tooLong])).toEqual({ valid: false });
+  });
+
+  it("accepts a tag exactly at the 40 char cap", () => {
+    const atCap = "a".repeat(40);
+    expect(parseTags([atCap])).toEqual({ valid: true, tags: [atCap] });
+  });
+});
+
 describe("authorizeAnnotationAccess", () => {
   it("denies access when annotation is null (not found)", () => {
     expect(authorizeAnnotationAccess(null, "user-1")).toBe(false);
@@ -176,7 +239,7 @@ describe("authorizeAnnotationAccess", () => {
 
 describe("toAnnotationSummary", () => {
   it("projects the public fields, omitting userId", () => {
-    const annotation = makeAnnotation({ note: "a note", color: "blue" });
+    const annotation = makeAnnotation({ note: "a note", color: "blue", tags: ["vocab"] });
     expect(toAnnotationSummary(annotation)).toEqual({
       id: "annotation-1",
       bookId: "book-1",
@@ -184,6 +247,7 @@ describe("toAnnotationSummary", () => {
       excerpt: "Some highlighted text",
       note: "a note",
       color: "blue",
+      tags: ["vocab"],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
     });

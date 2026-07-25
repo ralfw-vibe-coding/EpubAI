@@ -16,6 +16,16 @@ import type { Annotation, Loan, ReadingProgress } from '../../domain/types';
 
 let db: Database | null = null;
 
+/** Parse a stored tags JSON string into a string[], tolerating null/garbage. */
+function parseTags(raw: string | null): string[] {
+	try {
+		const parsed = raw ? JSON.parse(raw) : [];
+		return Array.isArray(parsed) ? parsed : [];
+	} catch {
+		return [];
+	}
+}
+
 /**
  * Add a column to an existing table if it isn't there yet. `CREATE TABLE IF
  * NOT EXISTS` only helps on a brand-new database — installations that already
@@ -90,6 +100,7 @@ async function boot(): Promise<Database> {
 			excerpt TEXT NOT NULL,
 			note TEXT,
 			color TEXT NOT NULL DEFAULT 'accent',
+			tags TEXT NOT NULL DEFAULT '[]',
 			createdAt TEXT NOT NULL,
 			updatedAt TEXT NOT NULL
 		);
@@ -106,6 +117,8 @@ async function boot(): Promise<Database> {
 	// become 'accent' - matching the backend default and keeping them looking
 	// the same as before this change.
 	addColumnIfMissing(database, 'Annotation', "color TEXT NOT NULL DEFAULT 'accent'");
+	// Migration for installations whose Annotation table predates tags.
+	addColumnIfMissing(database, 'Annotation', "tags TEXT NOT NULL DEFAULT '[]'");
 	return database;
 }
 
@@ -177,26 +190,38 @@ const handlers: Record<string, Handler> = {
 	saveAnnotation([annotation]: unknown[]): void {
 		const a = annotation as Annotation;
 		db!.exec({
-			sql: `INSERT INTO Annotation (id, bookId, cfiRange, excerpt, note, color, createdAt, updatedAt)
-			      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			sql: `INSERT INTO Annotation (id, bookId, cfiRange, excerpt, note, color, tags, createdAt, updatedAt)
+			      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			      ON CONFLICT(id) DO UPDATE SET
 			        bookId = excluded.bookId,
 			        cfiRange = excluded.cfiRange,
 			        excerpt = excluded.excerpt,
 			        note = excluded.note,
 			        color = excluded.color,
+			        tags = excluded.tags,
 			        createdAt = excluded.createdAt,
 			        updatedAt = excluded.updatedAt`,
-			bind: [a.id, a.bookId, a.cfiRange, a.excerpt, a.note, a.color, a.createdAt, a.updatedAt]
+			bind: [
+				a.id,
+				a.bookId,
+				a.cfiRange,
+				a.excerpt,
+				a.note,
+				a.color,
+				JSON.stringify(a.tags ?? []),
+				a.createdAt,
+				a.updatedAt
+			]
 		});
 	},
 	allAnnotationsForBook([bookId]: unknown[]): Annotation[] {
-		return db!.exec({
-			sql: 'SELECT id, bookId, cfiRange, excerpt, note, color, createdAt, updatedAt FROM Annotation WHERE bookId = ? ORDER BY createdAt',
+		const rows = db!.exec({
+			sql: 'SELECT id, bookId, cfiRange, excerpt, note, color, tags, createdAt, updatedAt FROM Annotation WHERE bookId = ? ORDER BY createdAt',
 			bind: [bookId as string],
 			rowMode: 'object',
 			returnValue: 'resultRows'
-		}) as unknown as Annotation[];
+		}) as unknown as (Omit<Annotation, 'tags'> & { tags: string })[];
+		return rows.map((r) => ({ ...r, tags: parseTags(r.tags) }));
 	},
 	annotationCountsByBook(): { bookId: string; highlightCount: number; noteCount: number }[] {
 		return db!.exec({
@@ -220,9 +245,9 @@ const handlers: Record<string, Handler> = {
 			db!.exec('DELETE FROM Annotation');
 			for (const a of all) {
 				db!.exec({
-					sql: `INSERT INTO Annotation (id, bookId, cfiRange, excerpt, note, color, createdAt, updatedAt)
-					      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-					bind: [a.id, a.bookId, a.cfiRange, a.excerpt, a.note, a.color, a.createdAt, a.updatedAt]
+					sql: `INSERT INTO Annotation (id, bookId, cfiRange, excerpt, note, color, tags, createdAt, updatedAt)
+					      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					bind: [a.id, a.bookId, a.cfiRange, a.excerpt, a.note, a.color, JSON.stringify(a.tags ?? []), a.createdAt, a.updatedAt]
 				});
 			}
 			db!.exec('COMMIT');

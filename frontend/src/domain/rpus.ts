@@ -41,9 +41,18 @@ export function isBookLocal(loans: Loan[], bookId: string): boolean {
  * cfiRange/excerpt/id/createdAt are immutable — they identify what was
  * highlighted. An empty/whitespace-only note collapses to null ("just marked").
  */
-export function withEditedNote(annotation: Annotation, note: string | null, now: string): Annotation {
+export function withEditedNote(
+	annotation: Annotation,
+	note: string | null,
+	tags: string[],
+	now: string
+): Annotation {
 	const trimmed = note?.trim() ?? '';
-	return { ...annotation, note: trimmed === '' ? null : trimmed, updatedAt: now };
+	// `tags` is copied into a fresh plain array, never aliased: callers pass UI
+	// state here (a Svelte 5 $state proxy in the reader), and the result is
+	// posted to the SQLite worker - postMessage cannot structured-clone a
+	// proxy (DataCloneError), which made every note save from the UI hang.
+	return { ...annotation, note: trimmed === '' ? null : trimmed, tags: [...tags], updatedAt: now };
 }
 
 /**
@@ -52,7 +61,10 @@ export function withEditedNote(annotation: Annotation, note: string | null, now:
  * PATCH accepts either/both/neither field on its own.
  */
 export function withEditedColor(annotation: Annotation, color: AnnotationColor, now: string): Annotation {
-	return { ...annotation, color, updatedAt: now };
+	// Same defensive copy as withEditedNote: `annotation` may be a Svelte 5
+	// $state proxy (the reader's annotations array), and a plain spread keeps
+	// the *nested* tags array proxied - which postMessage can't clone.
+	return { ...annotation, color, tags: [...annotation.tags], updatedAt: now };
 }
 
 /** Enrich a catalog book with its local-loan status and reading progress. */

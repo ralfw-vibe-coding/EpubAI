@@ -10,7 +10,7 @@ export interface AuthVerifyCodeInput {
 }
 
 export type AuthVerifyCodeBody =
-  | { token: string; userId: string; translationLanguage: string }
+  | { token: string; userId: string; translationLanguage: string; defaultFlashcardColor: string }
   | { error: string };
 
 /**
@@ -34,7 +34,12 @@ export async function authVerifyCode(input: AuthVerifyCodeInput): Promise<Reacto
   if (otpCheck.isBackdoorCode(normalizedCode)) {
     const user = await userRepo.findOrCreateByEmail(email);
     const token = jwtProvider.sign({ userId: user.id });
-    return ok(200, { token, userId: user.id, translationLanguage: user.translationLanguage });
+    return ok(200, {
+      token,
+      userId: user.id,
+      translationLanguage: user.translationLanguage,
+      defaultFlashcardColor: user.defaultFlashcardColor
+    });
   }
 
   const user = await userRepo.findByEmail(email);
@@ -51,5 +56,10 @@ export async function authVerifyCode(input: AuthVerifyCodeInput): Promise<Reacto
   await userRepo.clearOtp(user.id);
   const token = jwtProvider.sign({ userId: user.id });
 
-  return ok(200, { token, userId: user.id, translationLanguage: user.translationLanguage });
+  return ok(200, {
+    token,
+    userId: user.id,
+    translationLanguage: user.translationLanguage,
+    defaultFlashcardColor: user.defaultFlashcardColor
+  });
 }

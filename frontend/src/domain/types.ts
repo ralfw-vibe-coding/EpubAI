@@ -87,6 +87,12 @@ export interface Annotation {
 	excerpt: string;
 	note: string | null;
 	color: AnnotationColor;
+	/**
+	 * Free-form user tags (e.g. `flashcard`). Always present (empty array if
+	 * none), lowercase, stored without a leading `#` — the `#` is a display-only
+	 * convention.
+	 */
+	tags: string[];
 	createdAt: string;
 	updatedAt: string;
 }

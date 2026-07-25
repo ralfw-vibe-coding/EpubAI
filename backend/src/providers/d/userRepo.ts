@@ -5,29 +5,35 @@ interface UserRow {
   id: string;
   email: string;
   translation_language: string;
+  default_flashcard_color: string;
   created_at: Date;
 }
+
+const SELECT_FIELDS = "id, email, translation_language, default_flashcard_color, created_at";
 
 function toUser(row: UserRow): User {
   return {
     id: row.id,
     email: row.email,
     translationLanguage: row.translation_language,
+    defaultFlashcardColor: row.default_flashcard_color,
     createdAt: row.created_at.toISOString()
   };
 }
 
+export async function findById(userId: string): Promise<User | null> {
+  const result = await pool.query<UserRow>(`select ${SELECT_FIELDS} from "user" where id = $1`, [userId]);
+  return result.rows[0] ? toUser(result.rows[0]) : null;
+}
+
 export async function findByEmail(email: string): Promise<User | null> {
-  const result = await pool.query<UserRow>(
-    'select id, email, translation_language, created_at from "user" where email = $1',
-    [email]
-  );
+  const result = await pool.query<UserRow>(`select ${SELECT_FIELDS} from "user" where email = $1`, [email]);
   return result.rows[0] ? toUser(result.rows[0]) : null;
 }
 
 export async function insert(email: string): Promise<User> {
   const result = await pool.query<UserRow>(
-    'insert into "user" (email) values ($1) returning id, email, translation_language, created_at',
+    `insert into "user" (email) values ($1) returning ${SELECT_FIELDS}`,
     [email]
   );
   return toUser(result.rows[0]);
@@ -39,7 +45,7 @@ export async function findOrCreateByEmail(email: string): Promise<User> {
   // Race-safe against concurrent logins for the same brand-new address.
   const result = await pool.query<UserRow>(
     'insert into "user" (email) values ($1) on conflict (email) do update set email = excluded.email ' +
-      "returning id, email, translation_language, created_at",
+      `returning ${SELECT_FIELDS}`,
     [email]
   );
   return toUser(result.rows[0]);
@@ -47,6 +53,10 @@ export async function findOrCreateByEmail(email: string): Promise<User> {
 
 export async function updateTranslationLanguage(userId: string, lang: string): Promise<void> {
   await pool.query('update "user" set translation_language = $1 where id = $2', [lang, userId]);
+}
+
+export async function updateDefaultFlashcardColor(userId: string, color: string): Promise<void> {
+  await pool.query('update "user" set default_flashcard_color = $1 where id = $2', [color, userId]);
 }
 
 export interface StoredOtp {

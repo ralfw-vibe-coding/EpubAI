@@ -48,6 +48,7 @@ export function createDProvider(): DProvider {
 
 	function becomeLeader() {
 		isLeader = true;
+		console.info('[dprovider] Diese Seite ist der DB-Leader.');
 		worker = new SqliteWorker();
 		worker.onmessage = (event: MessageEvent<{ id: number; result?: unknown; error?: string }>) => {
 			const { id, result, error } = event.data;
@@ -101,6 +102,9 @@ export function createDProvider(): DProvider {
 			}
 			// Someone else already holds it - queue to take over once they
 			// release it (their tab closing releases the lock automatically).
+			console.info(
+				'[dprovider] Ein anderer Kontext (Tab/Fenster/PWA-Instanz) ist DB-Leader - Aufrufe werden dorthin weitergeleitet.'
+			);
 			navigator.locks.request(LOCK_NAME, () => {
 				becomeLeader();
 				return new Promise(() => {});
@@ -113,10 +117,38 @@ export function createDProvider(): DProvider {
 	function call<T>(method: string, ...args: unknown[]): Promise<T> {
 		const id = ++seq;
 		return new Promise<T>((resolve, reject) => {
-			pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+			// Diagnostic watchdog: a call that gets no answer would otherwise hang
+			// with zero trace. Log which method is stuck and this page's relay
+			// role - a "Follower" here means some *other* context (hidden tab,
+			// PWA window, frozen background page) holds the DB leadership and
+			// isn't answering, which is invisible from the UI.
+			const watchdog = setTimeout(() => {
+				console.warn(
+					`[dprovider] '${method}' wartet seit 3s auf eine Antwort vom DB-Worker ` +
+						`(Rolle dieser Seite: ${isLeader ? 'Leader' : 'Follower'}, offene Aufrufe: ${pending.size})`
+				);
+			}, 3000);
+			pending.set(id, {
+				resolve: (v: unknown) => {
+					clearTimeout(watchdog);
+					resolve(v as T);
+				},
+				reject: (e: Error) => {
+					clearTimeout(watchdog);
+					reject(e);
+				}
+			});
 			void roleReady.then(() => {
-				if (isLeader) dispatchToWorker(tabId, id, method, args);
-				else channel.postMessage({ type: 'request', tabId, id, method, args });
+				try {
+					if (isLeader) dispatchToWorker(tabId, id, method, args);
+					else channel.postMessage({ type: 'request', tabId, id, method, args });
+				} catch (error) {
+					// postMessage can throw synchronously (e.g. DataCloneError when an
+					// arg isn't structured-cloneable, like a Svelte $state proxy). The
+					// promise was already registered in `pending` - without this, it
+					// would never settle and the call would hang silently forever.
+					resolveLocal(id, undefined, error instanceof Error ? error.message : String(error));
+				}
 			});
 		});
 	}

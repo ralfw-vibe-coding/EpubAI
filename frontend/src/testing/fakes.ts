@@ -151,6 +151,7 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		excerpt: 'Ein markierter Satz',
 		note: null,
 		color: 'accent',
+		tags: [],
 		createdAt: '2026-07-13T00:00:00.000Z',
 		updatedAt: '2026-07-13T00:00:00.000Z'
 	};
@@ -172,7 +173,12 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 
 	const impl: HttpClient = {
 		requestLoginCode: record('requestLoginCode', { ok: true }),
-		verifyLoginCode: record('verifyLoginCode', { token: 'tok', userId: 'u1', translationLanguage: 'de' }),
+		verifyLoginCode: record('verifyLoginCode', {
+			token: 'tok',
+			userId: 'u1',
+			translationLanguage: 'de',
+			defaultFlashcardColor: 'yellow'
+		}),
 		getBooks: record('getBooks', [defaultBook]),
 		getBook: record('getBook', defaultBook),
 		createLoan: record('createLoan', defaultLoan),
@@ -188,7 +194,10 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		deleteAnnotation: record('deleteAnnotation', undefined as void),
 		translateSelection: record('translateSelection', 'Übersetzter Text'),
 		lookupSelection: record('lookupSelection', 'Erklärung des Begriffs'),
-		updateAccountSettings: record('updateAccountSettings', 'de'),
+		updateAccountSettings: record('updateAccountSettings', {
+			translationLanguage: 'de',
+			defaultFlashcardColor: 'yellow'
+		}),
 		chatAboutBook: record('chatAboutBook', defaultChatReply),
 		uploadDossier: record('uploadDossier', { ...defaultBook, hasDossier: true }),
 		deleteDossier: record('deleteDossier', undefined as void),

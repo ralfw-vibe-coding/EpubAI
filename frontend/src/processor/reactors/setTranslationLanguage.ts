@@ -11,7 +11,7 @@ export async function setTranslationLanguage(
 	deps: Pick<ReactorDeps, 'http' | 'auth'>,
 	lang: string
 ): Promise<void> {
-	const translationLanguage = await deps.http.updateAccountSettings(lang);
+	const { translationLanguage } = await deps.http.updateAccountSettings({ translationLanguage: lang });
 	const session = deps.auth.get();
 	if (session) deps.auth.set({ ...session, translationLanguage });
 }

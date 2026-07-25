@@ -10,9 +10,9 @@ export async function deleteAnnotation(
 	id: string
 ): Promise<void> {
 	await deps.domain.removeAnnotation(id);
-	try {
-		await deps.http.deleteAnnotation(id);
-	} catch {
-		// Local-first best effort; ignore transient failures.
-	}
+	// Not awaited - see updateAnnotationNote: the caller settles with the local
+	// delete so the UI can't be blocked by a slow backend (idle-suspended Neon).
+	void deps.http.deleteAnnotation(id).catch(() => {
+		// Local-first best effort; ignore push failures.
+	});
 }

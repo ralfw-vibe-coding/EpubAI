@@ -53,25 +53,26 @@ describe('createHttpClient', () => {
 	it('verifies a code and returns the session', async () => {
 		const fetchMock = vi
 			.fn()
-			.mockResolvedValue(jsonResponse({ token: 't', userId: 'u', translationLanguage: 'de' }));
+			.mockResolvedValue(jsonResponse({ token: 't', userId: 'u', translationLanguage: 'de', defaultFlashcardColor: 'yellow' }));
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
 		expect(await http.verifyLoginCode('a@b.de', 'hibiskus')).toEqual({
 			token: 't',
 			userId: 'u',
-			translationLanguage: 'de'
+			translationLanguage: 'de',
+			defaultFlashcardColor: 'yellow'
 		});
 	});
 
 	it('strips a trailing slash from the base URL', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ books: [] }));
-		const http = createHttpClient('http://api/', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }), fetchMock);
+		const http = createHttpClient('http://api/', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de', defaultFlashcardColor: 'yellow' }), fetchMock);
 		await http.getBooks();
 		expect(fetchMock.mock.calls[0][0]).toBe('http://api/books');
 	});
 
 	it('attaches the bearer token when authenticated', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ books: [] }));
-		const http = createHttpClient('http://api', fakeAuthStore({ token: 'abc', userId: 'u', translationLanguage: 'de' }), fetchMock);
+		const http = createHttpClient('http://api', fakeAuthStore({ token: 'abc', userId: 'u', translationLanguage: 'de', defaultFlashcardColor: 'yellow' }), fetchMock);
 		await http.getBooks();
 		expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer abc');
 	});
@@ -101,7 +102,7 @@ describe('createHttpClient', () => {
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValue(jsonResponse({ id: 'l1', bookId: 'b1', fileHash: 'h', borrowedAt: 't' }));
-		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }), fetchMock);
+		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de', defaultFlashcardColor: 'yellow' }), fetchMock);
 		await http.createLoan('b1', 'dev1');
 		const [url, opts] = fetchMock.mock.calls[0];
 		expect(url).toBe('http://api/loans');
@@ -111,7 +112,7 @@ describe('createHttpClient', () => {
 	it('ends a loan with bookId in the URL and deviceId in the body', async () => {
 		const res = { ok: true, status: 204, statusText: 'No Content', json: async () => null } as unknown as Response;
 		const fetchMock = vi.fn().mockResolvedValue(res);
-		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }), fetchMock);
+		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de', defaultFlashcardColor: 'yellow' }), fetchMock);
 		await http.returnLoan('b1', 'dev1');
 
 		const [url, opts] = fetchMock.mock.calls[0];
@@ -167,7 +168,7 @@ describe('createHttpClient', () => {
 		const { instance, headers, getCall, getSentBody } = fakeXhr(201, book);
 		const http = createHttpClient(
 			'http://api',
-			fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }),
+			fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de', defaultFlashcardColor: 'yellow' }),
 			fetch,
 			() => instance
 		);
@@ -275,13 +276,14 @@ describe('createHttpClient', () => {
 		excerpt: 'markiert',
 		note: null,
 		color: 'accent',
+		tags: [],
 		createdAt: 't',
 		updatedAt: 't'
 	};
 
 	it('unwraps the annotations array from GET /annotations', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ annotations: [annotation] }));
-		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' }), fetchMock);
+		const http = createHttpClient('http://api', fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de', defaultFlashcardColor: 'yellow' }), fetchMock);
 		expect(await http.getAllAnnotations()).toEqual([annotation]);
 		expect(fetchMock.mock.calls[0][0]).toBe('http://api/annotations');
 	});
@@ -433,16 +435,29 @@ describe('createHttpClient', () => {
 		await expect(http.lookupSelection('Begriff', 'de')).rejects.toBeInstanceOf(HttpError);
 	});
 
-	it('updates the account translation language', async () => {
-		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ translationLanguage: 'fr' }));
+	it('updates the account settings and returns the full current settings', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ translationLanguage: 'fr', defaultFlashcardColor: 'blue' }));
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
-		const res = await http.updateAccountSettings('fr');
+		const res = await http.updateAccountSettings({ translationLanguage: 'fr' });
 
-		expect(res).toBe('fr');
+		expect(res).toEqual({ translationLanguage: 'fr', defaultFlashcardColor: 'blue' });
 		const [url, opts] = fetchMock.mock.calls[0];
 		expect(url).toBe('http://api/account');
 		expect(opts.method).toBe('PATCH');
 		expect(JSON.parse(opts.body)).toEqual({ translationLanguage: 'fr' });
+	});
+
+	it('updates the default flashcard color, returning the full current settings', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ translationLanguage: 'de', defaultFlashcardColor: 'green' }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.updateAccountSettings({ defaultFlashcardColor: 'green' });
+
+		expect(res).toEqual({ translationLanguage: 'de', defaultFlashcardColor: 'green' });
+		expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ defaultFlashcardColor: 'green' });
 	});
 
 	it('throws on a failed updateAccountSettings', async () => {
@@ -450,7 +465,9 @@ describe('createHttpClient', () => {
 			.fn()
 			.mockResolvedValue(jsonResponse({ error: 'invalid_input' }, { ok: false, status: 400 }));
 		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
-		await expect(http.updateAccountSettings('xx')).rejects.toBeInstanceOf(HttpError);
+		await expect(http.updateAccountSettings({ translationLanguage: 'xx' })).rejects.toBeInstanceOf(
+			HttpError
+		);
 	});
 
 	it('chats about a book, sending the full history plus selection and progress', async () => {

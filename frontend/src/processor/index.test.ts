@@ -40,13 +40,23 @@ describe('processor reactors', () => {
 	it('verifyLoginCode stores the session', async () => {
 		const { deps, auth } = makeDeps();
 		const session = await createProcessor(deps).verifyLoginCode('a@b.de', 'hibiskus');
-		expect(session).toEqual({ token: 'tok', userId: 'u1', translationLanguage: 'de' });
+		expect(session).toEqual({
+			token: 'tok',
+			userId: 'u1',
+			translationLanguage: 'de',
+			defaultFlashcardColor: 'yellow'
+		});
 		expect(auth.get()).toEqual(session);
 	});
 
 	it('signOut clears the session', async () => {
 		const { deps, auth } = makeDeps({
-			auth: fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de' })
+			auth: fakeAuthStore({
+				token: 't',
+				userId: 'u',
+				translationLanguage: 'de',
+				defaultFlashcardColor: 'yellow'
+			})
 		});
 		await createProcessor(deps).signOut();
 		expect(auth.get()).toBeNull();
@@ -103,6 +113,7 @@ describe('processor reactors', () => {
 			excerpt: 'x',
 			note: null,
 			color: 'accent',
+			tags: [],
 			createdAt: 'c1',
 			updatedAt: 'c1'
 		});
@@ -113,6 +124,7 @@ describe('processor reactors', () => {
 			excerpt: 'y',
 			note: 'Eine Notiz',
 			color: 'accent',
+			tags: [],
 			createdAt: 'c2',
 			updatedAt: 'c2'
 		});
@@ -132,6 +144,7 @@ describe('processor reactors', () => {
 			excerpt: 'x',
 			note: null,
 			color: 'accent',
+			tags: [],
 			createdAt: 'c1',
 			updatedAt: 'c1'
 		});
@@ -142,6 +155,7 @@ describe('processor reactors', () => {
 			excerpt: 'y',
 			note: 'Eine Notiz',
 			color: 'accent',
+			tags: [],
 			createdAt: 'c2',
 			updatedAt: 'c2'
 		});
@@ -336,6 +350,7 @@ describe('processor reactors', () => {
 			excerpt: 'markiert',
 			note: null,
 			color: 'accent',
+			tags: [],
 			createdAt: '2026-07-13T00:00:00.000Z',
 			updatedAt: '2026-07-13T00:00:00.000Z'
 		};
@@ -385,14 +400,33 @@ describe('processor reactors', () => {
 			const { deps, http } = makeDeps();
 			await createProcessor(deps).createAnnotation('b1', 'cfi', 'text', 'meine Notiz');
 			const call = http.calls.find((c) => c.method === 'createAnnotation');
-			expect(call?.args).toEqual(['b1', 'cfi', 'text', 'meine Notiz', undefined]);
+			expect(call?.args).toEqual(['b1', 'cfi', 'text', 'meine Notiz', undefined, undefined]);
 		});
 
 		it('createAnnotation forwards an optional color to http', async () => {
 			const { deps, http } = makeDeps();
 			await createProcessor(deps).createAnnotation('b1', 'cfi', 'text', undefined, 'blue');
 			const call = http.calls.find((c) => c.method === 'createAnnotation');
-			expect(call?.args).toEqual(['b1', 'cfi', 'text', undefined, 'blue']);
+			expect(call?.args).toEqual(['b1', 'cfi', 'text', undefined, 'blue', undefined]);
+		});
+
+		it('createAnnotation forwards optional tags to http (the flashcard flow)', async () => {
+			const { deps, http } = makeDeps();
+			await createProcessor(deps).createAnnotation('b1', 'cfi', 'text', 'Übersetzung', 'yellow', [
+				'flashcard'
+			]);
+			const call = http.calls.find((c) => c.method === 'createAnnotation');
+			expect(call?.args).toEqual(['b1', 'cfi', 'text', 'Übersetzung', 'yellow', ['flashcard']]);
+		});
+
+		it('updateAnnotationNote forwards edited tags to http', async () => {
+			const { deps, http, domain } = makeDeps();
+			await domain.saveAnnotation(created);
+			const updated = await createProcessor(deps).updateAnnotationNote(created, 'Notiz', ['vokabel']);
+
+			expect(updated.tags).toEqual(['vokabel']);
+			const call = http.calls.find((c) => c.method === 'updateAnnotationNote');
+			expect(call?.args).toEqual(['a1', 'Notiz', ['vokabel']]);
 		});
 
 		it('updateAnnotationNote updates locally first and pushes to the backend', async () => {
@@ -404,7 +438,7 @@ describe('processor reactors', () => {
 			expect(updated.updatedAt).toBe('2026-07-13T12:00:00.000Z');
 			expect((await domain.annotationsFor('b1'))[0].note).toBe('Notiz');
 			const call = http.calls.find((c) => c.method === 'updateAnnotationNote');
-			expect(call?.args).toEqual(['a1', 'Notiz']);
+			expect(call?.args).toEqual(['a1', 'Notiz', []]);
 		});
 
 		it('updateAnnotationNote keeps the local edit even if the backend push fails', async () => {
@@ -524,22 +558,69 @@ describe('processor reactors', () => {
 			const { deps, http } = makeDeps();
 			await createProcessor(deps).setTranslationLanguage('fr');
 			const call = http.calls.find((c) => c.method === 'updateAccountSettings');
-			expect(call?.args).toEqual(['fr']);
+			expect(call?.args).toEqual([{ translationLanguage: 'fr' }]);
 		});
 
 		it('setTranslationLanguage updates the cached session with the confirmed value', async () => {
-			const http = fakeHttp({ updateAccountSettings: async () => 'fr' });
-			const auth = fakeAuthStore({ token: 't', userId: 'u1', translationLanguage: 'de' });
+			const http = fakeHttp({
+				updateAccountSettings: async () => ({ translationLanguage: 'fr', defaultFlashcardColor: 'yellow' })
+			});
+			const auth = fakeAuthStore({
+				token: 't',
+				userId: 'u1',
+				translationLanguage: 'de',
+				defaultFlashcardColor: 'yellow'
+			});
 			const { deps } = makeDeps({ http: http.impl, auth });
 			await createProcessor(deps).setTranslationLanguage('fr');
 
-			expect(auth.get()).toEqual({ token: 't', userId: 'u1', translationLanguage: 'fr' });
+			expect(auth.get()).toEqual({
+				token: 't',
+				userId: 'u1',
+				translationLanguage: 'fr',
+				defaultFlashcardColor: 'yellow'
+			});
 		});
 
 		it('setTranslationLanguage does nothing to the session when unauthenticated', async () => {
 			const auth = fakeAuthStore(null);
 			const { deps } = makeDeps({ auth });
 			await createProcessor(deps).setTranslationLanguage('fr');
+			expect(auth.get()).toBeNull();
+		});
+
+		it('setDefaultFlashcardColor delegates to http.updateAccountSettings with the chosen color', async () => {
+			const { deps, http } = makeDeps();
+			await createProcessor(deps).setDefaultFlashcardColor('blue');
+			const call = http.calls.find((c) => c.method === 'updateAccountSettings');
+			expect(call?.args).toEqual([{ defaultFlashcardColor: 'blue' }]);
+		});
+
+		it('setDefaultFlashcardColor updates the cached session with the confirmed value', async () => {
+			const http = fakeHttp({
+				updateAccountSettings: async () => ({ translationLanguage: 'de', defaultFlashcardColor: 'blue' })
+			});
+			const auth = fakeAuthStore({
+				token: 't',
+				userId: 'u1',
+				translationLanguage: 'de',
+				defaultFlashcardColor: 'yellow'
+			});
+			const { deps } = makeDeps({ http: http.impl, auth });
+			await createProcessor(deps).setDefaultFlashcardColor('blue');
+
+			expect(auth.get()).toEqual({
+				token: 't',
+				userId: 'u1',
+				translationLanguage: 'de',
+				defaultFlashcardColor: 'blue'
+			});
+		});
+
+		it('setDefaultFlashcardColor does nothing to the session when unauthenticated', async () => {
+			const auth = fakeAuthStore(null);
+			const { deps } = makeDeps({ auth });
+			await createProcessor(deps).setDefaultFlashcardColor('blue');
 			expect(auth.get()).toBeNull();
 		});
 

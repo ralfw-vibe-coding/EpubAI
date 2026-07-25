@@ -22,8 +22,14 @@ export async function buildServer() {
     }
   });
 
-  app.setErrorHandler((error: FastifyError, _request, reply) => {
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    // app.log.error alone (pino, buffered/async stdout) has been silently
+    // losing 500s on Deno Deploy - the serverless isolate freezes right after
+    // the response is sent, before pino's write flushes. console.error is
+    // synchronous and is what Deno Deploy's own log capture actually hooks,
+    // so it's the belt-and-suspenders that makes errors observable there.
     app.log.error(error);
+    console.error(`[error] ${request.method} ${request.url} ->`, error);
     const status = error.statusCode && error.statusCode >= 400 ? error.statusCode : 500;
     reply.code(status).send({ error: status === 500 ? "internal_error" : error.message });
   });

@@ -112,3 +112,15 @@ alter table annotation add column if not exists color text not null default 'acc
 alter table annotation drop constraint if exists annotation_color_check;
 alter table annotation add constraint annotation_color_check
   check (color in ('accent', 'orange', 'yellow', 'green', 'blue', 'purple'));
+
+-- Free-form tags on an annotation (e.g. for the "remember as vocabulary
+-- flashcard" feature and tag-based filtering in the book-details UI).
+-- Stored without a leading '#' - that's a display-only convention.
+alter table annotation add column if not exists tags text[] not null default '{}';
+
+-- Account setting: default color for flashcard notes, geräteübergreifend,
+-- mirrors translation_language above. Reuses the same 6 highlight color slugs.
+alter table "user" add column if not exists default_flashcard_color text not null default 'yellow';
+alter table "user" drop constraint if exists user_default_flashcard_color_check;
+alter table "user" add constraint user_default_flashcard_color_check
+  check (default_flashcard_color in ('accent', 'orange', 'yellow', 'green', 'blue', 'purple'));

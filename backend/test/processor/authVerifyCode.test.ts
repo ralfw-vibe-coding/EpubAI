@@ -30,6 +30,7 @@ describe("authVerifyCode reactor", () => {
       id: "user-1",
       email: "someone@example.com",
       translationLanguage: "de",
+      defaultFlashcardColor: "yellow",
       createdAt: "2026-01-01T00:00:00.000Z"
     });
     (userRepo.getOtp as ReturnType<typeof vi.fn>).mockResolvedValue(STORED_OTP);
@@ -42,6 +43,7 @@ describe("authVerifyCode reactor", () => {
         id: "user-9",
         email: "brand-new@example.com",
         translationLanguage: "de",
+        defaultFlashcardColor: "yellow",
         createdAt: "2026-01-01T00:00:00.000Z"
       });
       (jwtProvider.sign as ReturnType<typeof vi.fn>).mockReturnValue("signed.jwt.token");
@@ -50,7 +52,12 @@ describe("authVerifyCode reactor", () => {
 
       expect(result).toEqual({
         status: 200,
-        body: { token: "signed.jwt.token", userId: "user-9", translationLanguage: "de" }
+        body: {
+          token: "signed.jwt.token",
+          userId: "user-9",
+          translationLanguage: "de",
+          defaultFlashcardColor: "yellow"
+        }
       });
       expect(otpCheck.isBackdoorCode).toHaveBeenCalledWith("TESTOTP123");
       expect(userRepo.findOrCreateByEmail).toHaveBeenCalledWith("brand-new@example.com");
@@ -69,7 +76,12 @@ describe("authVerifyCode reactor", () => {
 
     expect(result).toEqual({
       status: 200,
-      body: { token: "signed.jwt.token", userId: "user-1", translationLanguage: "de" }
+      body: {
+        token: "signed.jwt.token",
+        userId: "user-1",
+        translationLanguage: "de",
+        defaultFlashcardColor: "yellow"
+      }
     });
     expect(otpCheck.verifyOtp).toHaveBeenCalledWith("TESTOTP123", STORED_OTP, expect.any(Date));
     expect(userRepo.clearOtp).toHaveBeenCalledWith("user-1");

@@ -3,6 +3,7 @@ import type { BookSummary } from "../domain/types.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
 import * as bookFileRepo from "../providers/d/bookFileRepo.js";
 import * as r2 from "../providers/x/r2.js";
+import { presignCoverUrl } from "./shared/coverUrl.js";
 import {
   parseEpub,
   extractFullText,
@@ -140,6 +141,6 @@ export async function uploadEpub(
     sizeBytes: input.fileBuffer.length
   });
 
-  const coverUrl = book.coverUrl ? await r2.getPresignedUrl(book.coverUrl) : null;
+  const coverUrl = await presignCoverUrl(book);
   return ok(201, toBookSummary(book, coverUrl));
 }

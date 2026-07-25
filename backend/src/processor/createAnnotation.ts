@@ -11,6 +11,7 @@ export interface CreateAnnotationInput {
   excerpt?: unknown;
   note?: unknown;
   color?: unknown;
+  tags?: unknown;
 }
 
 export type CreateAnnotationBody = AnnotationSummary | { error: string };

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick } from 'svelte';
-	import { slide } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import ePub, { type Book, type NavItem, type Rendition } from 'epubjs';
@@ -17,12 +17,16 @@
 		Check,
 		Languages,
 		BookOpenText,
-		MessagesSquare
+		MessagesSquare,
+		BookmarkPlus,
+		Eye,
+		Pencil
 	} from 'lucide-svelte';
 	import type { Annotation, AnnotationColor } from '../../../domain/types';
 	import type { ChatMessage } from '../../../processor/ports';
 	import { getProcessor, getSession, isAuthenticated } from '../../../portal/runtime';
 	import { colorHex, HIGHLIGHT_COLORS, highlightStyles } from './colors';
+	import { normalizeTag } from './tags';
 	import { isSwipeGesture } from './swipe';
 	import { AVAILABLE_LANGUAGES } from './languages';
 	import {
@@ -105,6 +109,13 @@
 	let selection = $state<{ cfiRange: string; excerpt: string } | null>(null);
 	let editing = $state<Annotation | null>(null);
 	let noteDraft = $state('');
+	// Free-form tag chips being edited alongside the note (the same `#flashcard`
+	// mechanism, user-editable for any note). `tagInput` is the pending text.
+	let noteDraftTags = $state<string[]>([]);
+	let tagInput = $state('');
+	// Note editor: preview (rendered Markdown) vs edit (raw textarea). Defaults to
+	// preview only when reopening a pre-existing note that already has text.
+	let notePreviewMode = $state(false);
 	let annotationError = $state<string | null>(null);
 	let annotationErrorTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -118,6 +129,8 @@
 	// translation target language picked in Settings. `aiResult` drives the
 	// bottom sheet showing the (loading/error/finished) result of either call.
 	let translationLanguage = $state('de');
+	// Account-level default highlight color for vocabulary flashcards (Settings).
+	let flashcardColor = $state<AnnotationColor>('yellow');
 	let aiResult = $state<{
 		kind: 'translate' | 'lookup';
 		loading: boolean;
@@ -131,6 +144,10 @@
 	// we authored ourselves.
 	let aiResultHtml = $derived(
 		aiResult?.text ? DOMPurify.sanitize(marked.parse(aiResult.text, { async: false })) : ''
+	);
+	// The note editor's Markdown preview (annotation notes are Markdown too).
+	let noteDraftHtml = $derived(
+		noteDraft.trim() ? DOMPurify.sanitize(marked.parse(noteDraft, { async: false })) : ''
 	);
 
 	async function translateExcerpt() {
@@ -345,18 +362,137 @@
 		}
 	}
 
-	function openNoteEditor(a: Annotation) {
-		editing = a;
-		noteDraft = a.note ?? '';
+	// Tracks the note/tags as last saved (or as loaded), so the Speichern button
+	// can stay disabled until there's actually something new to save - that
+	// disabled state is itself the "did my last save take?" feedback the button
+	// otherwise didn't give.
+	let originalNoteDraft = $state('');
+	let originalNoteDraftTags = $state<string[]>([]);
+	let savingNote = $state(false);
+	let noteJustSaved = $state(false);
+	let noteSavedFlashTimer: ReturnType<typeof setTimeout> | null = null;
+	const NOTE_SAVED_FLASH_MS = 1500;
+	// The local save (SQLite-via-OPFS-worker) normally completes in well under a
+	// second; if the worker connection is wedged (e.g. a stale leader tab), the
+	// call can otherwise hang forever with the button stuck on "Speichert…" and
+	// no way to know it failed. Cap it so a stuck save surfaces as an error.
+	const SAVE_TIMEOUT_MS = 5000;
+
+	function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+		return Promise.race([
+			promise,
+			new Promise<T>((_, reject) => setTimeout(() => reject(new Error('save timed out')), ms))
+		]);
 	}
 
+	function sameTags(a: string[], b: string[]): boolean {
+		if (a.length !== b.length) return false;
+		const sortedA = [...a].sort();
+		const sortedB = [...b].sort();
+		return sortedA.every((t, i) => t === sortedB[i]);
+	}
+
+	let noteDirty = $derived(
+		noteDraft.trim() !== originalNoteDraft.trim() || !sameTags(noteDraftTags, originalNoteDraftTags)
+	);
+
+	function openNoteEditor(a: Annotation, justCreated = false) {
+		editing = a;
+		noteDraft = a.note ?? '';
+		noteDraftTags = [...a.tags];
+		originalNoteDraft = noteDraft;
+		originalNoteDraftTags = [...a.tags];
+		tagInput = '';
+		noteJustSaved = false;
+		if (noteSavedFlashTimer) clearTimeout(noteSavedFlashTimer);
+		// Land in the rendered preview only when reopening a pre-existing note that
+		// already has text; a just-created note (or an empty one) opens raw.
+		notePreviewMode = !justCreated && a.note !== null && a.note.trim() !== '';
+	}
+
+	function addTagFromInput() {
+		const tag = normalizeTag(tagInput);
+		if (tag && !noteDraftTags.includes(tag)) noteDraftTags = [...noteDraftTags, tag];
+		tagInput = '';
+	}
+
+	function removeNoteTag(tag: string) {
+		noteDraftTags = noteDraftTags.filter((t) => t !== tag);
+	}
+
+	/**
+	 * Saving no longer closes the sheet (matches changeHighlightColor, which
+	 * also saves in place) - the Speichern button disabling itself, plus the
+	 * brief "Gespeichert" flash, are the confirmation that the click did
+	 * something. A failure now surfaces an error instead of leaving the editor
+	 * looking unchanged with no clue whether the save actually happened.
+	 */
 	async function saveNote() {
-		if (!editing) return;
+		if (!editing || !noteDirty || savingNote) return;
 		const a = editing;
 		const note = noteDraft.trim() ? noteDraft.trim() : null;
-		const updated = await getProcessor().updateAnnotationNote(a, note);
-		annotations = annotations.map((x) => (x.id === updated.id ? updated : x));
-		editing = null;
+		const tags = noteDraftTags;
+		savingNote = true;
+		try {
+			const updated = await withTimeout(getProcessor().updateAnnotationNote(a, note, tags), SAVE_TIMEOUT_MS);
+			annotations = annotations.map((x) => (x.id === updated.id ? updated : x));
+			if (editing?.id === updated.id) {
+				editing = updated;
+				originalNoteDraft = noteDraft;
+				originalNoteDraftTags = [...tags];
+			}
+			noteJustSaved = true;
+			if (noteSavedFlashTimer) clearTimeout(noteSavedFlashTimer);
+			noteSavedFlashTimer = setTimeout(() => (noteJustSaved = false), NOTE_SAVED_FLASH_MS);
+		} catch (error) {
+			// Unlike createHighlight/setDefaultFlashcardColor/etc., this save is
+			// local-first (SQLite-via-OPFS-worker) - the backend push already fails
+			// silently on its own (best-effort, self-heals on next sync), so an
+			// error here is a local write problem, never a network one. Saying
+			// "keine Verbindung" would just be wrong. The real cause goes to the
+			// console - the toast stays user-friendly, but the diagnostic must
+			// not be swallowed.
+			console.error('[saveNote] fehlgeschlagen:', error);
+			showAnnotationError('Notiz konnte nicht gespeichert werden. Bitte erneut versuchen.');
+		} finally {
+			savingNote = false;
+		}
+	}
+
+	/** Save the current translation as a highlighted "flashcard" annotation, then edit it. */
+	async function rememberAsVocab() {
+		if (!selection || !aiResult?.text) return;
+		const sel = selection;
+		const translation = aiResult.text;
+		const color = (getSession()?.defaultFlashcardColor ?? 'yellow') as AnnotationColor;
+		try {
+			const created = await getProcessor().createAnnotation(
+				bookId,
+				sel.cfiRange,
+				sel.excerpt,
+				translation,
+				color,
+				['flashcard']
+			);
+			annotations = [...annotations, created];
+			applyHighlight(created);
+			selection = null;
+			aiResult = null;
+			openNoteEditor(created, true);
+		} catch {
+			showAnnotationError('Vokabel konnte nicht gespeichert werden — keine Verbindung.');
+		}
+	}
+
+	async function setFlashcardColor(color: AnnotationColor) {
+		const previous = flashcardColor;
+		flashcardColor = color;
+		try {
+			await getProcessor().setDefaultFlashcardColor(color);
+		} catch {
+			flashcardColor = previous;
+			showAnnotationError('Standardfarbe konnte nicht gespeichert werden — keine Verbindung.');
+		}
 	}
 
 	/** Tapping a color swatch on the note editor changes an existing highlight's color immediately. */
@@ -389,6 +525,7 @@
 		}
 		prefs = parsePrefs(localStorage.getItem(STORAGE_KEY));
 		translationLanguage = getSession()?.translationLanguage ?? 'de';
+		flashcardColor = (getSession()?.defaultFlashcardColor as AnnotationColor) ?? 'yellow';
 		try {
 			const { data, progress, title } = await getProcessor().openBookForReading(bookId);
 
@@ -717,6 +854,7 @@
 		document.removeEventListener('visibilitychange', onVisibility);
 		if (annotationErrorTimer) clearTimeout(annotationErrorTimer);
 		if (chromeHideTimer) clearTimeout(chromeHideTimer);
+		if (noteSavedFlashTimer) clearTimeout(noteSavedFlashTimer);
 		void save();
 		rendition?.destroy();
 		book?.destroy();
@@ -993,6 +1131,32 @@
 					{/each}
 				</div>
 			</div>
+
+			<div class="border-t-2 border-[var(--color-divider)] py-3">
+				<span class="text-sm text-[var(--color-neutral-700)]">Standardfarbe für Vokabelkarten</span>
+				<p class="mt-0.5 text-xs text-[var(--color-neutral-700)]">
+					Farbe neuer Vokabel-Markierungen aus „Als Vokabel merken“. Gilt für das Konto.
+				</p>
+				<div class="mt-2 flex items-center gap-2.5">
+					{#each HIGHLIGHT_COLORS as color (color.value)}
+						<button
+							onclick={() => setFlashcardColor(color.value)}
+							aria-label={color.label}
+							aria-pressed={flashcardColor === color.value}
+							class="relative h-9 w-9 flex-none rounded-full transition {flashcardColor === color.value
+								? 'ring-2 ring-offset-2 ring-[var(--color-text)] ring-offset-[var(--color-bg)]'
+								: ''}"
+							style="background-color: {color.hex}"
+						>
+							{#if flashcardColor === color.value}
+								<span class="absolute inset-0 flex items-center justify-center rounded-full bg-black/20">
+									<Check size={18} color="white" strokeWidth={3} />
+								</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			</div>
 		</section>
 	{/if}
 
@@ -1056,7 +1220,23 @@
 			class="absolute inset-x-0 bottom-0 z-30 border-t-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))]"
 		>
 			<div class="mb-3 flex items-center justify-between">
-				<span class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">Notiz</span>
+				<div class="flex items-center gap-2">
+					<span class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">Notiz</span>
+					{#if noteDraft.trim() !== ''}
+						<button
+							onclick={() => (notePreviewMode = !notePreviewMode)}
+							aria-label={notePreviewMode ? 'Notiz bearbeiten' : 'Vorschau'}
+							title={notePreviewMode ? 'Bearbeiten' : 'Vorschau'}
+							class="p-1 text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
+						>
+							{#if notePreviewMode}
+								<Pencil size={16} />
+							{:else}
+								<Eye size={16} />
+							{/if}
+						</button>
+					{/if}
+				</div>
 				<button onclick={() => (editing = null)} aria-label="Schließen" class="text-[var(--color-accent-700)]">
 					<X size={20} />
 				</button>
@@ -1081,19 +1261,68 @@
 					</button>
 				{/each}
 			</div>
-			<textarea
-				bind:value={noteDraft}
-				rows="4"
-				placeholder="Notiz hinzufügen…"
-				class="w-full resize-none border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)]"
-			></textarea>
+			<div class="mb-3">
+				{#if noteDraftTags.length > 0}
+					<div class="mb-2 flex flex-wrap gap-1.5">
+						{#each noteDraftTags as tag (tag)}
+							<span
+								class="flex items-center gap-1 border border-[var(--color-divider)] bg-[var(--color-surface)] py-0.5 pr-1 pl-2 text-xs text-[var(--color-text)]"
+							>
+								#{tag}
+								<button
+									onclick={() => removeNoteTag(tag)}
+									aria-label={`Tag ${tag} entfernen`}
+									class="flex items-center text-[var(--color-neutral-700)] hover:text-[var(--color-accent-700)]"
+								>
+									<X size={12} />
+								</button>
+							</span>
+						{/each}
+					</div>
+				{/if}
+				<input
+					bind:value={tagInput}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							e.preventDefault();
+							addTagFromInput();
+						}
+					}}
+					placeholder="Tag hinzufügen… (Enter)"
+					aria-label="Tag hinzufügen"
+					class="w-full border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-1.5 text-sm text-[var(--color-text)]"
+				/>
+			</div>
+			{#if notePreviewMode}
+				<div
+					class="max-h-[40vh] min-h-[6rem] overflow-y-auto border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] [&_h1]:mt-2 [&_h1]:mb-1 [&_h1]:text-base [&_h1]:font-bold [&_h2]:mt-2 [&_h2]:mb-1 [&_h2]:text-base [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:mb-1 [&_h3]:font-semibold [&_p]:mb-2 [&_strong]:font-semibold [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-0.5"
+				>
+					{@html noteDraftHtml}
+				</div>
+			{:else}
+				<textarea
+					bind:value={noteDraft}
+					rows="4"
+					placeholder="Notiz hinzufügen…"
+					class="w-full resize-none border border-[var(--color-divider)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)]"
+				></textarea>
+			{/if}
 			<div class="mt-3 flex items-center gap-2">
 				<button
 					onclick={saveNote}
-					class="flex-1 bg-[var(--color-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--color-bg)]"
+					disabled={!noteDirty || savingNote}
+					class="flex-1 bg-[var(--color-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--color-bg)] transition disabled:opacity-40"
 				>
-					Speichern
+					{savingNote ? 'Speichert…' : 'Speichern'}
 				</button>
+				{#if noteJustSaved}
+					<span
+						transition:fade={{ duration: 200 }}
+						class="flex items-center gap-1 text-sm text-[var(--color-neutral-700)]"
+					>
+						<Check size={16} /> Gespeichert
+					</span>
+				{/if}
 				<button
 					onclick={() => editing && deleteHighlight(editing)}
 					aria-label="Markierung löschen"
@@ -1118,9 +1347,21 @@
 				<span class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">
 					{aiResult.kind === 'translate' ? 'Übersetzung' : 'Worterklärung'}
 				</span>
-				<button onclick={() => (aiResult = null)} aria-label="Schließen" class="text-[var(--color-accent-700)]">
-					<X size={20} />
-				</button>
+				<div class="flex items-center gap-3">
+					{#if aiResult.kind === 'translate' && !aiResult.loading && !aiResult.error}
+						<button
+							onclick={rememberAsVocab}
+							aria-label="Als Vokabel merken"
+							title="Als Vokabel merken"
+							class="text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
+						>
+							<BookmarkPlus size={20} />
+						</button>
+					{/if}
+					<button onclick={() => (aiResult = null)} aria-label="Schließen" class="text-[var(--color-accent-700)]">
+						<X size={20} />
+					</button>
+				</div>
 			</div>
 			{#if aiResult.loading}
 				<p class="py-4 text-center text-sm text-[var(--color-neutral-700)]">Einen Moment…</p>

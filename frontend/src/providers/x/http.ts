@@ -87,8 +87,18 @@ export function createHttpClient(
 				body: JSON.stringify({ email, code })
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
-			const body = (await res.json()) as { token: string; userId: string; translationLanguage: string };
-			return { token: body.token, userId: body.userId, translationLanguage: body.translationLanguage };
+			const body = (await res.json()) as {
+				token: string;
+				userId: string;
+				translationLanguage: string;
+				defaultFlashcardColor: string;
+			};
+			return {
+				token: body.token,
+				userId: body.userId,
+				translationLanguage: body.translationLanguage,
+				defaultFlashcardColor: body.defaultFlashcardColor
+			};
 		},
 
 		async getBooks(): Promise<CatalogBook[]> {
@@ -214,7 +224,8 @@ export function createHttpClient(
 			cfiRange: string,
 			excerpt: string,
 			note?: string,
-			color?: string
+			color?: string,
+			tags?: string[]
 		): Promise<Annotation> {
 			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/annotations`, {
 				method: 'POST',
@@ -223,18 +234,19 @@ export function createHttpClient(
 					cfiRange,
 					excerpt,
 					...(note !== undefined ? { note } : {}),
-					...(color !== undefined ? { color } : {})
+					...(color !== undefined ? { color } : {}),
+					...(tags !== undefined ? { tags } : {})
 				})
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 			return (await res.json()) as Annotation;
 		},
 
-		async updateAnnotationNote(id: string, note: string | null): Promise<Annotation> {
+		async updateAnnotationNote(id: string, note: string | null, tags?: string[]): Promise<Annotation> {
 			const res = await fetchImpl(`${base}/annotations/${encodeURIComponent(id)}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json', ...authHeaders() },
-				body: JSON.stringify({ note })
+				body: JSON.stringify({ note, ...(tags !== undefined ? { tags } : {}) })
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 			return (await res.json()) as Annotation;
@@ -280,15 +292,17 @@ export function createHttpClient(
 			return body.text;
 		},
 
-		async updateAccountSettings(translationLanguage: string): Promise<string> {
+		async updateAccountSettings(settings: {
+			translationLanguage?: string;
+			defaultFlashcardColor?: string;
+		}): Promise<{ translationLanguage: string; defaultFlashcardColor: string }> {
 			const res = await fetchImpl(`${base}/account`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json', ...authHeaders() },
-				body: JSON.stringify({ translationLanguage })
+				body: JSON.stringify(settings)
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
-			const body = (await res.json()) as { translationLanguage: string };
-			return body.translationLanguage;
+			return (await res.json()) as { translationLanguage: string; defaultFlashcardColor: string };
 		},
 
 		async chatAboutBook(

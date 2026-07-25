@@ -80,6 +80,29 @@ describe("listBooks reactor", () => {
     });
   });
 
+  it("degrades a failing cover presign to coverUrl null instead of failing the whole catalog (the 'internal error nach Pause' bug)", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.listByUser as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeBook({ id: "book-1", coverUrl: "broken-cover.jpg" }),
+      makeBook({ id: "book-2", coverUrl: "good-cover.jpg" })
+    ]);
+    (r2.getPresignedUrl as ReturnType<typeof vi.fn>).mockImplementation((key: string) =>
+      key === "broken-cover.jpg"
+        ? Promise.reject(new Error("presign exploded"))
+        : Promise.resolve("https://example.com/good")
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const result = await listBooks(`Bearer ${token}`);
+
+    expect(result.status).toBe(200);
+    const books = (result.body as { books: Array<{ id: string; coverUrl: string | null }> }).books;
+    expect(books.find((b) => b.id === "book-1")?.coverUrl).toBeNull();
+    expect(books.find((b) => b.id === "book-2")?.coverUrl).toBe("https://example.com/good");
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("book-1"), expect.any(Error));
+    consoleError.mockRestore();
+  });
+
   it("resolves a presigned coverUrl per book that has a cover storage key", async () => {
     const token = sign({ userId: "user-1" });
     (bookRepo.listByUser as ReturnType<typeof vi.fn>).mockResolvedValue([

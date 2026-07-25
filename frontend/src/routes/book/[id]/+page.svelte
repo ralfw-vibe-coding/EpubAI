@@ -14,15 +14,21 @@
 		BookOpenText,
 		Sparkles,
 		Eye,
+		Check,
 		X
 	} from 'lucide-svelte';
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
-	import type { Annotation, BookDetail } from '../../../domain/types';
+	import type { Annotation, AnnotationColor, BookDetail } from '../../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../../portal/runtime';
 	import BookMetaFields from '$lib/BookMetaFields.svelte';
-	import { colorHex } from '../../read/[id]/colors';
-	import { filterAnnotations } from './filterAnnotations';
+	import { colorHex, HIGHLIGHT_COLORS } from '../../read/[id]/colors';
+	import {
+		collectAnnotationTags,
+		filterAnnotations,
+		filterAnnotationsByColor,
+		filterAnnotationsByTags
+	} from './filterAnnotations';
 
 	const bookId = $derived($page.params.id ?? '');
 
@@ -128,9 +134,29 @@
 	let annotationsQuery = $state('');
 	let annotationsPage = $state(1);
 	let expandedAnnotationId = $state<string | null>(null);
+	// Tag chips (OR-semantics) and a single-select color, both AND-combining with
+	// the text search.
+	let selectedTags = $state<string[]>([]);
+	let selectedColor = $state<AnnotationColor | null>(null);
 	const ANNOTATIONS_PAGE_SIZE = 10;
 
-	let filteredAnnotations = $derived(filterAnnotations(annotations, annotationsQuery));
+	let availableTags = $derived(collectAnnotationTags(annotations));
+	let filteredAnnotations = $derived(
+		filterAnnotationsByColor(
+			filterAnnotationsByTags(filterAnnotations(annotations, annotationsQuery), selectedTags),
+			selectedColor
+		)
+	);
+
+	function toggleSelectedTag(tag: string) {
+		selectedTags = selectedTags.includes(tag)
+			? selectedTags.filter((t) => t !== tag)
+			: [...selectedTags, tag];
+	}
+
+	function toggleSelectedColor(color: AnnotationColor) {
+		selectedColor = selectedColor === color ? null : color;
+	}
 	let annotationsPageCount = $derived(
 		Math.max(1, Math.ceil(filteredAnnotations.length / ANNOTATIONS_PAGE_SIZE))
 	);
@@ -143,11 +169,18 @@
 
 	$effect(() => {
 		annotationsQuery;
+		selectedTags;
+		selectedColor;
 		annotationsPage = 1;
 	});
 
 	function formatAnnotationDate(iso: string): string {
 		return new Date(iso).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+	}
+
+	/** Notes are Markdown; render them (sanitized) for the always-on display here. */
+	function noteHtml(note: string): string {
+		return DOMPurify.sanitize(marked.parse(note, { async: false }));
 	}
 
 	function toggleAnnotationExpanded(id: string) {
@@ -807,6 +840,42 @@
 						class="mt-2 w-full border border-[var(--color-divider)] bg-[var(--color-surface)] px-3 py-1.5 text-sm sm:max-w-xs"
 					/>
 
+					{#if availableTags.length > 0}
+						<div class="mt-3 flex flex-wrap gap-1.5">
+							{#each availableTags as tag (tag)}
+								<button
+									onclick={() => toggleSelectedTag(tag)}
+									aria-pressed={selectedTags.includes(tag)}
+									class="border px-2 py-1 text-xs transition {selectedTags.includes(tag)
+										? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-[var(--color-bg)]'
+										: 'border-[var(--color-divider)] bg-[var(--color-surface)] text-[var(--color-text)]'}"
+								>
+									#{tag}
+								</button>
+							{/each}
+						</div>
+					{/if}
+
+					<div class="mt-3 flex items-center gap-2">
+						{#each HIGHLIGHT_COLORS as color (color.value)}
+							<button
+								onclick={() => toggleSelectedColor(color.value)}
+								aria-label={`Nach Farbe ${color.label} filtern`}
+								aria-pressed={selectedColor === color.value}
+								class="relative h-7 w-7 flex-none rounded-full transition {selectedColor === color.value
+									? 'ring-2 ring-offset-2 ring-[var(--color-text)] ring-offset-[var(--color-bg)]'
+									: ''}"
+								style="background-color: {color.hex}"
+							>
+								{#if selectedColor === color.value}
+									<span class="absolute inset-0 flex items-center justify-center rounded-full bg-black/20">
+										<Check size={14} color="white" strokeWidth={3} />
+									</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+
 					{#if filteredAnnotations.length === 0}
 						<p class="mt-3 text-sm text-[var(--color-neutral-700)]">Keine Treffer für diese Suche.</p>
 					{:else}
@@ -839,7 +908,22 @@
 										<div class="flex flex-col gap-2 border-t border-[var(--color-divider)] px-3 py-2 text-sm">
 											<p>{a.excerpt}</p>
 											{#if a.note}
-												<p class="whitespace-pre-wrap text-[var(--color-neutral-700)]">{a.note}</p>
+												<div
+													class="text-[var(--color-neutral-700)] [&_h1]:mt-2 [&_h1]:mb-1 [&_h1]:text-base [&_h1]:font-bold [&_h2]:mt-2 [&_h2]:mb-1 [&_h2]:text-base [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:mb-1 [&_h3]:font-semibold [&_p]:mb-2 [&_strong]:font-semibold [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-0.5"
+												>
+													{@html noteHtml(a.note)}
+												</div>
+											{/if}
+											{#if a.tags.length > 0}
+												<div class="flex flex-wrap gap-1.5">
+													{#each a.tags as tag (tag)}
+														<span
+															class="border border-[var(--color-divider)] bg-[var(--color-surface)] px-2 py-0.5 text-xs text-[var(--color-neutral-700)]"
+														>
+															#{tag}
+														</span>
+													{/each}
+												</div>
 											{/if}
 											<div class="flex items-center justify-between">
 												<p class="text-xs text-[var(--color-neutral-700)]">

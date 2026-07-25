@@ -18,6 +18,7 @@ function makeAnnotation(overrides: Partial<Annotation> = {}): Annotation {
     excerpt: "Some text",
     note: null,
     color: "accent",
+    tags: [],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...overrides
@@ -56,6 +57,7 @@ describe("listAnnotations reactor", () => {
             excerpt: "Some text",
             note: "a note",
             color: "accent",
+            tags: [],
             createdAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z"
           },
@@ -66,6 +68,7 @@ describe("listAnnotations reactor", () => {
             excerpt: "Some text",
             note: null,
             color: "accent",
+            tags: [],
             createdAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z"
           }

@@ -96,4 +96,19 @@ describe("getBook reactor", () => {
     expect(r2.getPresignedUrl).toHaveBeenCalledWith("hash-1-cover.jpg");
     expect((result.body as { coverUrl: string }).coverUrl).toBe("https://example.com/presigned");
   });
+
+  it("degrades a failing cover presign to coverUrl null instead of a 500", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      makeBook({ coverUrl: "hash-1-cover.jpg" })
+    );
+    (r2.getPresignedUrl as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("presign exploded"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const result = await getBook(`Bearer ${token}`, "book-1");
+
+    expect(result.status).toBe(200);
+    expect((result.body as { coverUrl: string | null }).coverUrl).toBeNull();
+    consoleError.mockRestore();
+  });
 });

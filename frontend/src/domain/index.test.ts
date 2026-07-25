@@ -130,6 +130,7 @@ describe('createReaderDomain', () => {
 			excerpt: 'markiert',
 			note: null,
 			color: 'accent',
+			tags: [],
 			createdAt: 'c1',
 			updatedAt: 'c1'
 		};
@@ -145,7 +146,7 @@ describe('createReaderDomain', () => {
 		it('edits only the note (and updatedAt), leaving cfiRange/excerpt/createdAt intact', async () => {
 			const domain = createReaderDomain(fakeDProvider());
 			await domain.saveAnnotation(ann);
-			const updated = await domain.editAnnotationNote(ann, 'Eine Notiz', 'c2');
+			const updated = await domain.editAnnotationNote(ann, 'Eine Notiz', [], 'c2');
 			expect(updated).toEqual({ ...ann, note: 'Eine Notiz', updatedAt: 'c2' });
 			expect(await domain.annotationsFor('b1')).toEqual([updated]);
 		});
@@ -153,7 +154,7 @@ describe('createReaderDomain', () => {
 		it('collapses an empty note to null when editing', async () => {
 			const domain = createReaderDomain(fakeDProvider());
 			await domain.saveAnnotation({ ...ann, note: 'alt' });
-			const updated = await domain.editAnnotationNote(ann, '   ', 'c2');
+			const updated = await domain.editAnnotationNote(ann, '   ', [], 'c2');
 			expect(updated.note).toBeNull();
 		});
 
@@ -168,7 +169,7 @@ describe('createReaderDomain', () => {
 		it('editAnnotationColor and editAnnotationNote are independently callable', async () => {
 			const domain = createReaderDomain(fakeDProvider());
 			await domain.saveAnnotation(ann);
-			await domain.editAnnotationNote(ann, 'Eine Notiz', 'c2');
+			await domain.editAnnotationNote(ann, 'Eine Notiz', [], 'c2');
 			const recolored = await domain.editAnnotationColor(
 				{ ...ann, note: 'Eine Notiz', updatedAt: 'c2' },
 				'green',

@@ -14,10 +14,10 @@ export async function updateAnnotationColor(
 	color: AnnotationColor
 ): Promise<Annotation> {
 	const updated = await deps.domain.editAnnotationColor(annotation, color, deps.clock.nowIso());
-	try {
-		await deps.http.updateAnnotationColor(updated.id, updated.color);
-	} catch {
-		// Local-first best effort; ignore transient failures.
-	}
+	// Not awaited - see updateAnnotationNote: the caller settles with the local
+	// save so the UI can't be blocked by a slow backend (idle-suspended Neon).
+	void deps.http.updateAnnotationColor(updated.id, updated.color).catch(() => {
+		// Local-first best effort; ignore push failures.
+	});
 	return updated;
 }

@@ -19,6 +19,7 @@ function makeAnnotation(overrides: Partial<Annotation> = {}): Annotation {
     excerpt: "Some text",
     note: null,
     color: "accent",
+    tags: [],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...overrides
@@ -111,6 +112,7 @@ describe("updateAnnotation reactor", () => {
         excerpt: "Some text",
         note: "new note",
         color: "accent",
+        tags: [],
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-02T00:00:00.000Z"
       }
@@ -157,6 +159,7 @@ describe("updateAnnotation reactor", () => {
         excerpt: "Some text",
         note: "old note",
         color: "yellow",
+        tags: [],
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-02T00:00:00.000Z"
       }
@@ -187,5 +190,42 @@ describe("updateAnnotation reactor", () => {
 
     expect(annotationRepo.update).toHaveBeenCalledWith("annotation-1", {});
     expect(result.status).toBe(200);
+  });
+
+  it("returns 400 for invalid tags, never touching the repo", async () => {
+    const token = sign({ userId: "user-1" });
+    (annotationRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeAnnotation());
+
+    const result = await updateAnnotation(`Bearer ${token}`, "annotation-1", { tags: "not-an-array" });
+    expect(result).toEqual({ status: 400, body: { error: "invalid_request" } });
+    expect(annotationRepo.update).not.toHaveBeenCalled();
+  });
+
+  it("updates only tags when note and color are omitted, leaving them untouched", async () => {
+    const token = sign({ userId: "user-1" });
+    (annotationRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      makeAnnotation({ note: "old note", color: "yellow" })
+    );
+    (annotationRepo.update as ReturnType<typeof vi.fn>).mockResolvedValue(
+      makeAnnotation({ note: "old note", color: "yellow", tags: ["vocab"], updatedAt: "2026-01-02T00:00:00.000Z" })
+    );
+
+    const result = await updateAnnotation(`Bearer ${token}`, "annotation-1", { tags: ["  #Vocab  "] });
+
+    expect(annotationRepo.update).toHaveBeenCalledWith("annotation-1", { tags: ["vocab"] });
+    expect(result).toEqual({
+      status: 200,
+      body: {
+        id: "annotation-1",
+        bookId: "book-1",
+        cfiRange: "cfi-1",
+        excerpt: "Some text",
+        note: "old note",
+        color: "yellow",
+        tags: ["vocab"],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z"
+      }
+    });
   });
 });

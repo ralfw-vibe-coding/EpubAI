@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "anchorHash": "d70179e05ac1f3bf",
+      "comment": "ja, das geht. aber irgendwie werden notizen grad nicht verlässlich gespeichert, wenn ich einfach so text selektiere und eine notiz einsetze.",
+      "contextLength": 160,
+      "createdAt": "2026-07-23T14:01:53.911Z",
+      "createdBy": "reviewer",
+      "endLine": 16,
+      "endOffset": 1184,
+      "id": "fb-mrxkye47",
+      "prefix": "**Live getestet:** Wort „Schritt\" selektiert, übersetzt, gemerkt — Markierung erschien sofort gelb im Buchtext, Editor zeigte Farbe/Tag/Rohtext korrekt.\n\n## 2. ",
+      "quote": "Tags auf Notizen (frei vergebbar)",
+      "quotePreview": "Tags auf Notizen (frei vergebbar)",
+      "resolution": "Echte Ursache per Konsolen-Screenshot gefunden: DataCloneError — die Tag-Chips sind ein Svelte-5-$state-Proxy-Array, das ungefiltert bis zum postMessage an den SQLite-Worker wanderte; Proxies sind nicht klonbar, der Aufruf hing dadurch für immer. Vor dem Tags-Feature enthielt das Objekt nur Strings — daher war Speichern früher nie ein Problem. Fix: defensive Plain-Kopie der Tags in withEditedNote/withEditedColor + der dprovider lehnt bei postMessage-Fehlern jetzt sofort sauber ab statt stumm zu hängen. Zusätzlich (zweiter, kleinerer Bug): der awaited Backend-Push + schlafende Neon-DB machte Speichern nach App-Start träge; Push läuft jetzt im Hintergrund. Verifiziert: exakte Proxy-Fehlerform speichert in 13 ms; Details in Abschnitt 6.",
+      "startLine": 16,
+      "startOffset": 1151,
+      "status": "edited",
+      "suffix": "\n\n- Jede Notiz kann beliebig viele Tags bekommen — Textfeld im Notiz-Editor („Tag hinzufügen… (Enter)\"), Tags als entfernbare Chips.\n- `#flashcard` ist einfach ",
+      "thread": [
+        {
+          "body": "ja, das geht. aber irgendwie werden notizen grad nicht verlässlich gespeichert, wenn ich einfach so text selektiere und eine notiz einsetze.",
+          "createdAt": "2026-07-23T14:01:53.911Z",
+          "createdBy": "reviewer",
+          "id": "th-mrxkye49",
+          "type": "comment"
+        },
+        {
+          "body": "Ursache diagnostiziert und behoben — es lag nicht am lokalen Speichern (das war immer in ~8 ms erfolgreich), sondern daran, dass der Reactor entgegen seiner „local-first“-Beschreibung auf den Backend-Push wartete. Die Neon-Test-DB schläft bei Inaktivität ein; nach frischem App-Start braucht die erste Query 5–15 s — genau dann wirkte Speichern kaputt. Der Push läuft jetzt im Hintergrund (auch bei Farbe ändern und Löschen), Speichern-Feedback kommt sofort, und „Gespeichert ✓“ + deaktivierter Button bestätigen den Erfolg. Details in Abschnitt 6 des Dokuments.",
+          "createdAt": "2026-07-24T15:15:00.000Z",
+          "createdBy": "assistant",
+          "id": "th-redaction-coldstart",
+          "type": "redaction"
+        },
+        {
+          "body": "Zweite Runde, echte Ursache: DataCloneError durch ein Svelte-$state-Proxy-Array im postMessage an den SQLite-Worker (dein Konsolen-Screenshot war der Schlüssel). Behoben durch defensive Plain-Kopien in den Domain-RPUs + Härtung des dproviders (sofortige, klare Ablehnung statt stummes Hängen) + Diagnose-Logging. Der frühere Neon-Befund war real, aber nur der zweite, kleinere Teil. Bitte einmal neu laden und Speichern testen — es sollte jetzt sofort „Gespeichert ✓“ zeigen.",
+          "createdAt": "2026-07-24T17:10:00.000Z",
+          "createdBy": "assistant",
+          "id": "th-redaction-datacloneerror",
+          "type": "redaction"
+        }
+      ],
+      "updatedAt": "2026-07-24T17:10:00.000Z",
+      "applied": {
+        "newQuote": "Tags auf Notizen (frei vergebbar)",
+        "newStartLine": 16,
+        "newEndLine": 16
+      }
+    }
+  ],
+  "file": "Review-Vokabeln-Tags-Filter.md",
+  "sourcePath": "/Users/ralfw/Repositories/08 Vibe Coding/EpubAI/requirements/Review-Vokabeln-Tags-Filter.md",
+  "updatedAt": "2026-07-24T17:10:00.000Z",
+  "version": 1
+}

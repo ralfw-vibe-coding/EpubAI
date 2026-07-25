@@ -1,4 +1,10 @@
-import { authorizeAnnotationAccess, parseColor, parseNote, toAnnotationSummary } from "../domain/annotationRpu.js";
+import {
+  authorizeAnnotationAccess,
+  parseColor,
+  parseNote,
+  parseTags,
+  toAnnotationSummary
+} from "../domain/annotationRpu.js";
 import type { AnnotationSummary } from "../domain/types.js";
 import * as annotationRepo from "../providers/d/annotationRepo.js";
 import type { AnnotationFieldUpdate } from "../providers/d/annotationRepo.js";
@@ -8,16 +14,18 @@ import { ok, type ReactorResult } from "./shared/result.js";
 export interface UpdateAnnotationInput {
   note?: unknown;
   color?: unknown;
+  tags?: unknown;
 }
 
 export type UpdateAnnotationBody = AnnotationSummary | { error: string };
 
 /**
- * Reactor for PATCH /annotations/:id. Only `note` and `color` are editable -
- * cfiRange/excerpt are immutable once created, since they identify *what*
- * was highlighted. Either field, both, or neither may be present in a given
- * request; only fields actually present in `input` are validated/touched -
- * e.g. sending only `color` leaves the existing note untouched.
+ * Reactor for PATCH /annotations/:id. Only `note`, `color`, and `tags` are
+ * editable - cfiRange/excerpt are immutable once created, since they
+ * identify *what* was highlighted. Any subset of these fields, or none, may
+ * be present in a given request; only fields actually present in `input`
+ * are validated/touched - e.g. sending only `color` leaves the existing
+ * note and tags untouched.
  */
 export async function updateAnnotation(
   authorizationHeader: string | undefined,
@@ -49,6 +57,12 @@ export async function updateAnnotation(
     const colorResult = parseColor(input.color);
     if (!colorResult.valid) return ok(400, { error: "invalid_request" });
     fields.color = colorResult.color;
+  }
+
+  if (input.tags !== undefined) {
+    const tagsResult = parseTags(input.tags);
+    if (!tagsResult.valid) return ok(400, { error: "invalid_request" });
+    fields.tags = tagsResult.tags;
   }
 
   const updated = await annotationRepo.update(annotationId, fields);

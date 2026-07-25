@@ -16,6 +16,7 @@ export interface Session {
 	token: string;
 	userId: string;
 	translationLanguage: string;
+	defaultFlashcardColor: string;
 }
 
 export interface LoanResponse {
@@ -98,10 +99,11 @@ export interface HttpClient {
 		cfiRange: string,
 		excerpt: string,
 		note?: string,
-		color?: string
+		color?: string,
+		tags?: string[]
 	): Promise<Annotation>;
-	/** Edit an existing annotation's note. */
-	updateAnnotationNote(id: string, note: string | null): Promise<Annotation>;
+	/** Edit an existing annotation's note (and tags). */
+	updateAnnotationNote(id: string, note: string | null, tags?: string[]): Promise<Annotation>;
 	/** Edit an existing annotation's color. */
 	updateAnnotationColor(id: string, color: string): Promise<Annotation>;
 	/** Delete an annotation by id. */
@@ -110,8 +112,15 @@ export interface HttpClient {
 	translateSelection(text: string, lang: string): Promise<string>;
 	/** Explain/look up a selected word or phrase (AI, §4.6). */
 	lookupSelection(text: string, lang: string): Promise<string>;
-	/** Persist the user's preferred translation target language; returns the confirmed value. */
-	updateAccountSettings(translationLanguage: string): Promise<string>;
+	/**
+	 * Persist account settings (translation language and/or default flashcard
+	 * color). Both fields are optional on input; the response always carries the
+	 * full current settings.
+	 */
+	updateAccountSettings(settings: {
+		translationLanguage?: string;
+		defaultFlashcardColor?: string;
+	}): Promise<{ translationLanguage: string; defaultFlashcardColor: string }>;
 	/**
 	 * Ask a question about the book (POST /ai/chat), either about a selected
 	 * excerpt (`selection`/`progressPercent` set) or about the book as a whole

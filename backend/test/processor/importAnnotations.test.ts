@@ -43,6 +43,7 @@ function makeAnnotation(overrides: Partial<Annotation> = {}): Annotation {
     excerpt: "e1",
     note: null,
     color: "accent",
+    tags: [],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...overrides
@@ -148,7 +149,8 @@ describe("importAnnotations reactor", () => {
       cfiRange: "cfi-1",
       excerpt: "e1",
       note: "n1",
-      color: "yellow"
+      color: "yellow",
+      tags: []
     });
     expect(result).toEqual({ status: 200, body: { imported: 2, skipped: 0 } });
   });
@@ -173,7 +175,8 @@ describe("importAnnotations reactor", () => {
       cfiRange: "cfi-2",
       excerpt: "e2",
       note: null,
-      color: "blue"
+      color: "blue",
+      tags: []
     });
     expect(result).toEqual({ status: 200, body: { imported: 1, skipped: 1 } });
   });
@@ -224,7 +227,8 @@ describe("importAnnotations reactor", () => {
       cfiRange: "cfi-2",
       excerpt: "e2",
       note: null,
-      color: "accent"
+      color: "accent",
+      tags: []
     });
     expect(result).toEqual({ status: 200, body: { imported: 1, skipped: 1 } });
   });

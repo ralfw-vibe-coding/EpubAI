@@ -14,6 +14,10 @@ export interface User {
   id: string;
   email: string;
   translationLanguage: string;
+  // Default highlight color slug applied to new flashcard notes, an account
+  // setting mirroring translationLanguage exactly (same 6 slugs as
+  // AnnotationColor). 'yellow' is the default.
+  defaultFlashcardColor: string;
   createdAt: string;
 }
 
@@ -107,6 +111,9 @@ export interface Annotation {
   excerpt: string;
   note: string | null;
   color: AnnotationColor;
+  // Free-form tags (e.g. for "remember as vocabulary flashcard" and
+  // tag-based filtering) - stored without a leading '#'. Empty when none set.
+  tags: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -119,6 +126,7 @@ export interface AnnotationSummary {
   excerpt: string;
   note: string | null;
   color: AnnotationColor;
+  tags: string[];
   createdAt: string;
   updatedAt: string;
 }

@@ -81,7 +81,10 @@ export async function importAnnotations(
       cfiRange: candidate.cfiRange,
       excerpt: candidate.excerpt,
       note: candidate.note,
-      color: candidate.color
+      color: candidate.color,
+      // Imported files don't carry tags (out of scope for export/import) -
+      // annotations always land with an empty tag set.
+      tags: []
     });
     seenInThisImport.push(identity);
     imported++;

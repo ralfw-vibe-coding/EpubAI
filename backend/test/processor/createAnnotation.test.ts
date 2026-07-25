@@ -128,6 +128,7 @@ describe("createAnnotation reactor", () => {
       excerpt: "Some text",
       note: null,
       color: "accent",
+      tags: [],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
     });
@@ -141,7 +142,8 @@ describe("createAnnotation reactor", () => {
       cfiRange: "cfi-1",
       excerpt: "Some text",
       note: null,
-      color: "accent"
+      color: "accent",
+      tags: []
     });
     expect(result).toEqual({
       status: 201,
@@ -152,6 +154,7 @@ describe("createAnnotation reactor", () => {
         excerpt: "Some text",
         note: null,
         color: "accent",
+        tags: [],
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z"
       }
@@ -169,6 +172,7 @@ describe("createAnnotation reactor", () => {
       excerpt: "Some text",
       note: "my note",
       color: "accent",
+      tags: [],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
     });
@@ -183,7 +187,8 @@ describe("createAnnotation reactor", () => {
       cfiRange: "cfi-1",
       excerpt: "Some text",
       note: "my note",
-      color: "accent"
+      color: "accent",
+      tags: []
     });
     expect((result.body as { note: string }).note).toBe("my note");
     expect(result.status).toBe(201);
@@ -200,6 +205,7 @@ describe("createAnnotation reactor", () => {
       excerpt: "Some text",
       note: null,
       color: "purple",
+      tags: [],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
     });
@@ -214,9 +220,56 @@ describe("createAnnotation reactor", () => {
       cfiRange: "cfi-1",
       excerpt: "Some text",
       note: null,
-      color: "purple"
+      color: "purple",
+      tags: []
     });
     expect((result.body as { color: string }).color).toBe("purple");
     expect(result.status).toBe(201);
+  });
+
+  it("creates a highlight with tags, normalized and passed through end to end", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
+    (annotationRepo.insert as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "annotation-1",
+      bookId: "book-1",
+      userId: "user-1",
+      cfiRange: "cfi-1",
+      excerpt: "Some text",
+      note: null,
+      color: "accent",
+      tags: ["vocab", "chapter-1"],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    });
+
+    const result = await createAnnotation(`Bearer ${token}`, "book-1", {
+      cfiRange: "cfi-1",
+      excerpt: "Some text",
+      tags: ["  #Vocab  ", "Chapter-1"]
+    });
+
+    expect(annotationRepo.insert).toHaveBeenCalledWith("book-1", "user-1", {
+      cfiRange: "cfi-1",
+      excerpt: "Some text",
+      note: null,
+      color: "accent",
+      tags: ["vocab", "chapter-1"]
+    });
+    expect((result.body as { tags: string[] }).tags).toEqual(["vocab", "chapter-1"]);
+    expect(result.status).toBe(201);
+  });
+
+  it("returns 400 for invalid tags (non-array), never touching insert", async () => {
+    const token = sign({ userId: "user-1" });
+    (bookRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeBook());
+
+    const result = await createAnnotation(`Bearer ${token}`, "book-1", {
+      cfiRange: "cfi-1",
+      excerpt: "text",
+      tags: "not-an-array"
+    });
+    expect(result).toEqual({ status: 400, body: { error: "invalid_request" } });
+    expect(annotationRepo.insert).not.toHaveBeenCalled();
   });
 });

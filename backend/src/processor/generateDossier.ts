@@ -3,6 +3,7 @@ import { chatCostUsd } from "../domain/aiCostRpu.js";
 import type { BookSummary } from "../domain/types.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
 import * as r2 from "../providers/x/r2.js";
+import { presignCoverUrl } from "./shared/coverUrl.js";
 import * as claude from "../providers/x/claude.js";
 import { requireUserId, AuthError } from "./shared/requireUserId.js";
 import { ok, type ReactorResult } from "./shared/result.js";
@@ -67,6 +68,6 @@ export async function generateDossier(
   // (practically impossible) case it was deleted in this instant, rather than
   // crashing.
   const updated = (await bookRepo.findById(bookId)) ?? book;
-  const coverUrl = updated.coverUrl ? await r2.getPresignedUrl(updated.coverUrl) : null;
+  const coverUrl = await presignCoverUrl(updated);
   return ok(200, { ...toBookSummary(updated, coverUrl), generationCostUsd: costUsd });
 }
