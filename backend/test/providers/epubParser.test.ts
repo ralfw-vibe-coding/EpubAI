@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EpubTooLargeError, parseEpub } from "../../src/providers/x/epubParser.js";
+import { EpubParseError, EpubTooLargeError, parseEpub } from "../../src/providers/x/epubParser.js";
 import {
   buildEpubWithEpub2Cover,
   buildEpubWithEpub3Cover,
@@ -71,8 +71,12 @@ describe("parseEpub", () => {
     await expect(parseEpub(buf, MAX)).resolves.toBeDefined();
   });
 
-  it("rejects a file that is not a zip at all", async () => {
+  it("rejects a file that is not a zip at all with EpubParseError (never the raw yauzl error) - the 'internal_error statt 400' bug", async () => {
     const buf = await buildNotAZip();
-    await expect(parseEpub(buf, MAX)).rejects.toThrow();
+    await expect(parseEpub(buf, MAX)).rejects.toThrow(EpubParseError);
+    // uploadEpub.ts only special-cases EpubTooLargeError/EpubParseError - any
+    // other error class rethrows uncaught into a 500. Pin the message too so
+    // a future refactor can't silently swap back to a raw yauzl error.
+    await expect(parseEpub(buf, MAX)).rejects.toThrow(/Failed to read EPUB as zip/);
   });
 });

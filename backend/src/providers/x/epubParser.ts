@@ -68,10 +68,26 @@ function safeParseXml(xml: string): unknown {
   }
 }
 
+/**
+ * Every yauzl/Node stream failure below funnels through this before being
+ * rejected, so a caller (uploadEpub.ts) only ever has to branch on our three
+ * typed errors - never a raw yauzl/fs error. Without it, a corrupted or
+ * non-zip upload (e.g. yauzl's "End of central directory record signature
+ * not found") escaped as an uncaught error all the way to Fastify's generic
+ * 500 handler instead of the already-existing 400 invalid_epub path.
+ */
+function asEpubError(err: unknown): Error {
+  if (err instanceof EpubParseError || err instanceof EpubTooLargeError || err instanceof EpubNoTextError) {
+    return err;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return new EpubParseError(`Failed to read EPUB as zip: ${message}`);
+}
+
 function openZip(buffer: Buffer): Promise<ZipFile> {
   return new Promise((resolve, reject) => {
     yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
-      if (err || !zipfile) return reject(err ?? new EpubParseError("Failed to open EPUB as zip"));
+      if (err || !zipfile) return reject(asEpubError(err ?? new Error("Failed to open EPUB as zip")));
       resolve(zipfile);
     });
   });
@@ -117,7 +133,7 @@ function findAndReadEntry<T>(
     zipfile.on("error", (err) => {
       if (!settled) {
         settled = true;
-        reject(err);
+        reject(asEpubError(err));
       }
     });
 
@@ -163,7 +179,7 @@ function collectEntries(
     const fail = (err: unknown) => {
       if (settled) return;
       settled = true;
-      reject(err);
+      reject(asEpubError(err));
     };
 
     zipfile.on("entry", (entry: Entry) => {
@@ -207,7 +223,9 @@ function collectEntries(
 function readEntryBuffer(zipfile: ZipFile, entry: Entry, budget: ByteBudget): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     zipfile.openReadStream(entry, (err, readStream) => {
-      if (err || !readStream) return reject(err ?? new EpubParseError("Failed to open zip entry stream"));
+      if (err || !readStream) {
+        return reject(asEpubError(err ?? new Error("Failed to open zip entry stream")));
+      }
 
       const chunks: Buffer[] = [];
       let aborted = false;
@@ -227,7 +245,7 @@ function readEntryBuffer(zipfile: ZipFile, entry: Entry, budget: ByteBudget): Pr
         if (!aborted) resolve(Buffer.concat(chunks));
       });
       readStream.on("error", (streamErr) => {
-        if (!aborted) reject(streamErr);
+        if (!aborted) reject(asEpubError(streamErr));
       });
     });
   });
