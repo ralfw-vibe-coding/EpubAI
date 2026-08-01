@@ -270,6 +270,23 @@
 		</span>
 	{/snippet}
 
+	<!-- Diagonal hatching over the whole cover for archived books (only ever
+	     visible when "Archiv einschließen" is on) - decorative, so pointer
+	     events pass through to the book button underneath; the archived state
+	     itself is exposed to assistive tech via sr-only text. Two fixed-opacity
+	     layers via color-mix (not a div-level `opacity`, which would just fade
+	     both together and let a dark cover swallow the stripes again): a light
+	     wash first to even out dark covers, then the stripes on top, so the
+	     hatching stays legible no matter how dark or busy the cover art is. -->
+	{#snippet archivedOverlay()}
+		<div
+			class="pointer-events-none absolute inset-0"
+			style="background-image: repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-neutral-700) 55%, transparent) 0 3px, transparent 3px 12px); background-color: color-mix(in srgb, var(--color-bg) 65%, transparent);"
+		>
+			<span class="sr-only">Archiviert</span>
+		</div>
+	{/snippet}
+
 	{#snippet annotationCounts(book: CatalogBook)}
 		{#if book.highlightCount > 0 || book.noteCount > 0}
 			<div class="mt-1 flex items-center gap-2 text-xs text-[var(--color-neutral-700)]">
@@ -388,6 +405,9 @@
 							{#if book.isLocal}
 								{@render localBadge()}
 							{/if}
+							{#if book.archived}
+								{@render archivedOverlay()}
+							{/if}
 						</div>
 						<p class="mt-2 truncate text-sm font-medium">{book.title}</p>
 						<p class="truncate text-xs text-[var(--color-neutral-700)]">{book.author}</p>
@@ -437,6 +457,9 @@
 								{/if}
 								{#if book.isLocal}
 									{@render localBadge()}
+								{/if}
+								{#if book.archived}
+									{@render archivedOverlay()}
 								{/if}
 							</div>
 							<div class="min-w-0 flex-1">
