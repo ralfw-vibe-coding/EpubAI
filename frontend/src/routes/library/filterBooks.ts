@@ -13,6 +13,11 @@ export function visibleBooks<T extends Pick<CatalogBook, 'archived'>>(
 	return includeArchived ? books : books.filter((b) => !b.archived);
 }
 
+/** Keeps only books currently borrowed (present) on this device, when onlyLocal is on. */
+export function filterByLocal<T extends { isLocal: boolean }>(books: T[], onlyLocal: boolean): T[] {
+	return onlyLocal ? books.filter((b) => b.isLocal) : books;
+}
+
 /** Distinct tags across the given books, alphabetically (German collation). */
 export function tagsFrom(books: Pick<CatalogBook, 'tags'>[]): string[] {
 	return Array.from(new Set(books.flatMap((b) => b.tags))).sort((a, b) => a.localeCompare(b, 'de'));

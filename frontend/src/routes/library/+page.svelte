@@ -4,7 +4,7 @@
 	import { Check, Highlighter, StickyNote, Upload } from 'lucide-svelte';
 	import type { BookDetail, CatalogBook } from '../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../portal/runtime';
-	import { filterBooks, tagsFrom, visibleBooks } from './filterBooks';
+	import { filterBooks, filterByLocal, tagsFrom, visibleBooks } from './filterBooks';
 
 	let books = $state<BookDetail[]>([]);
 	let loading = $state(true);
@@ -48,12 +48,15 @@
 	let searchQuery = $state('');
 
 	// Archiv einschließen: standardmäßig aus - archivierte Bücher sind dann
-	// weder in der Liste noch in den Tag-Chips sichtbar. Reihenfolge wichtig:
-	// erst Archiv-Einbeziehung (-> sichtbare Menge), DANN allTags aus dieser
-	// Menge ableiten, DANN Suche+Tags darauf anwenden.
+	// weder in der Liste noch in den Tag-Chips sichtbar. Ausgeliehen-Filter:
+	// standardmäßig aus, zeigt bei Aktivierung nur auf diesem Gerät geliehene
+	// Bücher. Reihenfolge wichtig: erst Archiv-Einbeziehung + Ausgeliehen-Filter
+	// (-> sichtbare Menge), DANN allTags aus dieser Menge ableiten, DANN
+	// Suche+Tags darauf anwenden.
 	let includeArchived = $state(false);
+	let onlyLocal = $state(false);
 
-	let visible = $derived(visibleBooks(books, includeArchived));
+	let visible = $derived(filterByLocal(visibleBooks(books, includeArchived), onlyLocal));
 	let allTags = $derived(tagsFrom(visible));
 	let filteredBooks = $derived(filterBooks(visible, searchQuery, activeTags));
 
@@ -336,10 +339,26 @@
 				aria-label="Suche nach Titel oder Autor"
 				class="w-full border border-[var(--color-divider)] bg-[var(--color-surface)] px-3 py-1.5 text-sm sm:max-w-xs"
 			/>
-			<label class="flex flex-none items-center gap-2 text-sm text-[var(--color-neutral-700)]">
-				<input type="checkbox" bind:checked={includeArchived} class="h-4 w-4" />
-				Archiv einschließen
-			</label>
+			<div class="flex flex-none items-center gap-2">
+				<button
+					onclick={() => (onlyLocal = !onlyLocal)}
+					aria-pressed={onlyLocal}
+					class="flex-none whitespace-nowrap border border-[var(--color-divider)] px-3 py-1 text-xs font-semibold {onlyLocal
+						? 'bg-[var(--color-accent)] text-[var(--color-bg)]'
+						: 'bg-[var(--color-surface)]'}"
+				>
+					Ausgeliehen
+				</button>
+				<button
+					onclick={() => (includeArchived = !includeArchived)}
+					aria-pressed={includeArchived}
+					class="flex-none whitespace-nowrap border border-[var(--color-divider)] px-3 py-1 text-xs font-semibold {includeArchived
+						? 'bg-[var(--color-accent)] text-[var(--color-bg)]'
+						: 'bg-[var(--color-surface)]'}"
+				>
+					Archiv
+				</button>
+			</div>
 		</div>
 
 		{#if allTags.length > 0}

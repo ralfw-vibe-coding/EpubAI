@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { filterBooks, tagsFrom, visibleBooks } from './filterBooks';
+import { filterBooks, filterByLocal, tagsFrom, visibleBooks } from './filterBooks';
 
-function book(over: Partial<{ id: string; title: string; author: string; tags: string[]; archived: boolean }>) {
+function book(
+	over: Partial<{
+		id: string;
+		title: string;
+		author: string;
+		tags: string[];
+		archived: boolean;
+		isLocal: boolean;
+	}>
+) {
 	return {
 		id: 'b1',
 		title: 'T',
 		author: 'A',
 		tags: [],
 		archived: false,
+		isLocal: false,
 		...over
 	};
 }
@@ -21,6 +31,18 @@ describe('visibleBooks', () => {
 	it('keeps every book when including archive', () => {
 		const books = [book({ id: 'b1', archived: false }), book({ id: 'b2', archived: true })];
 		expect(visibleBooks(books, true).map((b) => b.id)).toEqual(['b1', 'b2']);
+	});
+});
+
+describe('filterByLocal', () => {
+	it('keeps every book when off', () => {
+		const books = [book({ id: 'b1', isLocal: true }), book({ id: 'b2', isLocal: false })];
+		expect(filterByLocal(books, false).map((b) => b.id)).toEqual(['b1', 'b2']);
+	});
+
+	it('keeps only borrowed books when on', () => {
+		const books = [book({ id: 'b1', isLocal: true }), book({ id: 'b2', isLocal: false })];
+		expect(filterByLocal(books, true).map((b) => b.id)).toEqual(['b1']);
 	});
 });
 
