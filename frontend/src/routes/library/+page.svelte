@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { Check, Highlighter, StickyNote } from 'lucide-svelte';
+	import { Check, Highlighter, StickyNote, Upload } from 'lucide-svelte';
 	import type { BookDetail, CatalogBook } from '../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../portal/runtime';
 	import { filterBooks, tagsFrom, visibleBooks } from './filterBooks';
@@ -22,6 +22,12 @@
 	let uploadError = $state<string | null>(null);
 	let duplicateBookId = $state<string | null>(null);
 	let fileInput = $state<HTMLInputElement | null>(null);
+
+	// Drag-and-drop upload: counts nested dragenter/dragleave pairs (they fire
+	// for every child element the pointer crosses, not just window-level
+	// enter/exit) so the overlay doesn't flicker while dragging over the page.
+	let dragDepth = $state(0);
+	let isDraggingFile = $derived(dragDepth > 0);
 
 	// Book covers that failed to load fall back to the color-swatch display
 	// instead of a broken-image icon (Aufgabe 7).
@@ -66,6 +72,10 @@
 			await goto('/login', { replaceState: true });
 			return;
 		}
+		window.addEventListener('dragenter', onWindowDragEnter);
+		window.addEventListener('dragover', onWindowDragOver);
+		window.addEventListener('dragleave', onWindowDragLeave);
+		window.addEventListener('drop', onWindowDrop);
 		// App-start sync of annotations into the local cache (best-effort: if
 		// offline, the last synced cache stays as-is so the Reader still works).
 		getProcessor()
@@ -73,6 +83,44 @@
 			.catch(() => undefined);
 		await reload();
 	});
+
+	onDestroy(() => {
+		window.removeEventListener('dragenter', onWindowDragEnter);
+		window.removeEventListener('dragover', onWindowDragOver);
+		window.removeEventListener('dragleave', onWindowDragLeave);
+		window.removeEventListener('drop', onWindowDrop);
+	});
+
+	/** Only react to an actual file being dragged, never a dragged link/text/image. */
+	function dragHasFiles(e: DragEvent): boolean {
+		return Array.from(e.dataTransfer?.types ?? []).includes('Files');
+	}
+
+	function onWindowDragEnter(e: DragEvent) {
+		if (!dragHasFiles(e)) return;
+		e.preventDefault();
+		dragDepth++;
+	}
+
+	function onWindowDragOver(e: DragEvent) {
+		// preventDefault is what tells the browser "this is a valid drop
+		// target" - without it, the drop event never fires and the browser
+		// just opens the file itself.
+		if (dragHasFiles(e)) e.preventDefault();
+	}
+
+	function onWindowDragLeave(e: DragEvent) {
+		if (!dragHasFiles(e)) return;
+		dragDepth = Math.max(0, dragDepth - 1);
+	}
+
+	async function onWindowDrop(e: DragEvent) {
+		if (!dragHasFiles(e)) return;
+		e.preventDefault();
+		dragDepth = 0;
+		const file = e.dataTransfer?.files?.[0];
+		if (file) await uploadFile(file);
+	}
 
 	async function reload() {
 		loading = true;
@@ -106,13 +154,11 @@
 		if (fileInput) fileInput.value = '';
 	}
 
-	// A file was chosen -> upload it (which also creates the catalog entry) with
-	// a real progress readout, then reload the catalog. A duplicate links to the
-	// existing entry; any other failure shows an error.
-	async function onFileChosen(e: Event) {
-		const input = e.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
-		if (!file) return;
+	// Shared by both upload entry points (file picker and drag-and-drop):
+	// upload it (which also creates the catalog entry) with a real progress
+	// readout, then reload the catalog. A duplicate links to the existing
+	// entry; any other failure shows an error.
+	async function uploadFile(file: File) {
 		phase = 'uploading';
 		progress = 0;
 		uploadError = null;
@@ -132,6 +178,13 @@
 			phase = 'error';
 		}
 	}
+
+	async function onFileChosen(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		await uploadFile(file);
+	}
 </script>
 
 <header
@@ -148,6 +201,23 @@
 		<button onclick={signOut} class="text-sm text-[var(--color-accent-700)] underline">Abmelden</button>
 	</div>
 </header>
+
+{#if isDraggingFile}
+	<button
+		type="button"
+		onclick={startUpload}
+		aria-label="EPUB hochladen"
+		class="fixed inset-0 z-50 flex cursor-pointer flex-col items-center justify-center gap-3 bg-[var(--color-bg)]/90 backdrop-blur-sm"
+	>
+		<div
+			class="mx-6 flex flex-col items-center gap-3 border-2 border-dashed border-[var(--color-accent)] px-12 py-16 text-center"
+		>
+			<Upload size={40} class="text-[var(--color-accent)]" />
+			<p class="font-[var(--font-heading)] text-lg font-extrabold">EPUB hier ablegen</p>
+			<p class="text-sm text-[var(--color-neutral-700)]">oder klicken, um eine Datei auszuwählen</p>
+		</div>
+	</button>
+{/if}
 
 <!-- Hidden always; the visible "+ Hochladen" button triggers it directly. -->
 <input
