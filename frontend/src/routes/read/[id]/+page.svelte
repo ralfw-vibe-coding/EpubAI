@@ -20,7 +20,9 @@
 		MessagesSquare,
 		BookmarkPlus,
 		Eye,
-		Pencil
+		Pencil,
+		Search,
+		ArrowLeft
 	} from 'lucide-svelte';
 	import type { Annotation, AnnotationColor } from '../../../domain/types';
 	import type { ChatMessage } from '../../../processor/ports';
@@ -28,6 +30,7 @@
 	import { colorHex, HIGHLIGHT_COLORS, highlightStyles } from './colors';
 	import { normalizeTag } from './tags';
 	import { isSwipeGesture } from './swipe';
+	import { searchBook, highlightExcerpt, type BookSearchResult, MAX_BOOK_SEARCH_RESULTS } from './bookSearch';
 	import { AVAILABLE_LANGUAGES } from './languages';
 	import {
 		DEFAULT_PREFS,
@@ -68,6 +71,12 @@
 		if (chromeHideTimer) clearTimeout(chromeHideTimer);
 		chromeHideTimer = setTimeout(() => {
 			chromeVisible = false;
+			// toggleChrome() (manual tap) already nudges epub.js to re-measure
+			// after hiding the header/footer - the auto-hide timer was missing
+			// the same nudge, so the page stayed laid out for the smaller
+			// with-chrome viewport and clipped its last line once the footer's
+			// space became available.
+			setTimeout(forceResize, CHROME_TRANSITION_MS + 20);
 		}, CHROME_AUTO_HIDE_MS);
 	}
 
@@ -100,6 +109,28 @@
 	let tocOpen = $state(false);
 	let settingsOpen = $state(false);
 	let prefs = $state<ReaderPrefs>({ ...DEFAULT_PREFS });
+
+	// Volltextsuche im Buch: results/query survive closing the panel (only
+	// `searchOpen` toggles), so reopening it shows the same hit list rather
+	// than forcing a re-search - explicit trigger only (Enter/Icon), never
+	// live-as-you-type, since a full-book search reads every chapter.
+	let searchOpen = $state(false);
+	let searchQuery = $state('');
+	let searchResults = $state<BookSearchResult[] | null>(null);
+	let searching = $state(false);
+	let searchError = $state<string | null>(null);
+	// The CFI range of the search match currently highlighted on the page (a
+	// transient epub.js annotation, not a real saved highlight) - tracked so a
+	// second jump can remove the previous one instead of accumulating marks.
+	let searchHighlightCfi: string | null = null;
+
+	// Browser-style back history: every deliberate jump away from the current
+	// spot - TOC, Suche, eine Notiz/Markierung antippen, oder ein interner
+	// Link (Fußnote) im Buchtext - pushes the position jumped FROM here first.
+	// Plain page-turning (prev/next/Wischen) never pushes: that's reading
+	// forward, not "going somewhere else". No forward-stack (not asked for) -
+	// "Zurück" only ever pops, it's a one-way trip back through the stops.
+	let navHistory = $state<string[]>([]);
 
 	// Notizen & Markierungen: loaded from the local cache on open, kept in sync
 	// with epub.js highlights. `selection` drives the floating color-swatch bar
@@ -513,9 +544,67 @@
 		if (editing?.id === a.id) editing = null;
 	}
 
+	/** Push the current spot onto the back-history - call right before any deliberate jump away from it. */
+	function pushHistory() {
+		if (currentCfi) navHistory = [...navHistory, currentCfi];
+	}
+
 	function jumpToAnnotation(a: Annotation) {
+		pushHistory();
 		void rendition?.display(a.cfiRange);
 		notesOpen = false;
+	}
+
+	/** Clears the previous search-match highlight (if any) before re-adding it at a new CFI. */
+	function setSearchHighlight(cfi: string) {
+		if (searchHighlightCfi) rendition?.annotations.remove(searchHighlightCfi, 'highlight');
+		rendition?.annotations.add('highlight', cfi, {}, undefined, 'epubai-search-highlight', highlightStyles('yellow'));
+		searchHighlightCfi = cfi;
+	}
+
+	function clearSearchHighlight() {
+		if (!searchHighlightCfi) return;
+		rendition?.annotations.remove(searchHighlightCfi, 'highlight');
+		searchHighlightCfi = null;
+	}
+
+	/** Pops the last history entry and jumps there - a no-op with an empty stack. */
+	function jumpBack() {
+		if (navHistory.length === 0) return;
+		const target = navHistory[navHistory.length - 1];
+		navHistory = navHistory.slice(0, -1);
+		clearSearchHighlight();
+		void rendition?.display(target);
+	}
+
+	async function runBookSearch() {
+		const q = searchQuery.trim();
+		if (!q || !book || searching) return;
+		searching = true;
+		searchError = null;
+		try {
+			searchResults = await searchBook(book, q);
+		} catch {
+			searchError = 'Suche fehlgeschlagen.';
+			searchResults = null;
+		} finally {
+			searching = false;
+		}
+	}
+
+	/** "Suche löschen": clears query, results and any on-page match highlight - not just the input text. */
+	function clearSearch() {
+		searchQuery = '';
+		searchResults = null;
+		searchError = null;
+		clearSearchHighlight();
+	}
+
+	async function jumpToSearchResult(r: BookSearchResult) {
+		pushHistory();
+		searchOpen = false;
+		await rendition?.display(r.cfi);
+		setSearchHighlight(r.cfi);
 	}
 
 	onMount(async () => {
@@ -613,6 +702,21 @@
 			// onContentTouchEnd for why this can't just be a DOM listener on our container).
 			rendition.on('touchstart', onContentTouchStart);
 			rendition.on('touchend', onContentTouchEnd);
+
+			// Internal links (footnotes, cross-references) already navigate on tap -
+			// epub.js's own Rendition.handleLinks wires that up unconditionally, we
+			// don't call display() for it ourselves. This is a second, independent
+			// listener on the same per-section 'linkClicked' event, registered here
+			// purely to push the tapped-FROM position onto the back-history before
+			// that navigation lands - reading currentCfi synchronously inside this
+			// handler is still the pre-jump value, since handleLinks's display()
+			// call is async and 'relocated' (which updates currentCfi) hasn't fired
+			// yet at this point in the same event tick. `contents.on` isn't in
+			// epub.js's own .d.ts (same gap as Section.find(), see bookSearch.ts),
+			// hence the local inline type instead of importing Contents for this.
+			rendition.hooks.content.register((contents: { on(event: string, cb: (href: string) => void): void }) => {
+				contents.on('linkClicked', () => pushHistory());
+			});
 
 			// Re-apply this book's stored highlights from the LOCAL cache (never a
 			// network call here — offline-first Reader). Added before display() so
@@ -846,6 +950,7 @@
 	}
 
 	function openChapter(href: string) {
+		pushHistory();
 		void rendition?.display(href);
 		tocOpen = false;
 	}
@@ -879,6 +984,13 @@
 				class="p-1.5 text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
 			>
 				<List size={20} />
+			</button>
+			<button
+				onclick={() => (searchOpen = true)}
+				aria-label="Suche im Buch"
+				class="p-1.5 text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
+			>
+				<Search size={20} />
 			</button>
 			<button
 				onclick={() => (notesOpen = true)}
@@ -982,6 +1094,27 @@
 				</p>
 			</div>
 		{/if}
+
+		{#if navHistory.length > 0 && !selection && !aiResult && !chat && !annotationError}
+			<div class="absolute inset-x-0 bottom-4 z-40 flex justify-center">
+				<div class="flex items-center border-2 border-[var(--color-divider)] bg-[var(--color-bg)] shadow">
+					<button
+						onclick={jumpBack}
+						class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[var(--color-accent-700)]"
+					>
+						<ArrowLeft size={16} /> Zurück zur vorherigen Stelle
+					</button>
+					<button
+						onclick={() => (navHistory = [])}
+						aria-label="Verlauf löschen"
+						title="Verlauf löschen"
+						class="flex-none border-l-2 border-[var(--color-divider)] p-1.5 text-[var(--color-neutral-700)]"
+					>
+						<X size={16} />
+					</button>
+				</div>
+			</div>
+		{/if}
 	</div>
 
 	{#if chromeVisible}
@@ -1039,6 +1172,85 @@
 					{/each}
 				{/if}
 			</nav>
+		</aside>
+	{/if}
+
+	{#if searchOpen}
+		<button
+			aria-label="Suche schließen"
+			onclick={() => (searchOpen = false)}
+			class="absolute inset-0 z-20 bg-black/40"
+		></button>
+		<aside
+			class="absolute inset-y-0 right-0 z-30 flex w-4/5 max-w-[340px] flex-col border-l-2 border-[var(--color-divider)] bg-[var(--color-bg)]"
+		>
+			<div class="flex items-center justify-between border-b-2 border-[var(--color-divider)] px-4 py-3">
+				<span class="font-[var(--font-heading)] text-sm font-extrabold tracking-tight">Suche im Buch</span>
+				<button onclick={() => (searchOpen = false)} aria-label="Schließen" class="text-[var(--color-accent-700)]">
+					<X size={20} />
+				</button>
+			</div>
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					void runBookSearch();
+				}}
+				class="flex flex-none items-center gap-2 border-b border-[var(--color-divider)] px-4 py-3"
+			>
+				<input
+					type="search"
+					bind:value={searchQuery}
+					placeholder="Suchbegriff…"
+					aria-label="Suchbegriff"
+					class="w-full border border-[var(--color-divider)] bg-[var(--color-surface)] px-3 py-1.5 text-sm text-[var(--color-text)]"
+				/>
+				<button
+					type="submit"
+					aria-label="Suchen"
+					disabled={searching || !searchQuery.trim()}
+					class="flex-none p-1.5 text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)] disabled:opacity-40"
+				>
+					<Search size={18} />
+				</button>
+				{#if searchQuery || searchResults !== null}
+					<button
+						type="button"
+						onclick={clearSearch}
+						aria-label="Suche löschen"
+						title="Suche löschen"
+						class="flex-none p-1.5 text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
+					>
+						<X size={18} />
+					</button>
+				{/if}
+			</form>
+			<div class="flex-1 overflow-y-auto py-1">
+				{#if searching}
+					<p class="px-4 py-3 text-sm text-[var(--color-neutral-700)]">Durchsuche das Buch…</p>
+				{:else if searchError}
+					<p class="bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
+						{searchError}
+					</p>
+				{:else if searchResults === null}
+					<p class="px-4 py-3 text-sm text-[var(--color-neutral-700)]">
+						Suchbegriff eingeben und Enter drücken.
+					</p>
+				{:else if searchResults.length === 0}
+					<p class="px-4 py-3 text-sm text-[var(--color-neutral-700)]">Keine Treffer.</p>
+				{:else}
+					<p class="px-4 py-2 text-xs text-[var(--color-neutral-700)]">
+						{searchResults.length}{searchResults.length >= MAX_BOOK_SEARCH_RESULTS ? '+' : ''} Treffer
+					</p>
+					{#each searchResults as r, i (i)}
+						<button
+							onclick={() => jumpToSearchResult(r)}
+							class="block w-full border-b border-[var(--color-divider)] px-4 py-3 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-surface)]"
+						>
+							„{@html DOMPurify.sanitize(highlightExcerpt(r.excerpt, searchQuery))}“
+						</button>
+					{/each}
+				{/if}
+			</div>
 		</aside>
 	{/if}
 
