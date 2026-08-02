@@ -11,6 +11,6 @@
 	});
 </script>
 
-<div class="min-h-dvh">
+<div class="min-h-[var(--app-height)]">
 	{@render children()}
 </div>

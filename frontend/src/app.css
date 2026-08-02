@@ -37,6 +37,18 @@
 
 	--font-heading: 'Archivo', system-ui, sans-serif;
 	--font-body: 'Archivo', system-ui, sans-serif;
+
+	/*
+	 * The height actually available to a page, i.e. the viewport minus the
+	 * safe-area insets that `body` below already consumes as padding. Use this
+	 * instead of a bare 100dvh for anything meant to fill the screen exactly:
+	 * 100dvh is the FULL viewport, so inside body's padded content box it
+	 * overflows by exactly the inset height. On a notched iPhone that made the
+	 * whole document scrollable by ~34px - the reader could be nudged up/down
+	 * and drifted vertically during a swipe, since the swipe's vertical
+	 * component scrolled the document.
+	 */
+	--app-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 }
 
 html,
@@ -52,6 +64,9 @@ body {
 	/* Respect iOS safe-area insets (notch / home indicator). */
 	padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
 		env(safe-area-inset-left);
+	/* No rubber-band overscroll: in the reader a vertical drag is part of a
+	   page-turn swipe, not a scroll gesture. */
+	overscroll-behavior: none;
 }
 
 h1,

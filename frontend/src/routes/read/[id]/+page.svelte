@@ -71,12 +71,6 @@
 		if (chromeHideTimer) clearTimeout(chromeHideTimer);
 		chromeHideTimer = setTimeout(() => {
 			chromeVisible = false;
-			// toggleChrome() (manual tap) already nudges epub.js to re-measure
-			// after hiding the header/footer - the auto-hide timer was missing
-			// the same nudge, so the page stayed laid out for the smaller
-			// with-chrome viewport and clipped its last line once the footer's
-			// space became available.
-			setTimeout(forceResize, CHROME_TRANSITION_MS + 20);
 		}, CHROME_AUTO_HIDE_MS);
 	}
 
@@ -85,10 +79,10 @@
 		scheduleChromeHide();
 	}
 
-	// Hiding/showing the header/footer resizes the reading pane (they're
-	// normal flex-column siblings, not an overlay) - epub.js only re-measures
-	// its container on an explicit resize(), so nudge it once the slide
-	// transition has settled (mirrors setMargin's tick()+forceResize() pattern).
+	// Deliberately no forceResize() here: header/footer overlay the reading
+	// pane (see the template), so toggling them leaves its size untouched.
+	// Resizing would re-paginate the chapter and visibly jump the reader to a
+	// different page - the whole reason the chrome became an overlay.
 	function toggleChrome() {
 		if (chromeVisible) {
 			chromeVisible = false;
@@ -96,7 +90,6 @@
 		} else {
 			showChrome();
 		}
-		setTimeout(forceResize, CHROME_TRANSITION_MS + 20);
 	}
 	// Both stay null until book.locations.generate() has completed; the template
 	// shows nothing for the page read-out until then (see below).
@@ -966,12 +959,21 @@
 	});
 </script>
 
-<div class="min-h-dvh w-full bg-[var(--color-neutral-200)] flex justify-center">
-<div class="relative flex h-dvh w-full max-w-[520px] flex-col bg-[var(--color-neutral-100)]">
+<div class="min-h-[var(--app-height)] w-full bg-[var(--color-neutral-200)] flex justify-center">
+<div class="relative flex h-[var(--app-height)] w-full max-w-[520px] flex-col bg-[var(--color-neutral-100)]">
+	<!--
+		Header/Footer liegen ÜBER dem Lesebereich (absolut positioniert), nicht
+		als Flex-Geschwister daneben. Als Geschwister änderte ihr Ein-/Ausblenden
+		die Höhe des Lesebereichs, was epub.js zwingt, das Kapitel neu
+		umzubrechen - und beim Wiederherstellen der Position landete man dann
+		sichtbar auf einer anderen Seite. Als Overlay bleibt der Lesebereich
+		immer exakt gleich groß: kein Umbruch, kein Sprung, und der Text nutzt
+		durchgehend die volle Höhe (statt nur solange die Chrome versteckt ist).
+	-->
 	{#if chromeVisible}
 	<header
 		transition:slide={{ duration: CHROME_TRANSITION_MS }}
-		class="flex items-center justify-between border-b-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-4 py-2"
+		class="absolute inset-x-0 top-0 z-10 flex items-center justify-between border-b-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-4 py-2"
 	>
 		<button onclick={() => goto(`/book/${bookId}`)} class="flex-none text-sm text-[var(--color-accent-700)]">
 			← Schließen
@@ -1120,7 +1122,7 @@
 	{#if chromeVisible}
 	<div
 		transition:slide={{ duration: CHROME_TRANSITION_MS }}
-		class="flex-none border-t-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+		class="absolute inset-x-0 bottom-0 z-10 border-t-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-4 pt-2 pb-2"
 	>
 		<div class="mb-2 h-1 w-full bg-[var(--color-neutral-300)]">
 			<div class="h-full bg-[var(--color-accent)]" style="width: {percent}%"></div>
