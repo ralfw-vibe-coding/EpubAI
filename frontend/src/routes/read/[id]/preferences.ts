@@ -76,6 +76,12 @@ function isTheme(value: unknown): value is ReaderTheme {
 export function readerThemeStyles(theme: ReaderTheme): object {
 	const c = THEME_COLORS[theme];
 	return {
+		// Bewusst KEINE overflow-Sperre auf dem <html> des Iframes: Das lag
+		// nahe gegen das leichte vertikale Verrutschen beim Wischen, greift
+		// aber genau dort ein, wo epub.js seine Spalten-Paginierung aufbaut
+		// (das Wurzelelement bestimmt den Viewport, an dem die Kapitelbreite
+		// gemessen wird). Nicht ohne belastbaren Test wieder einbauen - die
+		// verbleibende Drift ist kosmetisch, leere Seiten sind es nicht.
 		body: {
 			background: `${c.bg} !important`,
 			color: `${c.fg} !important`

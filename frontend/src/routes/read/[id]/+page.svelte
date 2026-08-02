@@ -31,6 +31,7 @@
 	import { normalizeTag } from './tags';
 	import { isSwipeGesture } from './swipe';
 	import { searchBook, highlightExcerpt, type BookSearchResult, MAX_BOOK_SEARCH_RESULTS } from './bookSearch';
+	import { resolveTocHref } from './tocHref';
 	import { AVAILABLE_LANGUAGES } from './languages';
 	import {
 		DEFAULT_PREFS,
@@ -140,13 +141,13 @@
 	// Note editor: preview (rendered Markdown) vs edit (raw textarea). Defaults to
 	// preview only when reopening a pre-existing note that already has text.
 	let notePreviewMode = $state(false);
-	let annotationError = $state<string | null>(null);
-	let annotationErrorTimer: ReturnType<typeof setTimeout> | null = null;
+	let toastMessage = $state<string | null>(null);
+	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-	function showAnnotationError(message: string) {
-		annotationError = message;
-		if (annotationErrorTimer) clearTimeout(annotationErrorTimer);
-		annotationErrorTimer = setTimeout(() => (annotationError = null), 4000);
+	function showToast(message: string) {
+		toastMessage = message;
+		if (toastTimer) clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => (toastMessage = null), 4000);
 	}
 
 	// AI assist (§4.6): "Übersetzen"/"Nachschlagen" on the selection bar, and the
@@ -345,7 +346,7 @@
 			await getProcessor().setTranslationLanguage(lang);
 		} catch {
 			translationLanguage = previous;
-			showAnnotationError('Sprache konnte nicht gespeichert werden — keine Verbindung.');
+			showToast('Sprache konnte nicht gespeichert werden — keine Verbindung.');
 		}
 	}
 
@@ -382,7 +383,7 @@
 			annotations = [...annotations, created];
 			applyHighlight(created);
 		} catch {
-			showAnnotationError('Markierung konnte nicht gespeichert werden — keine Verbindung.');
+			showToast('Markierung konnte nicht gespeichert werden — keine Verbindung.');
 		}
 	}
 
@@ -477,7 +478,7 @@
 			// console - the toast stays user-friendly, but the diagnostic must
 			// not be swallowed.
 			console.error('[saveNote] fehlgeschlagen:', error);
-			showAnnotationError('Notiz konnte nicht gespeichert werden. Bitte erneut versuchen.');
+			showToast('Notiz konnte nicht gespeichert werden. Bitte erneut versuchen.');
 		} finally {
 			savingNote = false;
 		}
@@ -504,7 +505,7 @@
 			aiResult = null;
 			openNoteEditor(created, true);
 		} catch {
-			showAnnotationError('Vokabel konnte nicht gespeichert werden — keine Verbindung.');
+			showToast('Vokabel konnte nicht gespeichert werden — keine Verbindung.');
 		}
 	}
 
@@ -515,7 +516,7 @@
 			await getProcessor().setDefaultFlashcardColor(color);
 		} catch {
 			flashcardColor = previous;
-			showAnnotationError('Standardfarbe konnte nicht gespeichert werden — keine Verbindung.');
+			showToast('Standardfarbe konnte nicht gespeichert werden — keine Verbindung.');
 		}
 	}
 
@@ -542,10 +543,16 @@
 		if (currentCfi) navHistory = [...navHistory, currentCfi];
 	}
 
-	function jumpToAnnotation(a: Annotation) {
-		pushHistory();
-		void rendition?.display(a.cfiRange);
+	async function jumpToAnnotation(a: Annotation) {
+		const from = currentCfi;
 		notesOpen = false;
+		try {
+			await rendition?.display(a.cfiRange);
+			if (from) navHistory = [...navHistory, from];
+		} catch (error) {
+			console.error('[jumpToAnnotation] Sprung fehlgeschlagen:', a.cfiRange, error);
+			showToast('Diese Stelle konnte nicht geöffnet werden.');
+		}
 	}
 
 	/** Clears the previous search-match highlight (if any) before re-adding it at a new CFI. */
@@ -562,12 +569,17 @@
 	}
 
 	/** Pops the last history entry and jumps there - a no-op with an empty stack. */
-	function jumpBack() {
+	async function jumpBack() {
 		if (navHistory.length === 0) return;
 		const target = navHistory[navHistory.length - 1];
 		navHistory = navHistory.slice(0, -1);
 		clearSearchHighlight();
-		void rendition?.display(target);
+		try {
+			await rendition?.display(target);
+		} catch (error) {
+			console.error('[jumpBack] Sprung fehlgeschlagen:', target, error);
+			showToast('Zurückspringen fehlgeschlagen.');
+		}
 	}
 
 	async function runBookSearch() {
@@ -594,10 +606,16 @@
 	}
 
 	async function jumpToSearchResult(r: BookSearchResult) {
-		pushHistory();
+		const from = currentCfi;
 		searchOpen = false;
-		await rendition?.display(r.cfi);
-		setSearchHighlight(r.cfi);
+		try {
+			await rendition?.display(r.cfi);
+			if (from) navHistory = [...navHistory, from];
+			setSearchHighlight(r.cfi);
+		} catch (error) {
+			console.error('[jumpToSearchResult] Sprung fehlgeschlagen:', r.cfi, error);
+			showToast('Diese Fundstelle konnte nicht geöffnet werden.');
+		}
 	}
 
 	onMount(async () => {
@@ -942,15 +960,44 @@
 		persistPrefs();
 	}
 
-	function openChapter(href: string) {
-		pushHistory();
-		void rendition?.display(href);
+	/**
+	 * Springt zu einem Kapitel aus dem Inhaltsverzeichnis.
+	 *
+	 * Der href wird vorher auf ein echtes Spine-Ziel aufgelöst (siehe
+	 * tocHref.ts): epub.js reicht TOC-hrefs unverändert an den Spine-Index
+	 * weiter, obwohl sie relativ zum Navigationsdokument sind - bei Büchern,
+	 * deren Kapitel tiefer liegen als das OPF, findet er dadurch nichts.
+	 *
+	 * `display()` wird bewusst awaited und ein Fehler gemeldet statt
+	 * verschluckt: vorher tat ein Eintrag bei Fehlschlag einfach nichts, ohne
+	 * jede Spur. Bei Fehlschlag bleibt die Historie unverändert, sonst
+	 * sammelte sie Sprünge, die nie stattgefunden haben.
+	 */
+	async function openChapter(href: string) {
+		const from = currentCfi;
 		tocOpen = false;
+		const target = book
+			? resolveTocHref(href, book.packaging?.navPath || book.packaging?.ncxPath, (candidate) =>
+					Boolean(book?.spine.get(candidate))
+				)
+			: href;
+		if (!target) {
+			console.error('[openChapter] Kein Spine-Ziel für href:', href);
+			showToast('Dieses Kapitel ist im Buch nicht auffindbar.');
+			return;
+		}
+		try {
+			await rendition?.display(target);
+			if (from) navHistory = [...navHistory, from];
+		} catch (error) {
+			console.error('[openChapter] Sprung fehlgeschlagen:', href, '->', target, error);
+			showToast('Dieses Kapitel konnte nicht geöffnet werden.');
+		}
 	}
 
 	onDestroy(() => {
 		document.removeEventListener('visibilitychange', onVisibility);
-		if (annotationErrorTimer) clearTimeout(annotationErrorTimer);
+		if (toastTimer) clearTimeout(toastTimer);
 		if (chromeHideTimer) clearTimeout(chromeHideTimer);
 		if (noteSavedFlashTimer) clearTimeout(noteSavedFlashTimer);
 		void save();
@@ -1089,15 +1136,15 @@
 			</div>
 		{/if}
 
-		{#if annotationError}
+		{#if toastMessage}
 			<div class="absolute inset-x-0 bottom-4 z-40 flex justify-center px-4">
 				<p class="bg-[var(--color-accent-100)] px-3 py-2 text-center text-sm text-[var(--color-accent-800)]">
-					{annotationError}
+					{toastMessage}
 				</p>
 			</div>
 		{/if}
 
-		{#if navHistory.length > 0 && !selection && !aiResult && !chat && !annotationError}
+		{#if navHistory.length > 0 && !selection && !aiResult && !chat && !toastMessage}
 			<div class="absolute inset-x-0 bottom-4 z-40 flex justify-center">
 				<div class="flex items-center border-2 border-[var(--color-divider)] bg-[var(--color-bg)] shadow">
 					<button

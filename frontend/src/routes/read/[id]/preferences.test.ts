@@ -44,6 +44,16 @@ describe('readerThemeStyles', () => {
 		expect(styles.body.background).toBe(`${THEME_COLORS.dunkel.bg} !important`);
 		expect(styles.body.color).toBe(`${THEME_COLORS.dunkel.fg} !important`);
 	});
+
+	it('does not touch the iframe root element', () => {
+		// Eine overflow-Sperre auf <html> greift in epub.js' Spalten-Layout ein
+		// (Wurzelelement = Viewport, an dem die Kapitelbreite gemessen wird).
+		// Festgehalten, damit das nicht versehentlich zurückkommt.
+		for (const theme of ['hell', 'sepia', 'dunkel'] as const) {
+			const styles = readerThemeStyles(theme) as Record<string, unknown>;
+			expect(styles.html).toBeUndefined();
+		}
+	});
 });
 
 describe('MARGIN_PADDING', () => {
