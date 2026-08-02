@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts EpubAI locally: backend on :3000, frontend on :5173.
+# Starts EpubAI locally: backend on :3000, frontend on :5273.
 # Ctrl+C stops both. Installs dependencies on first run if needed.
 
 set -euo pipefail
@@ -54,7 +54,7 @@ cleanup() {
   # earlier, uncleanly-stopped run) gets force-killed directly, so the next
   # start never fails with "port already in use".
   local stragglers
-  stragglers="$(lsof -ti:3000,5173 2>/dev/null || true)"
+  stragglers="$(lsof -ti:3000,5273 2>/dev/null || true)"
   if [ -n "$stragglers" ]; then
     echo "$stragglers" | xargs kill -KILL 2>/dev/null || true
   fi
@@ -66,7 +66,7 @@ echo "==> Starte Backend (Port 3000)..."
 (cd "$BACKEND_DIR" && npm run dev) &
 PIDS+=("$!")
 
-echo "==> Starte Frontend (Port 5173)..."
+echo "==> Starte Frontend (Port 5273)..."
 (cd "$FRONTEND_DIR" && npm run dev) &
 PIDS+=("$!")
 
@@ -74,7 +74,7 @@ sleep 2
 echo ""
 echo "EpubAI läuft:"
 echo "  Backend:  http://localhost:3000"
-echo "  Frontend: http://localhost:5173"
+echo "  Frontend: http://localhost:5273"
 echo ""
 echo "Strg+C zum Beenden."
 

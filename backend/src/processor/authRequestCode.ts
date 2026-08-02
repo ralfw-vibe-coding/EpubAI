@@ -36,7 +36,12 @@ export async function authRequestCode(input: AuthRequestCodeInput): Promise<Reac
 
   try {
     await resend.sendOtpEmail(email, otp.code);
-  } catch {
+  } catch (error) {
+    // Den echten Grund loggen (ungültiger Key, nicht verifizierte
+    // Absenderdomain, keine Netzverbindung, ...) - nach außen bleibt es beim
+    // generischen Code. Ohne das ist ein fehlgeschlagener Login-Versand
+    // nicht diagnostizierbar: der Client sieht nur "email_send_failed".
+    console.error(`[auth] E-Mail-Versand an ${email} fehlgeschlagen:`, error);
     return ok(502, { error: "email_send_failed" });
   }
 

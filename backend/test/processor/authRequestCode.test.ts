@@ -51,12 +51,19 @@ describe("authRequestCode reactor", () => {
     expect(result.status).toBe(400);
   });
 
-  it("returns 502 when the email fails to send, but the code stays stored", async () => {
-    (resend.sendOtpEmail as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("Resend down"));
+  it("returns 502 when the email fails to send, but the code stays stored and the real cause is logged", async () => {
+    const cause = new Error("Resend down");
+    (resend.sendOtpEmail as ReturnType<typeof vi.fn>).mockRejectedValue(cause);
+    // Erwarteter Fehlerpfad - die Log-Zeile gehört dazu, soll die Testausgabe
+    // aber nicht verrauschen. Gleichzeitig festgenagelt, dass der echte Grund
+    // wirklich geloggt wird: ohne ihn ist ein Versandfehler nicht auffindbar.
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const result = await authRequestCode({ email: "someone@example.com" });
 
     expect(result).toEqual({ status: 502, body: { error: "email_send_failed" } });
     expect(userRepo.setOtp).toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("someone@example.com"), cause);
+    consoleError.mockRestore();
   });
 });

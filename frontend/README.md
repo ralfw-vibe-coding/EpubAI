@@ -44,7 +44,7 @@ Gespiegelt zum Backend, vier Schichten (siehe Requirements §4.7):
 ```bash
 cd frontend
 npm install
-npm run dev        # Dev-Server auf http://localhost:5173
+npm run dev        # Dev-Server auf http://localhost:5273
 ```
 
 Weitere Skripte:
@@ -96,7 +96,7 @@ Cover-Anzeige und Löschen. Voraussetzung: Backend läuft und ist unter
 `PUBLIC_API_BASE_URL` erreichbar (siehe oben), ein EPUB-Testbuch liegt lokal
 bereit.
 
-1. **Server starten:** `npm run dev`, Browser öffnet `http://localhost:5173`.
+1. **Server starten:** `npm run dev`, Browser öffnet `http://localhost:5273`.
 2. **Einloggen** mit E-Mail + OTP (`AUTH_SECRET_OTP` aus der Backend-Config) —
    landet danach auf der Bücherliste (`/library`).
 3. **Hochladen:** oben rechts im Header auf „+ Hochladen“ klicken → ein Panel
