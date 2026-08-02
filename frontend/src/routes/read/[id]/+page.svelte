@@ -3,7 +3,7 @@
 	import { fade, slide } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import ePub, { type Book, type NavItem, type Rendition } from 'epubjs';
+	import ePub, { EpubCFI, type Book, type Location, type NavItem, type Rendition } from 'epubjs';
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
 	import {
@@ -543,16 +543,70 @@
 		if (currentCfi) navHistory = [...navHistory, currentCfi];
 	}
 
-	async function jumpToAnnotation(a: Annotation) {
+	/**
+	 * Führt Sprünge strikt nacheinander aus.
+	 *
+	 * `Rendition.display()` bricht einen noch laufenden Sprung ab (es löst
+	 * dessen Promise vorzeitig auf) und stellt den neuen in seine Queue.
+	 * Ohne Serialisierung lief deshalb bei mehrmaligem "Zurück" die
+	 * Nachkorrektur aus displayCfi() für ein längst überholtes Ziel: sie maß
+	 * die inzwischen ganz andere Position, hielt sie für "zu früh gelandet"
+	 * und blätterte grundlos weiter - je Klick eine Seite Abweichung. Jeder
+	 * Sprung wartet nun auf den vorherigen; verworfen wird keiner, damit
+	 * mehrmaliges Klicken auch wirklich mehrere Schritte zurückgeht.
+	 */
+	let navChain: Promise<unknown> = Promise.resolve();
+	function queueNavigation(task: () => Promise<void>): void {
+		navChain = navChain.then(task, task).catch(() => undefined);
+	}
+
+	/**
+	 * Springt zu einer CFI und korrigiert die typische Landung eine Seite zu
+	 * früh.
+	 *
+	 * epub.js rechnet die Zielposition mit
+	 * `Math.floor(offset.left / layout.delta)` auf einen Seitenanfang - misst
+	 * es die Position um einen Sub-Pixel zu klein (die gespeicherte CFI ist
+	 * ein kollabierter Bereich, dessen Rechteck Browser unterschiedlich genau
+	 * liefern), fällt das Ergebnis eine ganze Seite zurück. Deshalb war die
+	 * Landung mal richtig, mal eine Seite davor.
+	 *
+	 * Erkennung ohne Raten: Liegt das Ziel HINTER dem letzten sichtbaren
+	 * Punkt, sind wir zu früh gelandet - dann eine Seite vor. Steht das Ziel
+	 * dagegen im sichtbaren Bereich, stimmt die Seite und es passiert nichts,
+	 * auch wenn die CFI nicht exakt am Seitenanfang liegt. Genau eine
+	 * Korrektur, weil der Abrundungsfehler höchstens eine Seite groß ist.
+	 */
+	async function displayCfi(cfi: string) {
+		await rendition?.display(cfi);
+		// currentLocation() ist in epub.js' eigenen Typen als DisplayedLocation
+		// deklariert, liefert zur Laufzeit aber das Location-Objekt mit
+		// start/end (dieselbe Typlücke wie bei Section.find(), siehe
+		// bookSearch.ts). Beim Continuous-Manager kann es zudem ein Promise
+		// sein - deshalb defensiv auf die eine Eigenschaft prüfen, die wir
+		// brauchen, statt auf den Typ zu vertrauen.
+		const location = rendition?.currentLocation() as unknown as Location | undefined;
+		const visibleEnd = location?.end?.cfi;
+		if (typeof visibleEnd !== 'string') return;
+		try {
+			if (new EpubCFI().compare(cfi, visibleEnd) > 0) await rendition?.next();
+		} catch {
+			// Nicht vergleichbare CFIs (fremdes Kapitel o.ä.): Landung so lassen.
+		}
+	}
+
+	function jumpToAnnotation(a: Annotation) {
 		const from = currentCfi;
 		notesOpen = false;
-		try {
-			await rendition?.display(a.cfiRange);
-			if (from) navHistory = [...navHistory, from];
-		} catch (error) {
-			console.error('[jumpToAnnotation] Sprung fehlgeschlagen:', a.cfiRange, error);
-			showToast('Diese Stelle konnte nicht geöffnet werden.');
-		}
+		queueNavigation(async () => {
+			try {
+				await displayCfi(a.cfiRange);
+				if (from) navHistory = [...navHistory, from];
+			} catch (error) {
+				console.error('[jumpToAnnotation] Sprung fehlgeschlagen:', a.cfiRange, error);
+				showToast('Diese Stelle konnte nicht geöffnet werden.');
+			}
+		});
 	}
 
 	/** Clears the previous search-match highlight (if any) before re-adding it at a new CFI. */
@@ -568,18 +622,25 @@
 		searchHighlightCfi = null;
 	}
 
-	/** Pops the last history entry and jumps there - a no-op with an empty stack. */
-	async function jumpBack() {
+	/**
+	 * Nimmt den obersten Eintrag der Historie und springt dorthin - bei leerer
+	 * Historie passiert nichts. Der Eintrag wird sofort entnommen, der Sprung
+	 * selbst aber eingereiht: mehrmaliges Klicken geht so wirklich mehrere
+	 * Schritte zurück, statt dass sich die Sprünge gegenseitig abschießen.
+	 */
+	function jumpBack() {
 		if (navHistory.length === 0) return;
 		const target = navHistory[navHistory.length - 1];
 		navHistory = navHistory.slice(0, -1);
 		clearSearchHighlight();
-		try {
-			await rendition?.display(target);
-		} catch (error) {
-			console.error('[jumpBack] Sprung fehlgeschlagen:', target, error);
-			showToast('Zurückspringen fehlgeschlagen.');
-		}
+		queueNavigation(async () => {
+			try {
+				await displayCfi(target);
+			} catch (error) {
+				console.error('[jumpBack] Sprung fehlgeschlagen:', target, error);
+				showToast('Zurückspringen fehlgeschlagen.');
+			}
+		});
 	}
 
 	async function runBookSearch() {
@@ -605,17 +666,19 @@
 		clearSearchHighlight();
 	}
 
-	async function jumpToSearchResult(r: BookSearchResult) {
+	function jumpToSearchResult(r: BookSearchResult) {
 		const from = currentCfi;
 		searchOpen = false;
-		try {
-			await rendition?.display(r.cfi);
-			if (from) navHistory = [...navHistory, from];
-			setSearchHighlight(r.cfi);
-		} catch (error) {
-			console.error('[jumpToSearchResult] Sprung fehlgeschlagen:', r.cfi, error);
-			showToast('Diese Fundstelle konnte nicht geöffnet werden.');
-		}
+		queueNavigation(async () => {
+			try {
+				await displayCfi(r.cfi);
+				if (from) navHistory = [...navHistory, from];
+				setSearchHighlight(r.cfi);
+			} catch (error) {
+				console.error('[jumpToSearchResult] Sprung fehlgeschlagen:', r.cfi, error);
+				showToast('Diese Fundstelle konnte nicht geöffnet werden.');
+			}
+		});
 	}
 
 	onMount(async () => {
@@ -973,7 +1036,7 @@
 	 * jede Spur. Bei Fehlschlag bleibt die Historie unverändert, sonst
 	 * sammelte sie Sprünge, die nie stattgefunden haben.
 	 */
-	async function openChapter(href: string) {
+	function openChapter(href: string) {
 		const from = currentCfi;
 		tocOpen = false;
 		const target = book
@@ -986,13 +1049,15 @@
 			showToast('Dieses Kapitel ist im Buch nicht auffindbar.');
 			return;
 		}
-		try {
-			await rendition?.display(target);
-			if (from) navHistory = [...navHistory, from];
-		} catch (error) {
-			console.error('[openChapter] Sprung fehlgeschlagen:', href, '->', target, error);
-			showToast('Dieses Kapitel konnte nicht geöffnet werden.');
-		}
+		queueNavigation(async () => {
+			try {
+				await rendition?.display(target);
+				if (from) navHistory = [...navHistory, from];
+			} catch (error) {
+				console.error('[openChapter] Sprung fehlgeschlagen:', href, '->', target, error);
+				showToast('Dieses Kapitel konnte nicht geöffnet werden.');
+			}
+		});
 	}
 
 	onDestroy(() => {
