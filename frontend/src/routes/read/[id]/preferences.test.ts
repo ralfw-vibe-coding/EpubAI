@@ -47,11 +47,22 @@ describe('readerThemeStyles', () => {
 
 	it('does not touch the iframe root element', () => {
 		// Eine overflow-Sperre auf <html> greift in epub.js' Spalten-Layout ein
-		// (Wurzelelement = Viewport, an dem die Kapitelbreite gemessen wird).
+		// (Wurzelelement = Viewport, an dem die Kapitelbreite gemessen wird)
+		// und hat nachweislich leere Folgeseiten verursacht.
 		// Festgehalten, damit das nicht versehentlich zurückkommt.
 		for (const theme of ['hell', 'sepia', 'dunkel'] as const) {
 			const styles = readerThemeStyles(theme) as Record<string, unknown>;
 			expect(styles.html).toBeUndefined();
+		}
+	});
+
+	it('blocks vertical panning of the page without disabling pinch-zoom', () => {
+		// Gegen das vertikale Verrutschen beim Wischen. `none` wäre riskant
+		// für die Textauswahl per Langdruck, deshalb genau diese Kombination -
+		// in jedem Theme, damit eine Theme-Änderung sie nicht verliert.
+		for (const theme of ['hell', 'sepia', 'dunkel'] as const) {
+			const styles = readerThemeStyles(theme) as Record<string, Record<string, string>>;
+			expect(styles.body['touch-action']).toBe('pan-x pinch-zoom');
 		}
 	});
 });

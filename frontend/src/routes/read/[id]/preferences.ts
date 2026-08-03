@@ -77,14 +77,25 @@ export function readerThemeStyles(theme: ReaderTheme): object {
 	const c = THEME_COLORS[theme];
 	return {
 		// Bewusst KEINE overflow-Sperre auf dem <html> des Iframes: Das lag
-		// nahe gegen das leichte vertikale Verrutschen beim Wischen, greift
-		// aber genau dort ein, wo epub.js seine Spalten-Paginierung aufbaut
-		// (das Wurzelelement bestimmt den Viewport, an dem die Kapitelbreite
-		// gemessen wird). Nicht ohne belastbaren Test wieder einbauen - die
-		// verbleibende Drift ist kosmetisch, leere Seiten sind es nicht.
+		// nahe gegen das leichte vertikale Verrutschen beim Wischen, hat aber
+		// nachweislich die Paginierung zerlegt (leere Folgeseiten) - das
+		// Wurzelelement bestimmt den Viewport, an dem epub.js die
+		// Kapitelbreite für seine Spalten misst. Nicht wieder einbauen.
+		//
+		// Stattdessen touch-action: das steuert ausschließlich, welche Gesten
+		// der Browser selbst verarbeitet, und fasst Layout, Messung und
+		// Spaltenfluss nicht an - der Fehlermodus von oben ist damit
+		// ausgeschlossen. `pan-x` verbietet das vertikale Mitziehen der Seite
+		// (geblättert wird ohnehin horizontal, und zu scrollen gibt es hier
+		// nichts); `pinch-zoom` bleibt bewusst erlaubt. Nicht `none`, das
+		// kann auf iOS die Ziehpunkte der Textauswahl beeinträchtigen - und
+		// Markieren ist hier ein Kernfeature. touch-action wird nicht
+		// vererbt, wirkt aber über die Vorfahrenkette: auf body gesetzt gilt
+		// es für jede Berührung im Buchtext.
 		body: {
 			background: `${c.bg} !important`,
-			color: `${c.fg} !important`
+			color: `${c.fg} !important`,
+			'touch-action': 'pan-x pinch-zoom'
 		},
 		'p, li, blockquote, td, th, figcaption, div, span': { color: `${c.fg} !important` },
 		'h1, h2, h3, h4, h5, h6': { color: `${c.fg} !important` },
