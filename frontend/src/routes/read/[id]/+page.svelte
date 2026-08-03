@@ -65,6 +65,8 @@
 	// come back on a tap - same pattern as most reading apps' fullscreen mode.
 	const CHROME_AUTO_HIDE_MS = 3000;
 	const CHROME_TRANSITION_MS = 200;
+	/** Notausstieg für afterReflow(), falls requestAnimationFrame nicht feuert (Hintergrund-Tab). */
+	const REFLOW_FALLBACK_MS = 250;
 	let chromeVisible = $state(true);
 	let chromeHideTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -561,35 +563,96 @@
 	}
 
 	/**
-	 * Springt zu einer CFI und korrigiert die typische Landung eine Seite zu
-	 * früh.
+	 * Wartet, bis ein frisch aufgebautes Kapitel wirklich fertig umbrochen ist.
 	 *
-	 * epub.js rechnet die Zielposition mit
-	 * `Math.floor(offset.left / layout.delta)` auf einen Seitenanfang - misst
-	 * es die Position um einen Sub-Pixel zu klein (die gespeicherte CFI ist
-	 * ein kollabierter Bereich, dessen Rechteck Browser unterschiedlich genau
-	 * liefern), fällt das Ergebnis eine ganze Seite zurück. Deshalb war die
-	 * Landung mal richtig, mal eine Seite davor.
+	 * epub.js' `view.display()` löst sein Promise auf, OHNE auf `hooks.content`
+	 * zu warten - und genau daran hängen Theme-Injektion und
+	 * Schriftgrößen-Override. Die Hooks laufen als Microtasks danach, der
+	 * daraus folgende Umbruch spätestens zum nächsten Layout. Zwei Frames
+	 * decken beides ab (dasselbe Muster wie beim Neuanlegen der Markierungen
+	 * weiter unten).
+	 */
+	function afterReflow(): Promise<void> {
+		return new Promise((resolve) => {
+			let settled = false;
+			const finish = () => {
+				if (settled) return;
+				settled = true;
+				resolve();
+			};
+			requestAnimationFrame(() => requestAnimationFrame(finish));
+			// requestAnimationFrame pausiert in Hintergrund-Tabs. Ohne diesen
+			// Ausweg bliebe das Öffnen dort für immer bei "Lädt..." stehen, weil
+			// der Erstaufbau auf diese Zusage wartet.
+			setTimeout(finish, REFLOW_FALLBACK_MS);
+		});
+	}
+
+	/**
+	 * currentLocation() ist in epub.js' eigenen Typen als DisplayedLocation
+	 * deklariert, liefert zur Laufzeit aber das Location-Objekt mit start/end
+	 * (dieselbe Typlücke wie bei Section.find(), siehe bookSearch.ts). Beim
+	 * Continuous-Manager kann es zudem ein Promise sein - deshalb defensiv auf
+	 * die Eigenschaften prüfen, die wir brauchen, statt auf den Typ zu
+	 * vertrauen.
+	 */
+	function visibleRange(): { start: string; end: string } | null {
+		const location = rendition?.currentLocation() as unknown as Location | undefined;
+		const start = location?.start?.cfi;
+		const end = location?.end?.cfi;
+		return typeof start === 'string' && typeof end === 'string' ? { start, end } : null;
+	}
+
+	/**
+	 * Springt zu einer CFI und korrigiert zwei Arten von Fehllandung.
 	 *
-	 * Erkennung ohne Raten: Liegt das Ziel HINTER dem letzten sichtbaren
-	 * Punkt, sind wir zu früh gelandet - dann eine Seite vor. Steht das Ziel
-	 * dagegen im sichtbaren Bereich, stimmt die Seite und es passiert nichts,
-	 * auch wenn die CFI nicht exakt am Seitenanfang liegt. Genau eine
-	 * Korrektur, weil der Abrundungsfehler höchstens eine Seite groß ist.
+	 * 1. Viele Seiten zu früh (nur bei frisch aufgebautem Kapitel): epub.js
+	 *    berechnet die Zielposition und scrollt, bevor Theme und Schriftgröße
+	 *    angewandt sind - `view.display()` wartet die content-Hooks nicht ab.
+	 *    Danach fließt der Text neu um: bei größerer Schrift braucht derselbe
+	 *    Text mehr Spalten, und dieselbe Pixelposition zeigt weit früher im
+	 *    Buch. Wie weit, hängt vom Buch-CSS und der Kapitellänge ab - deshalb
+	 *    fiel es nur bei manchen Büchern auf. Ein zweiter display() nach dem
+	 *    Umbruch rechnet mit den endgültigen Maßen.
+	 *
+	 * 2. Genau eine Seite zu früh: epub.js rundet die Zielposition mit
+	 *    `Math.floor(offset.left / layout.delta)` auf einen Seitenanfang ab.
+	 *    Die gespeicherte CFI ist ein kollabierter Bereich, dessen Rechteck
+	 *    Browser sub-pixelgenau unterschiedlich liefern - ein Bruchteil zu
+	 *    wenig kostet eine ganze Seite.
+	 *
+	 * Beides ohne Raten erkannt: Steht das Ziel im sichtbaren Bereich, stimmt
+	 * die Seite und es passiert nichts. Liegt es dahinter, sind wir zu früh -
+	 * erst neu aufbauen, und wenn danach immer noch eine Seite fehlt, genau
+	 * eine vorblättern. Mehr als eine kann der Rundungsfehler nicht sein.
 	 */
 	async function displayCfi(cfi: string) {
 		await rendition?.display(cfi);
-		// currentLocation() ist in epub.js' eigenen Typen als DisplayedLocation
-		// deklariert, liefert zur Laufzeit aber das Location-Objekt mit
-		// start/end (dieselbe Typlücke wie bei Section.find(), siehe
-		// bookSearch.ts). Beim Continuous-Manager kann es zudem ein Promise
-		// sein - deshalb defensiv auf die eine Eigenschaft prüfen, die wir
-		// brauchen, statt auf den Typ zu vertrauen.
-		const location = rendition?.currentLocation() as unknown as Location | undefined;
-		const visibleEnd = location?.end?.cfi;
-		if (typeof visibleEnd !== 'string') return;
+		await afterReflow();
+
+		const compare = new EpubCFI();
+		const isVisible = () => {
+			const range = visibleRange();
+			if (!range) return true; // nichts messbar - Landung so lassen
+			try {
+				return compare.compare(cfi, range.start) >= 0 && compare.compare(cfi, range.end) <= 0;
+			} catch {
+				return true; // nicht vergleichbare CFIs: nicht eingreifen
+			}
+		};
+
+		if (isVisible()) return;
+
+		// Fall 1: mit den jetzt endgültigen Maßen neu positionieren.
+		await rendition?.display(cfi);
+		await afterReflow();
+		if (isVisible()) return;
+
+		// Fall 2: der verbleibende Rundungsfehler, höchstens eine Seite.
+		const range = visibleRange();
+		if (!range) return;
 		try {
-			if (new EpubCFI().compare(cfi, visibleEnd) > 0) await rendition?.next();
+			if (compare.compare(cfi, range.end) > 0) await rendition?.next();
 		} catch {
 			// Nicht vergleichbare CFIs (fremdes Kapitel o.ä.): Landung so lassen.
 		}
