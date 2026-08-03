@@ -122,6 +122,29 @@ describe('createReaderDomain', () => {
 		expect(all.map((p) => p.bookId).sort()).toEqual(['b1', 'b2']);
 	});
 
+	it('recordProgressSync upserts the synced rows and leaves untouched books alone', async () => {
+		const domain = createReaderDomain(fakeDProvider());
+		await domain.saveProgress('b1', 'cfi1', 10, 1, 20, 'ts1');
+		await domain.saveProgress('b2', 'cfi2', 50, 10, 20, 'ts2');
+
+		await domain.recordProgressSync([
+			{ bookId: 'b1', cfi: 'cfi1-new', percent: 80, page: 16, totalPages: 20, updatedAt: 'ts3' },
+			{ bookId: 'b3', cfi: 'cfi3', percent: 5, page: null, totalPages: null, updatedAt: 'ts4' }
+		]);
+
+		expect(await domain.progressFor('b1')).toEqual({
+			bookId: 'b1',
+			cfi: 'cfi1-new',
+			percent: 80,
+			page: 16,
+			totalPages: 20,
+			updatedAt: 'ts3'
+		});
+		// Not part of the sync batch, so untouched - nothing is ever deleted here.
+		expect(await domain.progressFor('b2')).toMatchObject({ percent: 50, cfi: 'cfi2' });
+		expect(await domain.progressFor('b3')).toMatchObject({ percent: 5 });
+	});
+
 	describe('annotations', () => {
 		const ann: Annotation = {
 			id: 'a1',

@@ -128,6 +128,12 @@
 		getProcessor()
 			.syncAnnotations()
 			.catch(() => undefined);
+		// App-start sync of the reading position across devices (best-effort,
+		// same as above): merges local and remote per book, greater progress
+		// wins, and hands over any progress made while offline.
+		getProcessor()
+			.syncReadingProgress()
+			.catch(() => undefined);
 		await reload();
 	});
 

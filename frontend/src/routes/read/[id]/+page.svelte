@@ -67,6 +67,8 @@
 	const CHROME_TRANSITION_MS = 200;
 	/** Notausstieg für afterReflow(), falls requestAnimationFrame nicht feuert (Hintergrund-Tab). */
 	const REFLOW_FALLBACK_MS = 250;
+	/** So lange wartet das Öffnen höchstens auf den zentralen Lesestand (siehe onMount). */
+	const PROGRESS_SYNC_TIMEOUT_MS = 1500;
 	let chromeVisible = $state(true);
 	let chromeHideTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -753,7 +755,31 @@
 		translationLanguage = getSession()?.translationLanguage ?? 'de';
 		flashcardColor = (getSession()?.defaultFlashcardColor as AnnotationColor) ?? 'yellow';
 		try {
-			const { data, progress, title } = await getProcessor().openBookForReading(bookId);
+			// Den zentralen Lesestand gleich beim Öffnen abgleichen, nicht nur beim
+			// Aufbau der Bibliothek: Wer ein Buch schließt und wieder öffnet, kommt
+			// gar nicht an der Bibliothek vorbei (Schließen führt auf die
+			// Buchdetails) - der Stand von einem anderen Gerät wäre sonst erst nach
+			// einem Neustart der App da. Läuft parallel zum Laden der Datei.
+			const syncing = getProcessor()
+				.syncReadingProgress()
+				.catch(() => null);
+
+			const { data, progress: localProgress, title } = await getProcessor().openBookForReading(bookId);
+
+			// Kurz auf den Abgleich warten, damit das Buch gleich an der richtigen
+			// Stelle aufgeht statt erst hinzuspringen. Bewusst mit Frist: die
+			// Test-DB (Neon) braucht nach Leerlauf 5-15s, so lange darf sich das
+			// Öffnen nicht hinziehen. Kommt der Abgleich zu spät, wird mit dem
+			// lokalen Stand geöffnet - sein Ergebnis wird trotzdem lokal
+			// abgelegt und gilt dann beim nächsten Öffnen. Absichtlich KEIN
+			// Nachspringen im laufenden Betrieb: eine Seite, die einem beim Lesen
+			// unter den Fingern wegrutscht, wäre schlimmer als ein veralteter
+			// Einstieg.
+			const synced = await Promise.race([
+				syncing,
+				new Promise<null>((resolve) => setTimeout(() => resolve(null), PROGRESS_SYNC_TIMEOUT_MS))
+			]);
+			const progress = synced?.find((p) => p.bookId === bookId) ?? localProgress;
 
 			book = ePub(data);
 			// Prefer the catalog title cached on the loan (kept in sync with edits,

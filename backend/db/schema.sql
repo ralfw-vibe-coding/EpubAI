@@ -124,3 +124,17 @@ alter table "user" add column if not exists default_flashcard_color text not nul
 alter table "user" drop constraint if exists user_default_flashcard_color_check;
 alter table "user" add constraint user_default_flashcard_color_check
   check (default_flashcard_color in ('accent', 'orange', 'yellow', 'green', 'blue', 'purple'));
+
+-- Leseposition je Nutzer und Buch, geräteübergreifend (bisher nur lokal im
+-- Browser). Bei Konflikt gewinnt der größere Fortschritt - siehe
+-- mergeReadingProgress in der Domain.
+create table if not exists reading_progress (
+  user_id uuid not null references "user"(id),
+  book_id uuid not null references book(id),
+  cfi text not null,
+  percent integer not null default 0,
+  page integer,
+  total_pages integer,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, book_id)
+);

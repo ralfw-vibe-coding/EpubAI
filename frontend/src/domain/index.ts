@@ -91,6 +91,24 @@ export function createReaderDomain(d: DProvider) {
 			return d.allProgress();
 		},
 
+		/**
+		 * Store the merged reading positions of a cross-device sync locally.
+		 *
+		 * Deliberately a loop over the existing single-row `saveProgress` upsert
+		 * instead of a new bulk dProvider port: there is at most one row per book,
+		 * the sync only writes the ones that actually changed, and each write is an
+		 * idempotent upsert keyed by bookId. And unlike the annotation sync this
+		 * must NEVER wipe-and-reinsert — a DELETE would drop exactly the offline
+		 * progress this sync exists to preserve.
+		 */
+		async recordProgressSync(entries: ReadingProgress[]): Promise<void> {
+			for (const e of entries) {
+				await d.saveProgress(
+					makeProgress(e.bookId, e.cfi, e.percent, e.page, e.totalPages, e.updatedAt)
+				);
+			}
+		},
+
 		/** All annotations stored locally for a book (offline-first Reader read). */
 		async annotationsFor(bookId: string): Promise<Annotation[]> {
 			return d.allAnnotationsForBook(bookId);

@@ -1,4 +1,4 @@
-import type { Annotation, CatalogBook } from '../domain/types';
+import type { Annotation, CatalogBook, ReadingProgress } from '../domain/types';
 
 /**
  * xProvider ports used by the reactors (Requirements §4.7). These are external
@@ -74,6 +74,15 @@ export interface AnnotationExport {
 		color: string;
 	}>;
 }
+
+/**
+ * A reading-position row as the backend sends/returns it
+ * (`{ bookId, cfi, percent, page, totalPages, updatedAt }`). Field-for-field
+ * identical to the local Domain type, so it is deliberately an alias rather than
+ * a second, parallel declaration that would have to be kept in sync by hand —
+ * the name only exists to make the wire contract readable at the call sites.
+ */
+export type ReadingProgressDto = ReadingProgress;
 
 /** HTTP client to the backend. Mirrors the backend contract exactly. */
 export interface HttpClient {
@@ -155,6 +164,17 @@ export interface HttpClient {
 	 * validation (shape, file-hash match) happens on the backend.
 	 */
 	importAnnotations(bookId: string, payload: unknown): Promise<{ imported: number; skipped: number }>;
+	/** ALL of the user's reading positions across every book — the bulk sync-at-startup call. */
+	getReadingProgress(): Promise<ReadingProgressDto[]>;
+	/**
+	 * Push this device's reading position for a book. The backend applies the
+	 * same conflict rule as the client (the greater progress wins), so the
+	 * response may carry a HIGHER position than what was pushed.
+	 */
+	putReadingProgress(
+		bookId: string,
+		progress: { cfi: string; percent: number; page: number | null; totalPages: number | null }
+	): Promise<ReadingProgressDto>;
 }
 
 /** Stores the auth session (token + userId) and the backend auth header. */

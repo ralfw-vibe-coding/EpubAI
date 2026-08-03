@@ -33,6 +33,7 @@ import { setDefaultFlashcardColor } from './reactors/setDefaultFlashcardColor';
 import { setTranslationLanguage } from './reactors/setTranslationLanguage';
 import { signOut } from './reactors/signOut';
 import { syncAnnotations } from './reactors/syncAnnotations';
+import { syncReadingProgress } from './reactors/syncReadingProgress';
 import { translateSelection } from './reactors/translateSelection';
 import { unarchiveBook } from './reactors/unarchiveBook';
 import { updateAnnotationColor } from './reactors/updateAnnotationColor';
@@ -69,6 +70,7 @@ export function createProcessor(deps: ReactorDeps) {
 			totalPages: number | null
 		): Promise<ReadingProgress> =>
 			saveReadingProgress(deps, bookId, cfi, percent, page, totalPages),
+		syncReadingProgress: (): Promise<ReadingProgress[]> => syncReadingProgress(deps),
 		uploadEpub: (
 			file: Blob | ArrayBuffer,
 			filename: string,

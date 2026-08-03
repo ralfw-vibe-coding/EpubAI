@@ -5,6 +5,7 @@ import { registerLoanRoutes } from "./loanRoutes.js";
 import { registerAnnotationRoutes } from "./annotationRoutes.js";
 import { registerAiRoutes } from "./aiRoutes.js";
 import { registerAccountRoutes } from "./accountRoutes.js";
+import { registerReadingProgressRoutes } from "./readingProgressRoutes.js";
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await registerAuthRoutes(app);
@@ -13,4 +14,5 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await registerAnnotationRoutes(app);
   await registerAiRoutes(app);
   await registerAccountRoutes(app);
+  await registerReadingProgressRoutes(app);
 }

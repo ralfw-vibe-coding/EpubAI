@@ -130,3 +130,15 @@ export interface AnnotationSummary {
   createdAt: string;
   updatedAt: string;
 }
+
+// Reading position for one (user, book) pair, geräteübergreifend synced
+// (previously local-only in the browser). On conflict the greater progress
+// wins - see mergeReadingProgress in readingProgressRpu.ts.
+export interface ReadingProgress {
+  bookId: string;
+  cfi: string;
+  percent: number; // 0..100
+  page: number | null;
+  totalPages: number | null;
+  updatedAt: string; // ISO
+}

@@ -250,6 +250,118 @@ describe('processor reactors', () => {
 		expect(progress.totalPages).toBe(30);
 	});
 
+	it('saveReadingProgress pushes the position to the backend without awaiting it', async () => {
+		const { deps, http } = makeDeps();
+		await createProcessor(deps).saveReadingProgress('b1', 'cfi', 5, 2, 30);
+		// The push is fire-and-forget, so give the microtask queue one turn.
+		await Promise.resolve();
+
+		const call = http.calls.find((c) => c.method === 'putReadingProgress');
+		expect(call?.args[0]).toBe('b1');
+		expect(call?.args[1]).toEqual({ cfi: 'cfi', percent: 5, page: 2, totalPages: 30 });
+	});
+
+	it('saveReadingProgress still saves locally when the backend push fails', async () => {
+		const http = fakeHttp({
+			putReadingProgress: async () => {
+				throw new Error('offline');
+			}
+		});
+		const { deps, domain } = makeDeps({ http: http.impl });
+		const progress = await createProcessor(deps).saveReadingProgress('b1', 'cfi', 5, 2, 30);
+
+		expect(progress.percent).toBe(5);
+		expect(await domain.progressFor('b1')).toEqual(progress);
+	});
+
+	describe('reading-progress sync', () => {
+		const remoteEntry = {
+			bookId: 'b1',
+			cfi: 'remote-cfi',
+			percent: 70,
+			page: 70,
+			totalPages: 100,
+			updatedAt: '2026-07-12T00:00:00.000Z'
+		};
+
+		it('syncReadingProgress stores a further remote position locally', async () => {
+			const http = fakeHttp({ getReadingProgress: async () => [remoteEntry] });
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveProgress('b1', 'local-cfi', 20, 20, 100, '2026-07-13T00:00:00.000Z');
+
+			await createProcessor(deps).syncReadingProgress();
+
+			expect(await domain.progressFor('b1')).toEqual(remoteEntry);
+			expect(http.calls.some((c) => c.method === 'putReadingProgress')).toBe(false);
+		});
+
+		it('syncReadingProgress hands over progress made offline and keeps it locally', async () => {
+			const http = fakeHttp({ getReadingProgress: async () => [{ ...remoteEntry, percent: 20, page: 20 }] });
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveProgress('b1', 'local-cfi', 90, 90, 100, '2026-07-13T00:00:00.000Z');
+
+			await createProcessor(deps).syncReadingProgress();
+
+			const stored = await domain.progressFor('b1');
+			expect(stored?.percent).toBe(90);
+			expect(stored?.cfi).toBe('local-cfi');
+			const call = http.calls.find((c) => c.method === 'putReadingProgress');
+			expect(call?.args[0]).toBe('b1');
+			expect(call?.args[1]).toEqual({ cfi: 'local-cfi', percent: 90, page: 90, totalPages: 100 });
+		});
+
+		it('syncReadingProgress adopts a book the device has never opened', async () => {
+			const http = fakeHttp({ getReadingProgress: async () => [remoteEntry] });
+			const { deps, domain } = makeDeps({ http: http.impl });
+
+			await createProcessor(deps).syncReadingProgress();
+
+			expect(await domain.progressFor('b1')).toEqual(remoteEntry);
+		});
+
+		it('syncReadingProgress never deletes a local position the backend does not know', async () => {
+			const http = fakeHttp({ getReadingProgress: async () => [] });
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveProgress('b1', 'local-cfi', 33, 33, 100, '2026-07-13T00:00:00.000Z');
+
+			await createProcessor(deps).syncReadingProgress();
+
+			expect(await domain.progressFor('b1')).toMatchObject({ percent: 33, cfi: 'local-cfi' });
+			expect(http.calls.some((c) => c.method === 'putReadingProgress')).toBe(true);
+		});
+
+		it('syncReadingProgress keeps the local position and does not throw when offline', async () => {
+			const http = fakeHttp({
+				getReadingProgress: async () => {
+					throw new Error('offline');
+				}
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveProgress('b1', 'local-cfi', 33, 33, 100, '2026-07-13T00:00:00.000Z');
+
+			const result = await createProcessor(deps).syncReadingProgress();
+
+			expect(result).toHaveLength(1);
+			expect(await domain.progressFor('b1')).toMatchObject({ percent: 33 });
+		});
+
+		it('syncReadingProgress survives a failing push and still stores the merged positions', async () => {
+			const http = fakeHttp({
+				getReadingProgress: async () => [{ ...remoteEntry, bookId: 'b2', percent: 60 }],
+				putReadingProgress: async () => {
+					throw new Error('offline');
+				}
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveProgress('b1', 'local-cfi', 33, 33, 100, '2026-07-13T00:00:00.000Z');
+
+			await createProcessor(deps).syncReadingProgress();
+
+			expect(await domain.progressFor('b1')).toMatchObject({ percent: 33 });
+			expect(await domain.progressFor('b2')).toMatchObject({ percent: 60 });
+		});
+	});
+
 	it('uploadEpub delegates to http and returns the created book', async () => {
 		const { deps, http } = makeDeps();
 		const file = new Blob(['epub bytes']);

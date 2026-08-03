@@ -8,6 +8,7 @@ import type {
 	HttpClient,
 	LoanResponse,
 	LoginRequestResult,
+	ReadingProgressDto,
 	Session,
 	UploadEpubResult
 } from '../../processor/ports';
@@ -405,6 +406,26 @@ export function createHttpClient(
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 			return (await res.json()) as { imported: number; skipped: number };
+		},
+
+		async getReadingProgress(): Promise<ReadingProgressDto[]> {
+			const res = await fetchImpl(`${base}/reading-progress`, { headers: authHeaders() });
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			const body = (await res.json()) as { progress: ReadingProgressDto[] };
+			return body.progress;
+		},
+
+		async putReadingProgress(
+			bookId: string,
+			progress: { cfi: string; percent: number; page: number | null; totalPages: number | null }
+		): Promise<ReadingProgressDto> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/reading-progress`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify(progress)
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as ReadingProgressDto;
 		}
 	};
 }

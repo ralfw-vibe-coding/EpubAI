@@ -752,3 +752,81 @@ describe('createHttpClient', () => {
 		await expect(http.importAnnotations('b1', {})).rejects.toThrow('hash_mismatch');
 	});
 });
+
+describe('reading progress sync', () => {
+	const entry = {
+		bookId: 'b1',
+		cfi: 'epubcfi(/6/2!/4/2/1:0)',
+		percent: 42,
+		page: 42,
+		totalPages: 100,
+		updatedAt: '2026-07-13T00:00:00.000Z'
+	};
+
+	it('unwraps the progress array from GET /reading-progress', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ progress: [entry] }));
+		const http = createHttpClient(
+			'http://api',
+			fakeAuthStore({ token: 't', userId: 'u', translationLanguage: 'de', defaultFlashcardColor: 'yellow' }),
+			fetchMock
+		);
+		expect(await http.getReadingProgress()).toEqual([entry]);
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/reading-progress');
+		expect(opts.method ?? 'GET').toBe('GET');
+		expect(opts.headers.Authorization).toBe('Bearer t');
+	});
+
+	it('throws on a failed getReadingProgress', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'unauthorized' }, { ok: false, status: 401 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(http.getReadingProgress()).rejects.toBeInstanceOf(HttpError);
+	});
+
+	it('PUTs a book’s reading position and returns the stored entry', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(entry));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.putReadingProgress('b 1', {
+			cfi: 'epubcfi(/6/2!/4/2/1:0)',
+			percent: 42,
+			page: 42,
+			totalPages: 100
+		});
+
+		expect(res).toEqual(entry);
+		const [url, opts] = fetchMock.mock.calls[0];
+		expect(url).toBe('http://api/books/b%201/reading-progress');
+		expect(opts.method).toBe('PUT');
+		expect(JSON.parse(opts.body)).toEqual({
+			cfi: 'epubcfi(/6/2!/4/2/1:0)',
+			percent: 42,
+			page: 42,
+			totalPages: 100
+		});
+	});
+
+	it('returns the server’s higher position when it applied the conflict rule', async () => {
+		const higher = { ...entry, percent: 88, page: 88, cfi: 'remote' };
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(higher));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		const res = await http.putReadingProgress('b1', {
+			cfi: 'local',
+			percent: 10,
+			page: 10,
+			totalPages: 100
+		});
+		expect(res).toEqual(higher);
+	});
+
+	it('throws on a failed putReadingProgress', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ error: 'not_found' }, { ok: false, status: 404 }));
+		const http = createHttpClient('http://api', fakeAuthStore(), fetchMock);
+		await expect(
+			http.putReadingProgress('b1', { cfi: 'c', percent: 1, page: null, totalPages: null })
+		).rejects.toBeInstanceOf(HttpError);
+	});
+});

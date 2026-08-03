@@ -155,6 +155,14 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		createdAt: '2026-07-13T00:00:00.000Z',
 		updatedAt: '2026-07-13T00:00:00.000Z'
 	};
+	const defaultProgress: ReadingProgress = {
+		bookId: 'b1',
+		cfi: 'epubcfi(/6/2!/4/2/1:0)',
+		percent: 10,
+		page: 1,
+		totalPages: 100,
+		updatedAt: '2026-07-13T00:00:00.000Z'
+	};
 	const defaultAnnotationExport: AnnotationExport = {
 		schemaVersion: 1,
 		fileHash: 'h1',
@@ -208,6 +216,8 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		generateDossier: record('generateDossier', { ...defaultBook, hasDossier: true, generationCostUsd: 1.15 }),
 		exportAnnotations: record('exportAnnotations', defaultAnnotationExport),
 		importAnnotations: record('importAnnotations', { imported: 1, skipped: 0 }),
+		getReadingProgress: record('getReadingProgress', [] as ReadingProgress[]),
+		putReadingProgress: record('putReadingProgress', defaultProgress),
 		...overrides
 	};
 	return { impl, calls };
