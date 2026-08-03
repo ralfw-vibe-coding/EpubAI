@@ -5,6 +5,14 @@
 	import type { BookDetail, CatalogBook } from '../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../portal/runtime';
 	import { filterBooks, filterByLocal, tagsFrom, visibleBooks } from './filterBooks';
+	import {
+		LIBRARY_FILTERS_STORAGE_KEY,
+		parseLibraryFilters,
+		pruneMissingTags,
+		serializeLibraryFilters,
+		type LibraryFilters,
+		type LibraryViewMode
+	} from './filterState';
 
 	let books = $state<BookDetail[]>([]);
 	let loading = $state(true);
@@ -36,16 +44,26 @@
 		brokenCovers = new Set(brokenCovers).add(bookId);
 	}
 
+	// Die zuletzt eingestellte Ansicht gilt beim nächsten Öffnen wieder
+	// (gerätelokal, siehe filterState.ts). Direkt bei der Initialisierung
+	// gelesen statt in onMount: Die App läuft ohne SSR (+layout.ts), also ist
+	// localStorage hier schon verfügbar - und der Zustand ist von der ersten
+	// Darstellung an korrekt, ohne dass die Bibliothek kurz ungefiltert
+	// aufblitzt oder ein Speicher-Effekt die Werte überschreibt, bevor sie
+	// wiederhergestellt sind. Muss vor allem stehen, was daraus initialisiert
+	// wird - const, also keine Hochziehung.
+	const storedFilters = parseLibraryFilters(readStoredFilters());
+
 	// Cover/Liste-Umschalter (Segmented Control) - Cover-Ansicht ist Standard.
-	let viewMode = $state<'cover' | 'list'>('cover');
+	let viewMode = $state<LibraryViewMode>(storedFilters.viewMode);
 
 	// Tag-Filter: distinct Tags aus allen geladenen Büchern, alphabetisch.
 	// Aktive Tags werden ODER-verknüpft (Buch muss mindestens einen tragen).
-	let activeTags = $state<Set<string>>(new Set());
+	let activeTags = $state<Set<string>>(new Set(storedFilters.tags));
 
 	// Suche (Titel/Autor, Teilstring, Groß-/Kleinschreibung egal) - UND mit den
 	// aktiven Tags kombiniert.
-	let searchQuery = $state('');
+	let searchQuery = $state(storedFilters.query);
 
 	// Archiv einschließen: standardmäßig aus - archivierte Bücher sind dann
 	// weder in der Liste noch in den Tag-Chips sichtbar. Ausgeliehen-Filter:
@@ -53,8 +71,8 @@
 	// Bücher. Reihenfolge wichtig: erst Archiv-Einbeziehung + Ausgeliehen-Filter
 	// (-> sichtbare Menge), DANN allTags aus dieser Menge ableiten, DANN
 	// Suche+Tags darauf anwenden.
-	let includeArchived = $state(false);
-	let onlyLocal = $state(false);
+	let includeArchived = $state(storedFilters.includeArchived);
+	let onlyLocal = $state(storedFilters.onlyLocal);
 
 	let visible = $derived(filterByLocal(visibleBooks(books, includeArchived), onlyLocal));
 	let allTags = $derived(tagsFrom(visible));
@@ -69,6 +87,32 @@
 		}
 		activeTags = next;
 	}
+
+	// localStorage kann in bestimmten Datenschutz-/Speicherzuständen werfen -
+	// gemerkte Filter sind Komfort, nie ein Grund, die Bibliothek nicht zu
+	// zeigen. Gleiche Haltung wie bei den Reader-Einstellungen.
+	function readStoredFilters(): string | null {
+		try {
+			return localStorage.getItem(LIBRARY_FILTERS_STORAGE_KEY);
+		} catch {
+			return null;
+		}
+	}
+
+	$effect(() => {
+		const filters: LibraryFilters = {
+			query: searchQuery,
+			tags: [...activeTags],
+			includeArchived,
+			onlyLocal,
+			viewMode
+		};
+		try {
+			localStorage.setItem(LIBRARY_FILTERS_STORAGE_KEY, serializeLibraryFilters(filters));
+		} catch {
+			// Best effort - siehe readStoredFilters().
+		}
+	});
 
 	onMount(async () => {
 		if (!isAuthenticated()) {
@@ -130,6 +174,13 @@
 		error = null;
 		try {
 			books = await getProcessor().loadCatalog();
+			// Gemerkte Tags, die es im Katalog nicht mehr gibt, hier wegräumen -
+			// sonst bliebe ein Filter aktiv, für den gar kein Chip mehr angezeigt
+			// wird (die Chips leiten sich aus den vorhandenen Büchern ab), und die
+			// Bibliothek wirkte grundlos leer. Gegen ALLE Bücher geprüft, nicht die
+			// gerade sichtbaren: ein aktiver Ausleihen-/Archiv-Filter darf die
+			// gemerkten Tags nicht mit wegräumen.
+			activeTags = pruneMissingTags(activeTags, tagsFrom(books));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Katalog konnte nicht geladen werden.';
 		} finally {
