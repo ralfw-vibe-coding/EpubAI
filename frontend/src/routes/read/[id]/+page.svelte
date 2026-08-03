@@ -812,10 +812,23 @@
 			// A `?cfi=` query param (e.g. from the book detail page's annotations
 			// list, "open in reader") jumps straight to that spot; otherwise resume
 			// at the stored reading position, or start at the beginning. Same
-			// display() call either way - a deep-linked CFI is just as valid a
-			// target as a resumed one (both are real CFIs from this exact book).
+			// path either way - a deep-linked CFI is just as valid a target as a
+			// resumed one (both are real CFIs from this exact book).
+			//
+			// Über displayCfi() statt direkt display(): Sonst greift hier
+			// derselbe Abrundungsfehler wie bei den Sprüngen (siehe dort), und
+			// man landet beim Öffnen mal exakt dort, wo man zugeklappt hat, mal
+			// eine Seite davor. Ohne CFI (frisch geliehenes Buch) gibt es nichts
+			// zu korrigieren - dann der schlichte Aufruf, der am Anfang beginnt.
+			//
+			// Die Kette bekommt diesen ersten Aufruf als Startglied, damit ein
+			// Sprung, den man während des Ladens auslöst, sich dahinter einreiht
+			// statt den Erstaufbau abzuschießen.
 			const deepLinkCfi = $page.url.searchParams.get('cfi');
-			await rendition.display(deepLinkCfi || progress?.cfi || undefined);
+			const resumeCfi = deepLinkCfi || progress?.cfi;
+			const initialDisplay = resumeCfi ? displayCfi(resumeCfi) : rendition.display();
+			navChain = initialDisplay.catch(() => undefined);
+			await initialDisplay;
 			if (progress) {
 				percent = progress.percent;
 				// Show the page numbers from the last session immediately; they'll be
