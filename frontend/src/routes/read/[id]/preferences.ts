@@ -85,9 +85,14 @@ export function readerThemeStyles(theme: ReaderTheme): object {
 		// Stattdessen touch-action: das steuert ausschließlich, welche Gesten
 		// der Browser selbst verarbeitet, und fasst Layout, Messung und
 		// Spaltenfluss nicht an - der Fehlermodus von oben ist damit
-		// ausgeschlossen. `pan-x` verbietet das vertikale Mitziehen der Seite
-		// (geblättert wird ohnehin horizontal, und zu scrollen gibt es hier
-		// nichts); `pinch-zoom` bleibt bewusst erlaubt. Nicht `none`, das
+		// ausgeschlossen. `pan-x` verbietet das vertikale Mitziehen der Seite;
+		// zu scrollen gibt es hier nichts, und seit auch vertikal geblättert
+		// wird, ist es doppelt wichtig: Die Wischgeste nach oben würde sonst
+		// die Seite mitziehen, statt nur umzublättern - genau das Verrutschen,
+		// gegen das diese Zeile ursprünglich kam. Erkannt wird die Geste davon
+		// unberührt, touch-action steuert nur, was der Browser SELBST tut, und
+		// unterdrückt keine Touch-Ereignisse. `pinch-zoom` bleibt bewusst
+		// erlaubt. Nicht `none`, das
 		// kann auf iOS die Ziehpunkte der Textauswahl beeinträchtigen - und
 		// Markieren ist hier ein Kernfeature. touch-action wird nicht
 		// vererbt, wirkt aber über die Vorfahrenkette: auf body gesetzt gilt

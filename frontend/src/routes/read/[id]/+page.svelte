@@ -29,7 +29,7 @@
 	import { getProcessor, getSession, isAuthenticated } from '../../../portal/runtime';
 	import { colorHex, HIGHLIGHT_COLORS, highlightStyles } from './colors';
 	import { normalizeTag } from './tags';
-	import { isSwipeGesture } from './swipe';
+	import { detectSwipe, type Swipe } from './swipe';
 	import { searchBook, highlightExcerpt, type BookSearchResult, MAX_BOOK_SEARCH_RESULTS } from './bookSearch';
 	import { resolveTocHref } from './tocHref';
 	import { AVAILABLE_LANGUAGES } from './languages';
@@ -995,15 +995,25 @@
 	// swipe. This is deliberately NOT a page-curl/flip - just a thin bar
 	// sweeping across the pane, timed so the actual page swap lands roughly
 	// when the bar passes the middle, giving a "before/after" feel without
-	// simulating a real page. Direction matches the swipe that caused it: a
-	// leftward drag ("next") sweeps right-to-left, a rightward drag ("prev")
-	// sweeps left-to-right.
+	// simulating a real page.
+	//
+	// Der Strich läuft in der Achse, in der geblättert wurde, und in derselben
+	// Richtung wie die Geste: nach oben wischen ("next") lässt ihn von unten
+	// nach oben laufen, ein Zug nach links ebenso von rechts nach links. Nur so
+	// bestätigt er die Bewegung, statt ihr zu widersprechen.
+	//
+	// Der Seitenumbruch selbst bleibt intern horizontal (CSS-Spalten). epub.js
+	// kann für Bücher mit normaler Schreibrichtung gar nichts anderes: Es setzt
+	// die Achse beim Laden jedes Abschnitts hart auf "horizontal" zurück (siehe
+	// managers/views/iframe.js). Vertikal ist hier also Geste und Darstellung
+	// des Übergangs - für den Lesenden ist es vertikales Blättern, und die
+	// sauberen Seitenumbrüche bleiben erhalten.
 	const PAGE_TURN_SWEEP_MS = 320;
 	const PAGE_TURN_SWAP_DELAY_MS = 140;
-	let pageTurnAnim = $state<'next' | 'prev' | null>(null);
+	let pageTurnAnim = $state<Swipe | null>(null);
 
-	function triggerPageTurn(direction: 'next' | 'prev', turn: () => void) {
-		pageTurnAnim = direction;
+	function triggerPageTurn(turn: () => void, cue: Swipe) {
+		pageTurnAnim = cue;
 		setTimeout(turn, PAGE_TURN_SWAP_DELAY_MS);
 		setTimeout(() => {
 			pageTurnAnim = null;
@@ -1014,11 +1024,24 @@
 		if (chromeVisible) scheduleChromeHide();
 	}
 
+	// Knöpfe, Tastatur und Randklick haben keine eigene Richtung - sie bekommen
+	// die horizontale Darstellung, passend zu den Pfeilen ihrer Beschriftung.
+	// Bewusst OHNE optionalen Achsen-Parameter: Diese beiden hängen direkt an
+	// onclick, und ein optionales Argument würde dort stillschweigend das
+	// MouseEvent einsammeln. Das Wischen geht deshalb über turnBySwipe.
 	function next() {
-		triggerPageTurn('next', () => void rendition?.next());
+		triggerPageTurn(() => void rendition?.next(), { direction: 'next', axis: 'horizontal' });
 	}
 	function prev() {
-		triggerPageTurn('prev', () => void rendition?.prev());
+		triggerPageTurn(() => void rendition?.prev(), { direction: 'prev', axis: 'horizontal' });
+	}
+
+	/** Ein erkanntes Wischen ausführen - die Achse steuert nur die Darstellung. */
+	function turnBySwipe(swipe: Swipe) {
+		triggerPageTurn(
+			() => void (swipe.direction === 'next' ? rendition?.next() : rendition?.prev()),
+			swipe
+		);
 	}
 
 	// Touch swipe navigation (buttons remain as a fallback).
@@ -1037,19 +1060,18 @@
 		const t = e.changedTouches[0];
 		const dx = t.clientX - touchX;
 		const dy = t.clientY - touchY;
-		if (!isSwipeGesture(dx, dy, Date.now() - touchTime)) return;
-		if (dx < 0) next();
-		else prev();
+		const swipe = detectSwipe(dx, dy, Date.now() - touchTime);
+		if (swipe) turnBySwipe(swipe);
 	}
 
 	// Swiping over the book's own rendered content lives in a separate iframe
 	// per section - touch events never bubble out of it to the container
 	// above, so this needs epub.js's own per-Contents event forwarding (same
 	// mechanism the 'selected'/'click' handlers below rely on). Guarded so it
-	// never fires as a side effect of selecting text: besides the quick/
-	// mostly-horizontal check, a swipe never fires if the touch ended with an
-	// active (non-empty) selection in that iframe - that gesture was
-	// selecting a passage, not turning the page.
+	// never fires as a side effect of selecting text: besides der Prüfung auf
+	// eine schnelle, achsentreue Bewegung feuert ein Wischen nie, wenn die
+	// Berührung mit einer nicht-leeren Auswahl in diesem iframe endete - diese
+	// Geste wählte einen Abschnitt aus, sie blätterte nicht.
 	let contentTouchX = 0;
 	let contentTouchY = 0;
 	let contentTouchTime = 0;
@@ -1063,10 +1085,10 @@
 		const t = e.changedTouches[0];
 		const dx = t.clientX - contentTouchX;
 		const dy = t.clientY - contentTouchY;
-		if (!isSwipeGesture(dx, dy, Date.now() - contentTouchTime)) return;
+		const swipe = detectSwipe(dx, dy, Date.now() - contentTouchTime);
+		if (!swipe) return;
 		if ((contents.window.getSelection()?.toString() ?? '') !== '') return;
-		if (dx < 0) next();
-		else prev();
+		turnBySwipe(swipe);
 	}
 
 	/**
@@ -1255,7 +1277,7 @@
 		<div bind:this={viewer} class="h-full w-full"></div>
 
 		{#if pageTurnAnim}
-			<div class="page-turn-sweep {pageTurnAnim}"></div>
+			<div class="page-turn-sweep {pageTurnAnim.axis} {pageTurnAnim.direction}"></div>
 		{/if}
 
 		{#if loading}
@@ -1931,23 +1953,38 @@
 </div>
 
 <style>
-	/* Page-turn cue (see triggerPageTurn) - a bar sweeping the full height of
-	   the reading pane, not a page-curl/flip simulation. */
+	/* Page-turn cue (see triggerPageTurn) - a bar sweeping across the reading
+	   pane, not a page-curl/flip simulation. Es gibt ihn in beiden Achsen: Der
+	   Strich läuft dorthin, wohin gewischt wurde. */
 	.page-turn-sweep {
 		position: absolute;
-		inset: 0 auto 0 0;
-		width: 3px;
 		background: var(--color-accent);
 		box-shadow: 0 0 12px 2px var(--color-accent);
 		opacity: 0.7;
 		pointer-events: none;
 		z-index: 15;
 	}
-	.page-turn-sweep.next {
+	.page-turn-sweep.horizontal {
+		inset: 0 auto 0 0;
+		width: 3px;
+	}
+	.page-turn-sweep.vertical {
+		inset: 0 0 auto 0;
+		height: 3px;
+	}
+	.page-turn-sweep.horizontal.next {
 		animation: page-turn-sweep-rtl 320ms ease-in-out;
 	}
-	.page-turn-sweep.prev {
+	.page-turn-sweep.horizontal.prev {
 		animation: page-turn-sweep-ltr 320ms ease-in-out;
+	}
+	/* Nach oben wischen ("next") lässt den Strich von unten nach oben laufen -
+	   er folgt der Geste, statt ihr entgegenzulaufen. */
+	.page-turn-sweep.vertical.next {
+		animation: page-turn-sweep-btt 320ms ease-in-out;
+	}
+	.page-turn-sweep.vertical.prev {
+		animation: page-turn-sweep-ttb 320ms ease-in-out;
 	}
 	@keyframes page-turn-sweep-rtl {
 		from {
@@ -1963,6 +2000,22 @@
 		}
 		to {
 			left: 100%;
+		}
+	}
+	@keyframes page-turn-sweep-btt {
+		from {
+			top: 100%;
+		}
+		to {
+			top: 0%;
+		}
+	}
+	@keyframes page-turn-sweep-ttb {
+		from {
+			top: 0%;
+		}
+		to {
+			top: 100%;
 		}
 	}
 </style>
