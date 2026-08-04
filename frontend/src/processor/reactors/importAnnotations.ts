@@ -1,4 +1,5 @@
 import type { ReactorDeps } from '../deps';
+import { syncAnnotations } from './syncAnnotations';
 
 /**
  * Reactor: import a previously exported annotations payload
@@ -8,20 +9,20 @@ import type { ReactorDeps } from '../deps';
  *
  * The import response only carries counts, not the created rows (their ids
  * are backend-assigned and unknown to the caller), so a successful import
- * that added at least one annotation re-syncs the full local cache from the
- * backend (same pull-and-replace as syncAnnotations) - otherwise the reader
- * would report "N importiert" while the local cache, which is what actually
- * renders highlights, never learned about the new rows.
+ * that added at least one annotation re-syncs the local cache - otherwise the
+ * reader would report "N importiert" while the local cache, which is what
+ * actually renders highlights, never learned about the new rows.
+ *
+ * Dafür der reguläre Abgleich statt eines eigenen Holens: Der führt zusammen,
+ * statt zu ersetzen, und wirft damit nicht weg, was hier gerade offline
+ * entstanden sein könnte.
  */
 export async function importAnnotations(
-	deps: Pick<ReactorDeps, 'http' | 'domain'>,
+	deps: Pick<ReactorDeps, 'http' | 'domain' | 'ids' | 'clock'>,
 	bookId: string,
 	payload: unknown
 ): Promise<{ imported: number; skipped: number }> {
 	const result = await deps.http.importAnnotations(bookId, payload);
-	if (result.imported > 0) {
-		const annotations = await deps.http.getAllAnnotations();
-		await deps.domain.recordAnnotationSync(annotations);
-	}
+	if (result.imported > 0) await syncAnnotations(deps);
 	return result;
 }

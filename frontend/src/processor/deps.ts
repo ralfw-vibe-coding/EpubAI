@@ -1,5 +1,5 @@
 import type { ReaderDomain } from '../domain';
-import type { AuthStore, Clock, DeviceProvider, FileStore, HttpClient } from './ports';
+import type { AuthStore, Clock, DeviceProvider, FileStore, HttpClient, IdProvider } from './ports';
 
 /**
  * The full set of dependencies a reactor may compose: the Domain plus the
@@ -13,4 +13,5 @@ export interface ReactorDeps {
 	clock: Clock;
 	device: DeviceProvider;
 	auth: AuthStore;
+	ids: IdProvider;
 }

@@ -18,6 +18,12 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
+	// Offline-Betrieb: Der Katalog kam aus dem lokalen Spiegel, weil das Backend
+	// nicht erreichbar war - dann sind nur die hier ausgeliehenen Bücher da.
+	// Kein Fehlerzustand, sondern ein eigener Betriebszustand (siehe
+	// processor/reactors/loadCatalog.ts), deshalb ein eigenes Flag neben `error`.
+	let offline = $state(false);
+
 	// Upload flow, one phase at a time. Selecting a file uploads AND creates the
 	// book in one step (metadata as-is, edited later on the book detail page) -
 	// there is no intermediate "confirm details" step:
@@ -150,7 +156,8 @@
 	}
 
 	function onWindowDragEnter(e: DragEvent) {
-		if (!dragHasFiles(e)) return;
+		// Offline gibt es nichts hochzuladen - dann auch kein Ablage-Overlay.
+		if (!dragHasFiles(e) || offline) return;
 		e.preventDefault();
 		dragDepth++;
 	}
@@ -168,7 +175,7 @@
 	}
 
 	async function onWindowDrop(e: DragEvent) {
-		if (!dragHasFiles(e)) return;
+		if (!dragHasFiles(e) || offline) return;
 		e.preventDefault();
 		dragDepth = 0;
 		const file = e.dataTransfer?.files?.[0];
@@ -179,7 +186,9 @@
 		loading = true;
 		error = null;
 		try {
-			books = await getProcessor().loadCatalog();
+			const result = await getProcessor().loadCatalog();
+			books = result.books;
+			offline = result.offline;
 			// Gemerkte Tags, die es im Katalog nicht mehr gibt, hier wegräumen -
 			// sonst bliebe ein Filter aktiv, für den gar kein Chip mehr angezeigt
 			// wird (die Chips leiten sich aus den vorhandenen Büchern ab), und die
@@ -188,6 +197,9 @@
 			// gemerkten Tags nicht mit wegräumen.
 			activeTags = pruneMissingTags(activeTags, tagsFrom(books));
 		} catch (e) {
+			// Hierher kommt nur ein echter Fehler des Backends (offline wird vom
+			// Reactor als Zustand gemeldet, nicht geworfen) - also sind wir online.
+			offline = false;
 			error = e instanceof Error ? e.message : 'Katalog konnte nicht geladen werden.';
 		} finally {
 			loading = false;
@@ -202,6 +214,7 @@
 	// Step 1: "+ Hochladen" goes straight to the native file picker - no
 	// intermediate panel to open first (that extra click was confusing).
 	function startUpload() {
+		if (offline) return;
 		if (fileInput) fileInput.value = '';
 		fileInput?.click();
 	}
@@ -252,9 +265,15 @@
 >
 	<h1 class="font-[var(--font-heading)] text-xl font-extrabold tracking-tight">Bibliothek</h1>
 	<div class="flex items-center gap-4">
+		<!-- Offline nur deaktiviert, nicht ausgeblendet: Ein verschwundener Knopf
+		     sähe nach einem Fehler der App aus und ließe die Kopfzeile springen -
+		     der ausgegraute Knopf zeigt zusammen mit dem Hinweis darunter, dass
+		     Hochladen gerade nur nicht geht. -->
 		<button
 			onclick={startUpload}
-			class="border border-[var(--color-divider)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-semibold transition hover:border-[var(--color-accent)]"
+			disabled={offline}
+			title={offline ? 'Offline nicht möglich' : undefined}
+			class="border border-[var(--color-divider)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-semibold transition hover:border-[var(--color-accent)] disabled:opacity-45 disabled:hover:border-[var(--color-divider)]"
 		>
 			+ Hochladen
 		</button>
@@ -289,6 +308,12 @@
 />
 
 <main class="mx-auto max-w-2xl px-5 py-6">
+	{#if offline}
+		<p class="mb-4 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
+			Achtung, offline — nur ausgeliehene Bücher sichtbar.
+		</p>
+	{/if}
+
 	{#if phase !== 'idle'}
 		<div class="mb-6 flex flex-col gap-3 border border-[var(--color-divider)] bg-[var(--color-surface)] p-5">
 			<div class="flex items-center justify-between">
@@ -386,7 +411,11 @@
 	{:else if error}
 		<p class="bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">{error}</p>
 	{:else if books.length === 0}
-		<p class="text-[var(--color-neutral-700)]">Noch keine Bücher im Katalog.</p>
+		<p class="text-[var(--color-neutral-700)]">
+			{offline
+				? 'Auf diesem Gerät ist kein Buch ausgeliehen.'
+				: 'Noch keine Bücher im Katalog.'}
+		</p>
 	{:else}
 		<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 			<input

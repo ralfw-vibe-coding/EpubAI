@@ -58,7 +58,29 @@ export async function findById(annotationId: string): Promise<Annotation | null>
   return result.rows[0] ? toAnnotation(result.rows[0]) : null;
 }
 
-export async function insert(bookId: string, userId: string, draft: AnnotationDraft): Promise<Annotation> {
+/**
+ * Inserts a new annotation. When `draft.id` is supplied (an offline client
+ * generating its own id so annotation creation works without a round trip),
+ * it's used as the row's id with `on conflict (id) do nothing` so a retried
+ * request (e.g. a queued offline write replayed after a dropped connection)
+ * never creates a duplicate row or fails - see createAnnotation.ts for the
+ * idempotency handling around this. Without `draft.id`, the database assigns
+ * one as before (gen_random_uuid() default). Note that if a conflict occurs,
+ * the `insert ... returning` clause finds no row - the caller (a repeat
+ * insert of the same id) must re-fetch separately if it needs the row.
+ */
+export async function insert(bookId: string, userId: string, draft: AnnotationDraft): Promise<Annotation | null> {
+  if (draft.id !== undefined) {
+    const result = await pool.query<AnnotationRow>(
+      `insert into annotation (id, book_id, user_id, cfi_range, excerpt, note, color, tags)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)
+       on conflict (id) do nothing
+       returning ${SELECT_FIELDS}`,
+      [draft.id, bookId, userId, draft.cfiRange, draft.excerpt, draft.note, draft.color, draft.tags]
+    );
+    return result.rows[0] ? toAnnotation(result.rows[0]) : null;
+  }
+
   const result = await pool.query<AnnotationRow>(
     `insert into annotation (book_id, user_id, cfi_range, excerpt, note, color, tags)
      values ($1, $2, $3, $4, $5, $6, $7)

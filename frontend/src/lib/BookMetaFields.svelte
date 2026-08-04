@@ -25,10 +25,10 @@
 		let cancelled = false;
 		void (async () => {
 			try {
-				const catalog = await getProcessor().loadCatalog();
+				const { books } = await getProcessor().loadCatalog();
 				if (cancelled) return;
 				const distinct = new Set<string>();
-				for (const book of catalog) for (const tag of book.tags) distinct.add(tag);
+				for (const book of books) for (const tag of book.tags) distinct.add(tag);
 				knownTags = [...distinct];
 			} catch {
 				// Suggestions are a convenience only; silently skip on failure.

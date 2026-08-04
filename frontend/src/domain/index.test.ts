@@ -205,17 +205,79 @@ describe('createReaderDomain', () => {
 		it('removes an annotation by id', async () => {
 			const domain = createReaderDomain(fakeDProvider());
 			await domain.saveAnnotation(ann);
-			await domain.removeAnnotation('a1');
+			await domain.removeAnnotation('a1', 'd1');
 			expect(await domain.annotationsFor('b1')).toEqual([]);
 		});
 
-		it('recordAnnotationSync replaces the whole local cache', async () => {
+		it('hinterlässt beim Löschen einen Grabstein, wenn das Backend den Eintrag kennt', async () => {
 			const domain = createReaderDomain(fakeDProvider());
 			await domain.saveAnnotation(ann);
+			await domain.removeAnnotation('a1', 'd1');
+			expect(await domain.annotationTombstones()).toEqual(['a1']);
+			await domain.forgetAnnotationTombstone('a1');
+			expect(await domain.annotationTombstones()).toEqual([]);
+		});
+
+		it('hinterlässt KEINEN Grabstein für eine nie hochgereichte Markierung', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			await domain.recordNewAnnotation('a9', 'b1', 'cfi', 'markiert', null, 'accent', [], 'c1');
+			await domain.removeAnnotation('a9', 'd1');
+			expect(await domain.annotationTombstones()).toEqual([]);
+		});
+
+		it('merkt eine neu angelegte Markierung als noch nicht abgeglichen vor', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			const created = await domain.recordNewAnnotation(
+				'a9',
+				'b1',
+				'cfi',
+				'markiert',
+				'  ',
+				'blue',
+				['flashcard'],
+				'c1'
+			);
+			// Leere Notiz = keine Notiz, Zeitstempel aus der übergebenen Uhr.
+			expect(created).toEqual({
+				id: 'a9',
+				bookId: 'b1',
+				cfiRange: 'cfi',
+				excerpt: 'markiert',
+				note: null,
+				color: 'blue',
+				tags: ['flashcard'],
+				createdAt: 'c1',
+				updatedAt: 'c1'
+			});
+			expect(await domain.annotationSyncState()).toEqual([
+				{ annotation: created, serverKnown: false, dirty: true }
+			]);
+		});
+
+		it('eine Bearbeitung nimmt serverKnown nicht zurück, macht den Eintrag aber dirty', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			await domain.saveAnnotation(ann);
+			await domain.editAnnotationNote(ann, 'Eine Notiz', [], 'c2');
+			expect(await domain.annotationSyncState()).toMatchObject([
+				{ serverKnown: true, dirty: true }
+			]);
+		});
+
+		it('applyAnnotationSync schreibt und löscht, ohne den Rest anzutasten', async () => {
+			const domain = createReaderDomain(fakeDProvider());
+			await domain.saveAnnotation(ann);
+			await domain.recordNewAnnotation('a9', 'b1', 'cfi', 'offline', null, 'accent', [], 'c1');
 			const fresh: Annotation = { ...ann, id: 'a2', excerpt: 'anders' };
-			await domain.recordAnnotationSync([fresh]);
+
+			await domain.applyAnnotationSync([fresh], ['a1']);
+
 			const all = await domain.annotationsFor('b1');
-			expect(all).toEqual([fresh]);
+			expect(all.map((a) => a.id).sort()).toEqual(['a2', 'a9']);
+			expect(await domain.annotationSyncState()).toContainEqual({
+				annotation: fresh,
+				serverKnown: true,
+				dirty: false
+			});
 		});
 
 		describe('annotationCounts', () => {

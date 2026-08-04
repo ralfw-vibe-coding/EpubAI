@@ -6,6 +6,7 @@ import { createAuthStore } from '../providers/x/auth-store';
 import { createClock } from '../providers/x/clock';
 import { createDeviceProvider } from '../providers/x/device';
 import { createHttpClient } from '../providers/x/http';
+import { createIdProvider } from '../providers/x/ids';
 import { createFileStore } from '../providers/x/opfs-files';
 import type { Session } from '../processor/ports';
 
@@ -37,7 +38,8 @@ export function getProcessor(): Processor {
 			files: createFileStore(),
 			clock: createClock(),
 			device: createDeviceProvider(),
-			auth
+			auth,
+			ids: createIdProvider()
 		});
 	}
 	return processor;

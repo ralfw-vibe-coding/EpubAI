@@ -15,6 +15,7 @@ export const ANNOTATION_COLORS: readonly AnnotationColor[] = [
 ];
 
 export interface AnnotationDraft {
+  id?: string;
   cfiRange: string;
   excerpt: string;
   note: string | null;
@@ -24,6 +25,33 @@ export interface AnnotationDraft {
 
 export type ParseCreateAnnotationResult = { valid: true; draft: AnnotationDraft } | { valid: false };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Validates a client-supplied annotation id: must be a UUID (version 1-5,
+ * case-insensitive). Used so an offline client can generate the id itself
+ * and have annotation creation be idempotent under retry - see
+ * createAnnotation.ts for the idempotency handling.
+ */
+export function isValidUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
+export type ParseIdResult = { valid: true; id: string | undefined } | { valid: false };
+
+/**
+ * Validates and normalizes an optional client-supplied `id` field: omitted/
+ * `undefined` -> no value (the server assigns one as before, see
+ * annotationRepo.insert). Present -> must be a UUID string (see
+ * `isValidUuid`), normalized to lowercase; anything else invalidates the
+ * whole input.
+ */
+export function parseId(value: unknown): ParseIdResult {
+  if (value === undefined) return { valid: true, id: undefined };
+  if (typeof value !== "string" || !isValidUuid(value)) return { valid: false };
+  return { valid: true, id: value.toLowerCase() };
+}
+
 /**
  * Validates and normalizes a POST /books/:id/annotations request body.
  * `cfiRange` and `excerpt` are required, non-blank (after trim) strings;
@@ -31,14 +59,19 @@ export type ParseCreateAnnotationResult = { valid: true; draft: AnnotationDraft 
  * whole book as one "highlight". `note` is optional - see `parseNote`.
  * `color` is optional and defaults to "accent" - see `parseColor`.
  * `tags` is optional and defaults to `[]` - see `parseTags`.
+ * `id` is optional - see `parseId`.
  */
 export function parseCreateAnnotation(input: {
+  id?: unknown;
   cfiRange?: unknown;
   excerpt?: unknown;
   note?: unknown;
   color?: unknown;
   tags?: unknown;
 }): ParseCreateAnnotationResult {
+  const idResult = parseId(input.id);
+  if (!idResult.valid) return { valid: false };
+
   if (typeof input.cfiRange !== "string") return { valid: false };
   const cfiRange = input.cfiRange.trim();
   if (!cfiRange) return { valid: false };
@@ -58,7 +91,14 @@ export function parseCreateAnnotation(input: {
 
   return {
     valid: true,
-    draft: { cfiRange, excerpt, note: noteResult.note, color: colorResult.color, tags: tagsResult.tags }
+    draft: {
+      id: idResult.id,
+      cfiRange,
+      excerpt,
+      note: noteResult.note,
+      color: colorResult.color,
+      tags: tagsResult.tags
+    }
   };
 }
 

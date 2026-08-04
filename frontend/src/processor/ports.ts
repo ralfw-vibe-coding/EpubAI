@@ -102,15 +102,15 @@ export interface HttpClient {
 	deleteBook(bookId: string): Promise<void>;
 	/** ALL of the user's annotations across every book — the bulk sync-at-startup call. */
 	getAllAnnotations(): Promise<Annotation[]>;
-	/** Create an annotation on a book; the backend assigns the id we then cache locally. */
-	createAnnotation(
-		bookId: string,
-		cfiRange: string,
-		excerpt: string,
-		note?: string,
-		color?: string,
-		tags?: string[]
-	): Promise<Annotation>;
+	/**
+	 * Reicht eine hier angelegte Markierung ans Backend nach. Die ID kommt vom
+	 * Client mit - das Anlegen braucht deshalb kein Netz mehr, und ein
+	 * wiederholter Aufruf mit derselben ID ist idempotent (200 statt 201).
+	 * Bewusst die ganze Markierung als ein Argument statt einer Reihe von
+	 * Einzelwerten: Aufrufer haben an dieser Stelle ohnehin den fertigen
+	 * lokalen Datensatz in der Hand.
+	 */
+	createAnnotation(annotation: Annotation): Promise<Annotation>;
 	/** Edit an existing annotation's note (and tags). */
 	updateAnnotationNote(id: string, note: string | null, tags?: string[]): Promise<Annotation>;
 	/** Edit an existing annotation's color. */
@@ -200,4 +200,14 @@ export interface Clock {
 /** Stable per-device identifier used for loans. */
 export interface DeviceProvider {
 	id(): string;
+}
+
+/**
+ * Quelle neuer IDs (UUIDs). Wie `Clock` eine Plattformfunktion
+ * (`crypto.randomUUID`), die nur als Port hereinkommt - so bleiben Reactors,
+ * die IDs vergeben, in Tests vorhersagbar. Gebraucht, seit Markierungen ihre ID
+ * auf dem Client bekommen und damit offline anlegbar sind.
+ */
+export interface IdProvider {
+	newId(): string;
 }

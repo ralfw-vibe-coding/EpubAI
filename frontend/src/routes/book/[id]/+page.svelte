@@ -35,6 +35,11 @@
 	let detail = $state<BookDetail | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	// Die Angaben stammen aus dem lokalen Spiegel, weil das Backend nicht
+	// erreichbar war (nur für ausgeliehene Bücher möglich, siehe
+	// processor/reactors/openBookDetail.ts). Kein Fehler, sondern ein eigener
+	// Betriebszustand - deshalb ein eigenes Flag neben `error`.
+	let offline = $state(false);
 	let borrowing = $state(false);
 	let returning = $state(false);
 
@@ -220,7 +225,9 @@
 		loading = true;
 		error = null;
 		try {
-			detail = await getProcessor().openBookDetail(bookId);
+			const result = await getProcessor().openBookDetail(bookId);
+			detail = result.book;
+			offline = result.offline;
 			coverBroken = false;
 			// loadAnnotations returns them oldest-first (the local cache's storage
 			// order); the list here shows newest first, so reverse for display only.
@@ -238,6 +245,9 @@
 					});
 			}
 		} catch (e) {
+			// Siehe Bibliothek: ein geworfener Fehler heißt, das Backend hat
+			// geantwortet - der Offline-Hinweis gehört dann weg.
+			offline = false;
 			error = e instanceof Error ? e.message : 'Buch konnte nicht geladen werden.';
 		} finally {
 			loading = false;
@@ -514,6 +524,11 @@
 	{:else if error && !detail}
 		<p class="bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">{error}</p>
 	{:else if detail}
+		{#if offline}
+			<p class="mb-4 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
+				Offline — Angaben aus dem lokalen Speicher.
+			</p>
+		{/if}
 		<div class="flex gap-5">
 			{#if detail.coverUrl && !coverBroken}
 				<img

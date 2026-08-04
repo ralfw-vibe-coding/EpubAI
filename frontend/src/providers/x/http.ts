@@ -220,25 +220,25 @@ export function createHttpClient(
 			return body.annotations;
 		},
 
-		async createAnnotation(
-			bookId: string,
-			cfiRange: string,
-			excerpt: string,
-			note?: string,
-			color?: string,
-			tags?: string[]
-		): Promise<Annotation> {
-			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/annotations`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', ...authHeaders() },
-				body: JSON.stringify({
-					cfiRange,
-					excerpt,
-					...(note !== undefined ? { note } : {}),
-					...(color !== undefined ? { color } : {}),
-					...(tags !== undefined ? { tags } : {})
-				})
-			});
+		async createAnnotation(annotation: Annotation): Promise<Annotation> {
+			// `id` geht mit: Sie entstand beim Anlegen auf diesem Gerät, damit das
+			// ohne Netz funktioniert. Das Backend nimmt sie an und antwortet auf
+			// eine Wiederholung idempotent, statt eine zweite Zeile anzulegen.
+			const res = await fetchImpl(
+				`${base}/books/${encodeURIComponent(annotation.bookId)}/annotations`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', ...authHeaders() },
+					body: JSON.stringify({
+						id: annotation.id,
+						cfiRange: annotation.cfiRange,
+						excerpt: annotation.excerpt,
+						note: annotation.note,
+						color: annotation.color,
+						tags: annotation.tags
+					})
+				}
+			);
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 			return (await res.json()) as Annotation;
 		},

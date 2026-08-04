@@ -17,6 +17,7 @@ export async function registerAnnotationRoutes(app: FastifyInstance): Promise<vo
 
   app.post<{ Params: { id: string } }>("/books/:id/annotations", async (request, reply) => {
     const body = (request.body ?? {}) as {
+      id?: unknown;
       cfiRange?: unknown;
       excerpt?: unknown;
       note?: unknown;
@@ -24,6 +25,7 @@ export async function registerAnnotationRoutes(app: FastifyInstance): Promise<vo
       tags?: unknown;
     };
     const result = await createAnnotation(request.headers.authorization, request.params.id, {
+      id: body.id,
       cfiRange: body.cfiRange,
       excerpt: body.excerpt,
       note: body.note,

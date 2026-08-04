@@ -37,6 +37,40 @@ export function isBookLocal(loans: Loan[], bookId: string): boolean {
 }
 
 /**
+ * Baut eine frisch angelegte Markierung. Die ID kommt von außen (aus dem
+ * Reactor, siehe `IdProvider`) statt aus dem Backend - genau das macht das
+ * Anlegen offline möglich.
+ *
+ * `note` und `tags` werden wie in `withEditedNote` normalisiert: eine leere
+ * Notiz ist keine Notiz, und `tags` wird in ein frisches Array kopiert, weil
+ * die Oberfläche hier Svelte-$state-Proxys hereinreicht, die der SQLite-Worker
+ * nicht per postMessage klonen kann.
+ */
+export function makeAnnotation(
+	id: string,
+	bookId: string,
+	cfiRange: string,
+	excerpt: string,
+	note: string | null,
+	color: AnnotationColor,
+	tags: string[],
+	now: string
+): Annotation {
+	const trimmed = note?.trim() ?? '';
+	return {
+		id,
+		bookId,
+		cfiRange,
+		excerpt,
+		note: trimmed === '' ? null : trimmed,
+		color,
+		tags: [...tags],
+		createdAt: now,
+		updatedAt: now
+	};
+}
+
+/**
  * Produce an annotation with only its note edited (and updatedAt re-stamped).
  * cfiRange/excerpt/id/createdAt are immutable — they identify what was
  * highlighted. An empty/whitespace-only note collapses to null ("just marked").

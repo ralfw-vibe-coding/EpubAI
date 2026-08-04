@@ -11,6 +11,10 @@ import type { ReactorDeps } from '../deps';
  * when idle and its first query after a fresh app start can take >5s, which
  * previously froze the note editor and made saves look failed/unreliable.
  * Returns the locally updated annotation.
+ *
+ * Die lokale Änderung ist bis zum geglückten Push als "dirty" vorgemerkt; erst
+ * danach gilt sie als abgeglichen. Scheitert er (offline), reicht der nächste
+ * Abgleich sie nach, statt sie stillschweigend zu verlieren.
  */
 export async function updateAnnotationNote(
 	deps: Pick<ReactorDeps, 'http' | 'domain' | 'clock'>,
@@ -24,8 +28,11 @@ export async function updateAnnotationNote(
 		tags ?? annotation.tags,
 		deps.clock.nowIso()
 	);
-	void deps.http.updateAnnotationNote(updated.id, updated.note, updated.tags).catch(() => {
-		// Local-first best effort; ignore push failures.
-	});
+	void deps.http
+		.updateAnnotationNote(updated.id, updated.note, updated.tags)
+		.then(() => deps.domain.markAnnotationSynced(updated.id, updated.updatedAt))
+		.catch(() => {
+			// Local-first best effort; der nächste Abgleich reicht es nach.
+		});
 	return updated;
 }

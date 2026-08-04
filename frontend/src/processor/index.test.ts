@@ -6,11 +6,12 @@ import {
 	fakeDProvider,
 	fakeDevice,
 	fakeFileStore,
-	fakeHttp
+	fakeHttp,
+	fakeIds
 } from '../testing/fakes';
 import { createProcessor } from './index';
 import type { ReactorDeps } from './deps';
-import type { Annotation } from '../domain/types';
+import type { Annotation, CatalogBook } from '../domain/types';
 
 function makeDeps(overrides: Partial<ReactorDeps> = {}) {
 	const http = fakeHttp();
@@ -24,6 +25,7 @@ function makeDeps(overrides: Partial<ReactorDeps> = {}) {
 		clock: fakeClock(),
 		device: fakeDevice('dev1'),
 		auth,
+		ids: fakeIds(),
 		...overrides
 	};
 	return { deps, http, files, auth, domain };
@@ -64,14 +66,14 @@ describe('processor reactors', () => {
 
 	it('loadCatalog returns the backend book list', async () => {
 		const { deps } = makeDeps();
-		const books = await createProcessor(deps).loadCatalog();
+		const { books } = await createProcessor(deps).loadCatalog();
 		expect(books).toHaveLength(1);
 		expect(books[0].id).toBe('b1');
 	});
 
 	it('loadCatalog enriches a book with progress null when never opened', async () => {
 		const { deps } = makeDeps();
-		const books = await createProcessor(deps).loadCatalog();
+		const { books } = await createProcessor(deps).loadCatalog();
 		expect(books[0].progress).toBeNull();
 	});
 
@@ -80,31 +82,31 @@ describe('processor reactors', () => {
 		const p = createProcessor(deps);
 		await p.saveReadingProgress('b1', 'epubcfi(/6/2)', 40, 8, 20);
 
-		const books = await p.loadCatalog();
+		const { books } = await p.loadCatalog();
 		expect(books[0].progress).toEqual({ percent: 40, page: 8, totalPages: 20 });
 	});
 
 	it('loadCatalog marks a borrowed book as isLocal', async () => {
 		const { deps } = makeDeps();
 		const p = createProcessor(deps);
-		expect((await p.loadCatalog())[0].isLocal).toBe(false);
+		expect((await p.loadCatalog()).books[0].isLocal).toBe(false);
 
 		await p.borrowBook('b1', 'Titel');
-		expect((await p.loadCatalog())[0].isLocal).toBe(true);
+		expect((await p.loadCatalog()).books[0].isLocal).toBe(true);
 	});
 
 	it('openBookDetail enriches with local-loan status', async () => {
 		const { deps } = makeDeps();
 		const p = createProcessor(deps);
-		expect((await p.openBookDetail('b1')).isLocal).toBe(false);
+		expect((await p.openBookDetail('b1')).book.isLocal).toBe(false);
 		await p.borrowBook('b1', 'Titel');
-		expect((await p.openBookDetail('b1')).isLocal).toBe(true);
+		expect((await p.openBookDetail('b1')).book.isLocal).toBe(true);
 	});
 
 	it('loadCatalog enriches each book with its local highlight/note counts, defaulting to 0', async () => {
 		const { deps, domain } = makeDeps();
 		const p = createProcessor(deps);
-		expect((await p.loadCatalog())[0]).toMatchObject({ highlightCount: 0, noteCount: 0 });
+		expect((await p.loadCatalog()).books[0]).toMatchObject({ highlightCount: 0, noteCount: 0 });
 
 		await domain.saveAnnotation({
 			id: 'a1',
@@ -129,13 +131,13 @@ describe('processor reactors', () => {
 			updatedAt: 'c2'
 		});
 
-		expect((await p.loadCatalog())[0]).toMatchObject({ highlightCount: 1, noteCount: 1 });
+		expect((await p.loadCatalog()).books[0]).toMatchObject({ highlightCount: 1, noteCount: 1 });
 	});
 
 	it('openBookDetail enriches the one book with its local highlight/note counts, defaulting to 0', async () => {
 		const { deps, domain } = makeDeps();
 		const p = createProcessor(deps);
-		expect(await p.openBookDetail('b1')).toMatchObject({ highlightCount: 0, noteCount: 0 });
+		expect((await p.openBookDetail('b1')).book).toMatchObject({ highlightCount: 0, noteCount: 0 });
 
 		await domain.saveAnnotation({
 			id: 'a1',
@@ -160,7 +162,7 @@ describe('processor reactors', () => {
 			updatedAt: 'c2'
 		});
 
-		expect(await p.openBookDetail('b1')).toMatchObject({ highlightCount: 1, noteCount: 0 });
+		expect((await p.openBookDetail('b1')).book).toMatchObject({ highlightCount: 1, noteCount: 0 });
 	});
 
 	it('borrowBook downloads to OPFS and records the loan (correct order)', async () => {
@@ -226,7 +228,8 @@ describe('processor reactors', () => {
 			files: files.impl,
 			clock: fakeClock(),
 			device: fakeDevice('dev1'),
-			auth: fakeAuthStore()
+			auth: fakeAuthStore(),
+			ids: fakeIds()
 		};
 		const p = createProcessor(deps);
 		await p.borrowBook('b1', 'Titel');
@@ -467,7 +470,10 @@ describe('processor reactors', () => {
 			updatedAt: '2026-07-13T00:00:00.000Z'
 		};
 
-		it('syncAnnotations pulls from the backend and replaces the local cache', async () => {
+		/** Lässt die nicht abgewarteten Push-Aufrufe der local-first Reactors durchlaufen. */
+		const settlePushes = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+		it('syncAnnotations pulls from the backend and merges it into the local cache', async () => {
 			const http = fakeHttp({ getAllAnnotations: async () => [created] });
 			const { deps, domain } = makeDeps({ http: http.impl });
 			const result = await createProcessor(deps).syncAnnotations();
@@ -485,50 +491,181 @@ describe('processor reactors', () => {
 			expect(await domain.annotationsFor('b1')).toEqual([]);
 		});
 
-		it('createAnnotation posts to the backend first, then caches with the returned id', async () => {
+		it('createAnnotation legt lokal an und reicht sie ans Backend nach', async () => {
 			const { deps, http, domain } = makeDeps();
 			const res = await createProcessor(deps).createAnnotation('b1', 'cfi', 'markiert');
 
-			// The default fake returns an annotation with id 'a1' for book 'b1'.
-			expect(res.id).toBe('a1');
-			expect(http.calls.map((c) => c.method)).toContain('createAnnotation');
+			// Die ID kommt jetzt vom Client (fakeIds zählt hoch), nicht vom Backend.
+			expect(res.id).toBe('id-1');
+			expect(res.createdAt).toBe('2026-07-13T12:00:00.000Z');
 			expect(await domain.annotationsFor('b1')).toEqual([res]);
+			await settlePushes();
+			const call = http.calls.find((c) => c.method === 'createAnnotation');
+			expect(call?.args).toEqual([res]);
 		});
 
-		it('createAnnotation throws and stores nothing locally when the backend fails', async () => {
+		it('createAnnotation funktioniert ohne Netz: gibt zurück, wirft nicht, bleibt lokal', async () => {
 			const http = fakeHttp({
 				createAnnotation: async () => {
 					throw new Error('offline');
 				}
 			});
 			const { deps, domain } = makeDeps({ http: http.impl });
-			await expect(
-				createProcessor(deps).createAnnotation('b1', created.cfiRange, 'markiert')
-			).rejects.toThrow('offline');
-			expect(await domain.annotationsFor('b1')).toEqual([]);
-		});
+			const res = await createProcessor(deps).createAnnotation('b1', created.cfiRange, 'markiert');
 
-		it('createAnnotation forwards an optional note to http', async () => {
-			const { deps, http } = makeDeps();
-			await createProcessor(deps).createAnnotation('b1', 'cfi', 'text', 'meine Notiz');
-			const call = http.calls.find((c) => c.method === 'createAnnotation');
-			expect(call?.args).toEqual(['b1', 'cfi', 'text', 'meine Notiz', undefined, undefined]);
-		});
-
-		it('createAnnotation forwards an optional color to http', async () => {
-			const { deps, http } = makeDeps();
-			await createProcessor(deps).createAnnotation('b1', 'cfi', 'text', undefined, 'blue');
-			const call = http.calls.find((c) => c.method === 'createAnnotation');
-			expect(call?.args).toEqual(['b1', 'cfi', 'text', undefined, 'blue', undefined]);
-		});
-
-		it('createAnnotation forwards optional tags to http (the flashcard flow)', async () => {
-			const { deps, http } = makeDeps();
-			await createProcessor(deps).createAnnotation('b1', 'cfi', 'text', 'Übersetzung', 'yellow', [
-				'flashcard'
+			expect(res.excerpt).toBe('markiert');
+			expect(await domain.annotationsFor('b1')).toEqual([res]);
+			await settlePushes();
+			// Noch nicht abgeglichen - der nächste Abgleich holt das nach.
+			expect(await domain.annotationSyncState()).toMatchObject([
+				{ serverKnown: false, dirty: true }
 			]);
+		});
+
+		it('ein späterer Abgleich reicht die offline angelegte Markierung nach', async () => {
+			const posted: Annotation[] = [];
+			const http = fakeHttp({
+				createAnnotation: async (a) => {
+					posted.push(a);
+					return a;
+				},
+				getAllAnnotations: async () => posted
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.recordNewAnnotation('a9', 'b1', 'cfi', 'offline', null, 'accent', [], 'c1');
+
+			const result = await createProcessor(deps).syncAnnotations();
+
+			expect(posted.map((a) => a.id)).toEqual(['a9']);
+			expect(result.map((a) => a.id)).toEqual(['a9']);
+			expect(await domain.annotationSyncState()).toMatchObject([
+				{ serverKnown: true, dirty: false }
+			]);
+		});
+
+		it('ein Abgleich reicht ein offline erfolgtes Löschen nach - und holt den Eintrag nicht zurück', async () => {
+			const deleted: string[] = [];
+			const http = fakeHttp({
+				deleteAnnotation: async (id) => {
+					deleted.push(id);
+				},
+				// Der Server führt den Eintrag beim Holen noch: Das DELETE ging ja
+				// erst in diesem Lauf raus.
+				getAllAnnotations: async () => [created]
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveAnnotation(created);
+			await domain.removeAnnotation('a1', 'd1');
+
+			const result = await createProcessor(deps).syncAnnotations();
+
+			expect(deleted).toEqual(['a1']);
+			expect(result).toEqual([]);
+			expect(await domain.annotationTombstones()).toEqual([]);
+		});
+
+		it('ein gescheiterter Push hält die übrigen Einträge nicht auf', async () => {
+			const posted: Annotation[] = [];
+			const http = fakeHttp({
+				createAnnotation: async (a) => {
+					if (a.id === 'a-kaputt') throw new Error('offline');
+					posted.push(a);
+					return a;
+				},
+				getAllAnnotations: async () => posted
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.recordNewAnnotation('a-kaputt', 'b1', 'cfi', 'erste', null, 'accent', [], 'c1');
+			await domain.recordNewAnnotation('a-ok', 'b1', 'cfi2', 'zweite', null, 'accent', [], 'c2');
+
+			await createProcessor(deps).syncAnnotations();
+
+			expect(posted.map((a) => a.id)).toEqual(['a-ok']);
+			// Der gescheiterte bleibt lokal und weiterhin zum Nachreichen vorgemerkt.
+			const local = await domain.annotationSyncState();
+			expect(local.find((e) => e.annotation.id === 'a-kaputt')).toMatchObject({
+				serverKnown: false
+			});
+			expect(local.find((e) => e.annotation.id === 'a-ok')).toMatchObject({ serverKnown: true });
+		});
+
+		it('syncAnnotations meldet keinen Fehler, wenn das Backend nicht erreichbar ist', async () => {
+			const http = fakeHttp({
+				getAllAnnotations: async () => {
+					throw new TypeError('Failed to fetch');
+				}
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveAnnotation(created);
+
+			const result = await createProcessor(deps).syncAnnotations();
+
+			expect(result).toEqual([created]);
+			expect(await domain.annotationsFor('b1')).toEqual([created]);
+		});
+
+		it('syncAnnotations lässt einen echten HTTP-Fehler (401) durchschlagen', async () => {
+			const http = fakeHttp({
+				getAllAnnotations: async () => {
+					throw Object.assign(new Error('unauthorized'), { status: 401 });
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			await expect(createProcessor(deps).syncAnnotations()).rejects.toThrow('unauthorized');
+		});
+
+		it('syncAnnotations gibt einer bei 409 kollidierenden ID eine neue, statt ewig zu wiederholen', async () => {
+			const posted: Annotation[] = [];
+			const http = fakeHttp({
+				createAnnotation: async (a) => {
+					// Nur die ursprüngliche ID kollidiert; die neu vergebene geht durch.
+					if (a.id === 'a-kollision') {
+						throw Object.assign(new Error('id_conflict'), { status: 409 });
+					}
+					posted.push(a);
+					return a;
+				},
+				getAllAnnotations: async () => posted
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.recordNewAnnotation('a-kollision', 'b1', 'cfi', 'markiert', null, 'accent', [], 'c1');
+			const p = createProcessor(deps);
+
+			await p.syncAnnotations();
+			// Erster Lauf: nur umbenannt, noch kein Push.
+			expect(posted).toEqual([]);
+			const afterFirst = await domain.annotationSyncState();
+			expect(afterFirst).toHaveLength(1);
+			expect(afterFirst[0].annotation.id).toBe('id-1');
+			expect(afterFirst[0].annotation.excerpt).toBe('markiert');
+
+			// Zweiter Lauf: die neue ID geht durch, der Eintrag ist abgeglichen.
+			await p.syncAnnotations();
+			expect(posted.map((a) => a.id)).toEqual(['id-1']);
+			expect(await domain.annotationSyncState()).toMatchObject([
+				{ serverKnown: true, dirty: false }
+			]);
+		});
+
+		it('createAnnotation übernimmt Notiz, Farbe und Tags (der Flashcard-Weg)', async () => {
+			const { deps, http } = makeDeps();
+			const res = await createProcessor(deps).createAnnotation(
+				'b1',
+				'cfi',
+				'text',
+				'Übersetzung',
+				'yellow',
+				['flashcard']
+			);
+
+			expect(res).toMatchObject({
+				note: 'Übersetzung',
+				color: 'yellow',
+				tags: ['flashcard']
+			});
+			await settlePushes();
 			const call = http.calls.find((c) => c.method === 'createAnnotation');
-			expect(call?.args).toEqual(['b1', 'cfi', 'text', 'Übersetzung', 'yellow', ['flashcard']]);
+			expect(call?.args).toEqual([res]);
 		});
 
 		it('updateAnnotationNote forwards edited tags to http', async () => {
@@ -566,6 +703,44 @@ describe('processor reactors', () => {
 			expect((await domain.annotationsFor('b1'))[0].note).toBe('Notiz');
 		});
 
+		// Der Push wird bewusst nicht abgewartet, also kann der Nutzer dieselbe
+		// Notiz erneut ändern, während er noch läuft. Der zurückkehrende Push darf
+		// die neuere Änderung dann nicht als abgeglichen abhaken - sonst stünde im
+		// Backend die alte Fassung und niemand würde die neue je nachreichen.
+		it('hält eine Notizänderung offen, die während des laufenden Pushes entstand', async () => {
+			let release!: () => void;
+			const inFlight = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			let firstPush = true;
+			const http = fakeHttp({
+				updateAnnotationNote: async (...args: unknown[]) => {
+					if (!firstPush) throw new Error('offline');
+					firstPush = false;
+					await inFlight;
+					return { ...created, note: args[1] as string };
+				}
+			});
+			let now = '2026-07-13T12:00:00.000Z';
+			const { deps, domain } = makeDeps({ http: http.impl, clock: { nowIso: () => now } });
+			await domain.saveAnnotation(created);
+
+			const processor = createProcessor(deps);
+			const first = await processor.updateAnnotationNote(created, 'erste Fassung');
+			now = '2026-07-13T12:00:05.000Z';
+			await processor.updateAnnotationNote(first, 'zweite Fassung');
+
+			release();
+			await inFlight;
+			// Eine Mikrotask-Runde, damit das .then() des ersten Pushes durchläuft.
+			await Promise.resolve();
+			await Promise.resolve();
+
+			const [entry] = await domain.annotationSyncState();
+			expect(entry.annotation.note).toBe('zweite Fassung');
+			expect(entry.dirty).toBe(true);
+		});
+
 		it('updateAnnotationColor updates locally first and pushes to the backend', async () => {
 			const { deps, http, domain } = makeDeps();
 			await domain.saveAnnotation(created);
@@ -601,6 +776,14 @@ describe('processor reactors', () => {
 			expect(call?.args).toEqual(['a1']);
 		});
 
+		it('deleteAnnotation räumt nach geglücktem DELETE den Grabstein ab', async () => {
+			const { deps, domain } = makeDeps();
+			await domain.saveAnnotation(created);
+			await createProcessor(deps).deleteAnnotation('a1');
+			await settlePushes();
+			expect(await domain.annotationTombstones()).toEqual([]);
+		});
+
 		it('deleteAnnotation still removes locally when the backend push fails', async () => {
 			const http = fakeHttp({
 				deleteAnnotation: async () => {
@@ -610,7 +793,23 @@ describe('processor reactors', () => {
 			const { deps, domain } = makeDeps({ http: http.impl });
 			await domain.saveAnnotation(created);
 			await createProcessor(deps).deleteAnnotation('a1');
+			await settlePushes();
 			expect(await domain.annotationsFor('b1')).toEqual([]);
+			// Der Grabstein bleibt liegen: Der nächste Abgleich reicht das DELETE nach.
+			expect(await domain.annotationTombstones()).toEqual(['a1']);
+		});
+
+		it('deleteAnnotation wertet ein 404 als Erfolg und räumt den Grabstein ab', async () => {
+			const http = fakeHttp({
+				deleteAnnotation: async () => {
+					throw Object.assign(new Error('not_found'), { status: 404 });
+				}
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+			await domain.saveAnnotation(created);
+			await createProcessor(deps).deleteAnnotation('a1');
+			await settlePushes();
+			expect(await domain.annotationTombstones()).toEqual([]);
 		});
 
 		it('loadAnnotations reads the local cache without any network call', async () => {
@@ -954,5 +1153,172 @@ describe('processor reactors', () => {
 			const { deps } = makeDeps({ http: http.impl });
 			await expect(createProcessor(deps).generateDossier('b1')).rejects.toThrow('generation_failed');
 		});
+	});
+});
+
+describe('Offline-Rückfall auf den lokalen Katalog-Spiegel', () => {
+	/**
+	 * Ein Netzfehler, wie ihn `fetch` wirft, wenn der Server gar nicht antwortet:
+	 * ohne HTTP-Status - genau daran unterscheidet ihn `isOfflineError` von einer
+	 * echten Fehlerantwort des Backends.
+	 */
+	function networkError() {
+		return new TypeError('Failed to fetch');
+	}
+
+	/** Eine Backend-Fehlerantwort (der Server hat geantwortet - kein Offline-Fall). */
+	function httpError(status: number, message: string) {
+		return Object.assign(new Error(message), { status });
+	}
+
+	function catalogBook(id: string, overrides: Partial<CatalogBook> = {}): CatalogBook {
+		return {
+			id,
+			title: `Titel ${id}`,
+			author: 'Autor',
+			fileHash: `h-${id}`,
+			processingStatus: 'ready',
+			tags: ['sachbuch'],
+			// Signierte R2-URL mit kurzer Gültigkeit - offline wertlos.
+			coverUrl: `https://r2.example/${id}.jpg?sig=abc`,
+			progress: null,
+			hasDossier: false,
+			aiCostUsd: 0,
+			archived: false,
+			originalFilename: null,
+			highlightCount: 0,
+			noteCount: 0,
+			dossierCostUsd: 0,
+			...overrides
+		};
+	}
+
+	/**
+	 * Deps mit einem HTTP-Fake, der sich zur Laufzeit offline schalten lässt -
+	 * so kann ein Test erst online spiegeln und ausleihen und danach denselben
+	 * Aufruf im Offline-Zustand wiederholen.
+	 */
+	function makeSwitchableDeps(books: CatalogBook[]) {
+		const state = { online: true };
+		const http = fakeHttp({
+			getBooks: async () => {
+				if (!state.online) throw networkError();
+				return books;
+			},
+			getBook: async (bookId: string) => {
+				if (!state.online) throw networkError();
+				const found = books.find((b) => b.id === bookId);
+				if (!found) throw httpError(404, 'not_found');
+				return found;
+			},
+			createLoan: async (bookId: string) => ({
+				id: `loan-${bookId}`,
+				bookId,
+				fileHash: `h-${bookId}`,
+				borrowedAt: '2026-07-13T00:00:00.000Z'
+			})
+		});
+		const { deps, domain } = makeDeps({ http: http.impl });
+		return { deps, domain, state };
+	}
+
+	it('loadCatalog spiegelt den geholten Katalog lokal', async () => {
+		const { deps, domain } = makeSwitchableDeps([catalogBook('b1'), catalogBook('b2')]);
+		const res = await createProcessor(deps).loadCatalog();
+
+		expect(res.offline).toBe(false);
+		expect((await domain.cachedCatalog()).map((b) => b.id)).toEqual(['b1', 'b2']);
+	});
+
+	it('loadCatalog ersetzt den Spiegel, statt ihn zu ergänzen', async () => {
+		const { deps, domain } = makeSwitchableDeps([catalogBook('b1')]);
+		await createProcessor(deps).loadCatalog();
+		// Ein zweiter Lauf mit anderem Katalog (Buch b1 serverseitig gelöscht).
+		await domain.cacheCatalog([catalogBook('b2')]);
+
+		expect((await domain.cachedCatalog()).map((b) => b.id)).toEqual(['b2']);
+	});
+
+	it('loadCatalog liefert bei Netzfehler die ausgeliehenen Bücher aus dem Spiegel', async () => {
+		const { deps, state } = makeSwitchableDeps([catalogBook('b1'), catalogBook('b2')]);
+		const p = createProcessor(deps);
+		await p.loadCatalog();
+		await p.borrowBook('b1', 'Titel b1');
+
+		state.online = false;
+		const res = await p.loadCatalog();
+
+		expect(res.offline).toBe(true);
+		expect(res.books.map((b) => b.id)).toEqual(['b1']);
+		expect(res.books[0].isLocal).toBe(true);
+		expect(res.books[0].title).toBe('Titel b1');
+	});
+
+	it('loadCatalog lässt offline die abgelaufenen Cover-Links weg', async () => {
+		const { deps, state } = makeSwitchableDeps([catalogBook('b1')]);
+		const p = createProcessor(deps);
+		await p.loadCatalog();
+		await p.borrowBook('b1', 'Titel b1');
+
+		state.online = false;
+		const res = await p.loadCatalog();
+
+		expect(res.books[0].coverUrl).toBeNull();
+	});
+
+	it('loadCatalog zeigt offline keine nicht ausgeliehenen Bücher', async () => {
+		const { deps, state } = makeSwitchableDeps([catalogBook('b1'), catalogBook('b2')]);
+		const p = createProcessor(deps);
+		await p.loadCatalog();
+
+		state.online = false;
+		const res = await p.loadCatalog();
+
+		expect(res.offline).toBe(true);
+		expect(res.books).toEqual([]);
+	});
+
+	it('loadCatalog reicht eine echte Fehlerantwort des Backends durch', async () => {
+		const http = fakeHttp({
+			getBooks: async () => {
+				throw httpError(401, 'unauthorized');
+			}
+		});
+		const { deps } = makeDeps({ http: http.impl });
+		await expect(createProcessor(deps).loadCatalog()).rejects.toThrow('unauthorized');
+	});
+
+	it('openBookDetail bedient ein ausgeliehenes Buch bei Netzfehler aus dem Spiegel', async () => {
+		const { deps, state } = makeSwitchableDeps([catalogBook('b1')]);
+		const p = createProcessor(deps);
+		await p.loadCatalog();
+		await p.borrowBook('b1', 'Titel b1');
+
+		state.online = false;
+		const res = await p.openBookDetail('b1');
+
+		expect(res.offline).toBe(true);
+		expect(res.book.id).toBe('b1');
+		expect(res.book.isLocal).toBe(true);
+		expect(res.book.coverUrl).toBeNull();
+	});
+
+	it('openBookDetail reicht den Fehler durch, wenn das Buch nicht ausgeliehen ist', async () => {
+		const { deps, state } = makeSwitchableDeps([catalogBook('b1')]);
+		const p = createProcessor(deps);
+		await p.loadCatalog();
+
+		state.online = false;
+		await expect(p.openBookDetail('b1')).rejects.toThrow('Failed to fetch');
+	});
+
+	it('openBookDetail reicht eine echte Fehlerantwort des Backends durch', async () => {
+		const http = fakeHttp({
+			getBook: async () => {
+				throw httpError(404, 'not_found');
+			}
+		});
+		const { deps } = makeDeps({ http: http.impl });
+		await expect(createProcessor(deps).openBookDetail('b1')).rejects.toThrow('not_found');
 	});
 });

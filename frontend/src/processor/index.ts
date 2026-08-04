@@ -1,4 +1,4 @@
-import type { Annotation, AnnotationColor, BookDetail, CatalogBook, Loan, ReadingProgress } from '../domain/types';
+import type { Annotation, AnnotationColor, CatalogBook, Loan, ReadingProgress } from '../domain/types';
 import type { ReactorDeps } from './deps';
 import type {
 	AnnotationExport,
@@ -22,9 +22,9 @@ import { exportAnnotations } from './reactors/exportAnnotations';
 import { generateDossier } from './reactors/generateDossier';
 import { importAnnotations } from './reactors/importAnnotations';
 import { loadAnnotations } from './reactors/loadAnnotations';
-import { loadCatalog } from './reactors/loadCatalog';
+import { loadCatalog, type CatalogResult } from './reactors/loadCatalog';
 import { lookupSelection } from './reactors/lookupSelection';
-import { openBookDetail } from './reactors/openBookDetail';
+import { openBookDetail, type BookDetailResult } from './reactors/openBookDetail';
 import { openBookForReading, type OpenForReadingResult } from './reactors/openBookForReading';
 import { requestLoginCode } from './reactors/requestLoginCode';
 import { returnLoan } from './reactors/returnLoan';
@@ -55,8 +55,8 @@ export function createProcessor(deps: ReactorDeps) {
 		verifyLoginCode: (email: string, code: string): Promise<Session> =>
 			verifyLoginCode(deps, email, code),
 		signOut: (): Promise<void> => signOut(deps),
-		loadCatalog: (): Promise<BookDetail[]> => loadCatalog(deps),
-		openBookDetail: (bookId: string): Promise<BookDetail> => openBookDetail(deps, bookId),
+		loadCatalog: (): Promise<CatalogResult> => loadCatalog(deps),
+		openBookDetail: (bookId: string): Promise<BookDetailResult> => openBookDetail(deps, bookId),
 		borrowBook: (bookId: string, title: string): Promise<Loan> =>
 			borrowBook(deps, bookId, title),
 		returnLoan: (bookId: string): Promise<void> => returnLoan(deps, bookId),

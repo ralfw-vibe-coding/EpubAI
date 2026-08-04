@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   authorizeAnnotationAccess,
+  isValidUuid,
   parseColor,
   parseCreateAnnotation,
+  parseId,
   parseNote,
   parseTags,
   toAnnotationSummary
@@ -118,6 +120,37 @@ describe("parseCreateAnnotation", () => {
   it("rejects a non-string, non-null note", () => {
     expect(parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text", note: 42 })).toEqual({ valid: false });
   });
+
+  it("accepts and lowercases a client-supplied UUID id", () => {
+    const result = parseCreateAnnotation({
+      id: "550E8400-E29B-41D4-A716-446655440000",
+      cfiRange: "cfi-1",
+      excerpt: "text"
+    });
+    expect(result).toEqual({
+      valid: true,
+      draft: {
+        id: "550e8400-e29b-41d4-a716-446655440000",
+        cfiRange: "cfi-1",
+        excerpt: "text",
+        note: null,
+        color: "accent",
+        tags: []
+      }
+    });
+  });
+
+  it("omits id from the draft when not supplied", () => {
+    const result = parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text" });
+    expect(result.valid).toBe(true);
+    expect((result as { draft: { id?: string } }).draft.id).toBeUndefined();
+  });
+
+  it("rejects a malformed id", () => {
+    expect(parseCreateAnnotation({ id: "not-a-uuid", cfiRange: "cfi-1", excerpt: "text" })).toEqual({
+      valid: false
+    });
+  });
 });
 
 describe("parseNote", () => {
@@ -220,6 +253,59 @@ describe("parseTags", () => {
   it("accepts a tag exactly at the 40 char cap", () => {
     const atCap = "a".repeat(40);
     expect(parseTags([atCap])).toEqual({ valid: true, tags: [atCap] });
+  });
+});
+
+describe("isValidUuid", () => {
+  it.each([
+    "550e8400-e29b-11d4-a716-446655440000", // v1
+    "550e8400-e29b-21d4-a716-446655440000", // v2
+    "550e8400-e29b-31d4-a716-446655440000", // v3
+    "550e8400-e29b-41d4-a716-446655440000", // v4
+    "550e8400-e29b-51d4-a716-446655440000" // v5
+  ])("accepts a valid v1-v5 UUID %s", (id) => {
+    expect(isValidUuid(id)).toBe(true);
+  });
+
+  it("accepts an uppercase UUID", () => {
+    expect(isValidUuid("550E8400-E29B-41D4-A716-446655440000")).toBe(true);
+  });
+
+  it("rejects a broken string", () => {
+    expect(isValidUuid("not-a-uuid")).toBe(false);
+  });
+
+  it("rejects an empty string", () => {
+    expect(isValidUuid("")).toBe(false);
+  });
+});
+
+describe("parseId", () => {
+  it("treats undefined as no id", () => {
+    expect(parseId(undefined)).toEqual({ valid: true, id: undefined });
+  });
+
+  it("accepts and lowercases a valid UUID", () => {
+    expect(parseId("550E8400-E29B-41D4-A716-446655440000")).toEqual({
+      valid: true,
+      id: "550e8400-e29b-41d4-a716-446655440000"
+    });
+  });
+
+  it("rejects a broken string", () => {
+    expect(parseId("not-a-uuid")).toEqual({ valid: false });
+  });
+
+  it("rejects an empty string", () => {
+    expect(parseId("")).toEqual({ valid: false });
+  });
+
+  it("rejects a non-string value", () => {
+    expect(parseId(42)).toEqual({ valid: false });
+  });
+
+  it("rejects null", () => {
+    expect(parseId(null)).toEqual({ valid: false });
   });
 });
 

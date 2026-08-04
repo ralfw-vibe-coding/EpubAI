@@ -387,7 +387,10 @@
 			annotations = [...annotations, created];
 			applyHighlight(created);
 		} catch {
-			showToast('Markierung konnte nicht gespeichert werden — keine Verbindung.');
+			// Ohne Netz ist das kein Fehlerfall mehr: Die Markierung entsteht lokal
+			// und wird beim nächsten Abgleich nachgereicht. Hier landet nur noch,
+			// wem die lokale Datenbank selbst den Dienst versagt.
+			showToast('Markierung konnte nicht gespeichert werden.');
 		}
 	}
 
@@ -509,7 +512,8 @@
 			aiResult = null;
 			openNoteEditor(created, true);
 		} catch {
-			showToast('Vokabel konnte nicht gespeichert werden — keine Verbindung.');
+			// Siehe createHighlight: das Anlegen selbst braucht kein Netz mehr.
+			showToast('Vokabel konnte nicht gespeichert werden.');
 		}
 	}
 

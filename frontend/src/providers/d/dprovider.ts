@@ -1,5 +1,6 @@
+import type { SyncedAnnotation } from '../../domain/annotationSync';
 import type { DProvider } from '../../domain/ports';
-import type { Annotation, Loan, ReadingProgress } from '../../domain/types';
+import type { Annotation, CatalogBook, Loan, ReadingProgress } from '../../domain/types';
 import SqliteWorker from './worker?worker';
 
 const LOCK_NAME = 'epubai-db-leader';
@@ -161,12 +162,21 @@ export function createDProvider(): DProvider {
 		saveProgress: (progress: ReadingProgress) => call<void>('saveProgress', progress),
 		findProgress: (bookId: string) => call<ReadingProgress | null>('findProgress', bookId),
 		allProgress: () => call<ReadingProgress[]>('allProgress'),
-		saveAnnotation: (annotation: Annotation) => call<void>('saveAnnotation', annotation),
+		saveAnnotation: (annotation: Annotation, serverKnown: boolean, dirty: boolean) =>
+			call<void>('saveAnnotation', annotation, serverKnown, dirty),
 		allAnnotationsForBook: (bookId: string) => call<Annotation[]>('allAnnotationsForBook', bookId),
-		deleteAnnotation: (id: string) => call<void>('deleteAnnotation', id),
-		replaceAllAnnotations: (annotations: Annotation[]) =>
-			call<void>('replaceAllAnnotations', annotations),
+		pendingAnnotations: () => call<SyncedAnnotation[]>('pendingAnnotations'),
+		markAnnotationSynced: (id: string, syncedUpdatedAt: string) =>
+			call<void>('markAnnotationSynced', id, syncedUpdatedAt),
+		deleteAnnotation: (id: string, deletedAt: string) =>
+			call<void>('deleteAnnotation', id, deletedAt),
+		annotationTombstones: () => call<string[]>('annotationTombstones'),
+		clearAnnotationTombstone: (id: string) => call<void>('clearAnnotationTombstone', id),
+		applyAnnotationSync: (toSave: Annotation[], toRemove: string[]) =>
+			call<void>('applyAnnotationSync', toSave, toRemove),
 		annotationCountsByBook: () =>
-			call<{ bookId: string; highlightCount: number; noteCount: number }[]>('annotationCountsByBook')
+			call<{ bookId: string; highlightCount: number; noteCount: number }[]>('annotationCountsByBook'),
+		replaceCatalog: (books: CatalogBook[]) => call<void>('replaceCatalog', books),
+		allCachedBooks: () => call<CatalogBook[]>('allCachedBooks')
 	};
 }

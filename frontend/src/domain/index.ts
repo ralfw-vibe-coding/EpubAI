@@ -1,5 +1,14 @@
+import type { SyncedAnnotation } from './annotationSync';
 import type { DProvider } from './ports';
-import { isBookLocal, makeLoan, makeProgress, toBookDetail, withEditedColor, withEditedNote } from './rpus';
+import {
+	isBookLocal,
+	makeAnnotation,
+	makeLoan,
+	makeProgress,
+	toBookDetail,
+	withEditedColor,
+	withEditedNote
+} from './rpus';
 import type { Annotation, AnnotationColor, BookDetail, CatalogBook, Loan, ReadingProgress } from './types';
 
 /**
@@ -114,9 +123,33 @@ export function createReaderDomain(d: DProvider) {
 			return d.allAnnotationsForBook(bookId);
 		},
 
-		/** Persist (upsert) a single annotation locally, using the backend's id. */
+		/**
+		 * Legt eine Markierung hier auf dem Gerät an - ohne jede Netzverbindung.
+		 * Sie gilt danach als noch nicht hochgereicht (nicht serverKnown, dirty),
+		 * der nächste Abgleich holt das nach.
+		 */
+		async recordNewAnnotation(
+			id: string,
+			bookId: string,
+			cfiRange: string,
+			excerpt: string,
+			note: string | null,
+			color: AnnotationColor,
+			tags: string[],
+			now: string
+		): Promise<Annotation> {
+			const annotation = makeAnnotation(id, bookId, cfiRange, excerpt, note, color, tags, now);
+			await d.saveAnnotation(annotation, false, true);
+			return annotation;
+		},
+
+		/**
+		 * Legt eine aus dem Backend stammende Markierung lokal ab - sie gilt damit
+		 * als abgeglichen. Gegenstück zu `recordNewAnnotation` für den Einzelfall;
+		 * ganze Abgleichergebnisse laufen über `applyAnnotationSync`.
+		 */
 		async saveAnnotation(annotation: Annotation): Promise<void> {
-			await d.saveAnnotation(annotation);
+			await d.saveAnnotation(annotation, true, false);
 		},
 
 		/**
@@ -130,7 +163,10 @@ export function createReaderDomain(d: DProvider) {
 			now: string
 		): Promise<Annotation> {
 			const updated = withEditedNote(annotation, note, tags, now);
-			await d.saveAnnotation(updated);
+			// `false` heißt hier nicht "das Backend kennt sie nicht", sondern "weiß
+			// ich nicht" - der Merker kann nur gesetzt, nie zurückgenommen werden
+			// (siehe DProvider.saveAnnotation).
+			await d.saveAnnotation(updated, false, true);
 			return updated;
 		},
 
@@ -145,24 +181,71 @@ export function createReaderDomain(d: DProvider) {
 			now: string
 		): Promise<Annotation> {
 			const updated = withEditedColor(annotation, color, now);
-			await d.saveAnnotation(updated);
+			// Siehe editAnnotationNote zum `false`.
+			await d.saveAnnotation(updated, false, true);
 			return updated;
 		},
 
-		/** Forget a single annotation locally. */
-		async removeAnnotation(id: string): Promise<void> {
-			await d.deleteAnnotation(id);
+		/**
+		 * Vergisst eine Markierung auf diesem Gerät. Kannte das Backend sie schon,
+		 * bleibt ein Grabstein zurück, bis das DELETE dort durchging - sonst würde
+		 * der nächste Abgleich sie aus dem Serverbestand wieder einsammeln.
+		 */
+		async removeAnnotation(id: string, now: string): Promise<void> {
+			await d.deleteAnnotation(id, now);
 		},
 
-		/** Replace the whole local annotation cache with a freshly synced set. */
-		async recordAnnotationSync(annotations: Annotation[]): Promise<void> {
-			await d.replaceAllAnnotations(annotations);
+		/** Der gesamte lokale Bestand samt Abgleich-Merkern. */
+		async annotationSyncState(): Promise<SyncedAnnotation[]> {
+			return d.pendingAnnotations();
+		},
+
+		/** Die IDs der hier gelöschten, im Backend noch nicht abgeräumten Markierungen. */
+		async annotationTombstones(): Promise<string[]> {
+			return d.annotationTombstones();
+		},
+
+		/**
+		 * Ein Push ist durchgegangen. `syncedUpdatedAt` ist der Stand, der dabei
+		 * hochgereicht wurde: Wurde der Eintrag inzwischen erneut bearbeitet,
+		 * bleibt er offen und wird nachgereicht (siehe worker.ts).
+		 */
+		async markAnnotationSynced(id: string, syncedUpdatedAt: string): Promise<void> {
+			await d.markAnnotationSynced(id, syncedUpdatedAt);
+		},
+
+		/** Das DELETE ist im Backend angekommen - der Grabstein kann weg. */
+		async forgetAnnotationTombstone(id: string): Promise<void> {
+			await d.clearAnnotationTombstone(id);
+		},
+
+		/**
+		 * Übernimmt das Ergebnis eines Abgleichs (siehe annotationSync.ts) lokal.
+		 * Bewusst kein Ersetzen des ganzen Bestands: Das würde genau die offline
+		 * angelegten Markierungen wegwerfen, für die dieser Abgleich da ist.
+		 */
+		async applyAnnotationSync(toSave: Annotation[], toRemove: string[]): Promise<void> {
+			await d.applyAnnotationSync(toSave, toRemove);
 		},
 
 		/** Highlight/note counts per book, keyed by bookId — one bulk query for the whole catalog. */
 		async annotationCounts(): Promise<Map<string, { highlightCount: number; noteCount: number }>> {
 			const rows = await d.annotationCountsByBook();
 			return new Map(rows.map((r) => [r.bookId, { highlightCount: r.highlightCount, noteCount: r.noteCount }]));
+		},
+
+		/**
+		 * Mirror a freshly fetched catalog locally, so the library and book
+		 * detail pages have something to fall back on when the backend can't be
+		 * reached (offline reading of borrowed books).
+		 */
+		async cacheCatalog(books: CatalogBook[]): Promise<void> {
+			await d.replaceCatalog(books);
+		},
+
+		/** The locally mirrored catalog (see `cacheCatalog`), server-owned fields only. */
+		async cachedCatalog(): Promise<CatalogBook[]> {
+			return d.allCachedBooks();
 		}
 	};
 }

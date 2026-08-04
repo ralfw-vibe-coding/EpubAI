@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule, { type Database, type Sqlite3Static } from '@sqlite.org/sqlite-wasm';
-import type { Annotation, Loan, ReadingProgress } from '../../domain/types';
+import type { SyncedAnnotation } from '../../domain/annotationSync';
+import type { Annotation, CatalogBook, Loan, ReadingProgress } from '../../domain/types';
 
 /**
  * SQLite-Wasm Web Worker (dProvider backend). Runs SQLite compiled to WebAssembly
@@ -11,7 +12,15 @@ import type { Annotation, Loan, ReadingProgress } from '../../domain/types';
  * Tables (only what the skeleton needs, §4.4):
  *   Loan(bookId PK, deviceId, fileHash, title, borrowedAt)
  *   ReadingProgress(bookId PK, cfi, percent, page, totalPages, updatedAt)
- *   Annotation(id PK, bookId, cfiRange, excerpt, note, color, createdAt, updatedAt)
+ *   Annotation(id PK, bookId, cfiRange, excerpt, note, color, tags, createdAt,
+ *     updatedAt, serverKnown, dirty) — die beiden letzten Spalten sind die
+ *     Abgleich-Merker (siehe domain/annotationSync.ts): Kennt das Backend die
+ *     Zeile schon, und gibt es hier noch nicht hochgereichte Änderungen?
+ *   DeletedAnnotation(id PK, deletedAt) — Grabsteine. Eine gelöschte Markierung
+ *     hinterlässt hier ihre ID, bis das DELETE im Backend durchging; sonst
+ *     würde der nächste Abgleich sie aus dem Serverbestand wieder einsammeln.
+ *   Book(id PK, ...) — local mirror of the server catalog, so the library and
+ *     book detail pages still have something to show while offline
  */
 
 let db: Database | null = null;
@@ -102,7 +111,28 @@ async function boot(): Promise<Database> {
 			color TEXT NOT NULL DEFAULT 'accent',
 			tags TEXT NOT NULL DEFAULT '[]',
 			createdAt TEXT NOT NULL,
-			updatedAt TEXT NOT NULL
+			updatedAt TEXT NOT NULL,
+			serverKnown INTEGER NOT NULL DEFAULT 1,
+			dirty INTEGER NOT NULL DEFAULT 0
+		);
+		CREATE TABLE IF NOT EXISTS DeletedAnnotation (
+			id TEXT PRIMARY KEY,
+			deletedAt TEXT NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS Book (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			author TEXT NOT NULL,
+			fileHash TEXT NOT NULL,
+			processingStatus TEXT NOT NULL,
+			tags TEXT NOT NULL DEFAULT '[]',
+			coverUrl TEXT,
+			hasDossier INTEGER NOT NULL DEFAULT 0,
+			aiCostUsd REAL NOT NULL DEFAULT 0,
+			archived INTEGER NOT NULL DEFAULT 0,
+			originalFilename TEXT,
+			dossierCostUsd REAL NOT NULL DEFAULT 0,
+			sortOrder INTEGER NOT NULL DEFAULT 0
 		);
 	`);
 	// Migration for installations whose ReadingProgress table predates page/totalPages.
@@ -119,7 +149,60 @@ async function boot(): Promise<Database> {
 	addColumnIfMissing(database, 'Annotation', "color TEXT NOT NULL DEFAULT 'accent'");
 	// Migration for installations whose Annotation table predates tags.
 	addColumnIfMissing(database, 'Annotation', "tags TEXT NOT NULL DEFAULT '[]'");
+	// Migration für Installationen, deren Annotation-Tabelle die Abgleich-Merker
+	// noch nicht kennt. Die Vorgabewerte sind mit Absicht genau so gewählt:
+	// Bestandszeilen stammen ausnahmslos aus dem alten Ersetzen-Abgleich, sind
+	// also dem Backend bekannt (serverKnown=1) und unverändert (dirty=0). Mit
+	// umgekehrten Werten würde der erste Abgleich nach dem Update den gesamten
+	// lokalen Bestand als "neu" ans Backend schicken.
+	addColumnIfMissing(database, 'Annotation', 'serverKnown INTEGER NOT NULL DEFAULT 1');
+	addColumnIfMissing(database, 'Annotation', 'dirty INTEGER NOT NULL DEFAULT 0');
 	return database;
+}
+
+/**
+ * Schreibt eine Markierung samt ihrer Abgleich-Merker (Upsert über die ID).
+ *
+ * Zum `serverKnown`-Merker: Er kann nur von 0 nach 1 wandern, nie zurück -
+ * deshalb `MAX(...)` statt schlichtem Überschreiben. Eine Bearbeitung (Notiz,
+ * Farbe) weiß nämlich gar nicht, ob das Backend die Zeile schon kennt, und
+ * übergibt hier `false`; würde das den Merker zurücksetzen, geriete eine längst
+ * hochgereichte Markierung beim nächsten Abgleich fälschlich in den POST-Topf.
+ * Umgekehrt darf ein `true` den Merker jederzeit setzen (so meldet der Abgleich
+ * einen geglückten Push zurück).
+ *
+ * `tags` liegt als JSON-Text in der Spalte, die Merker als 0/1 - SQLite kennt
+ * weder Arrays noch Booleans (siehe die Book-Tabelle im selben File).
+ */
+function upsertAnnotation(a: Annotation, serverKnown: boolean, dirty: boolean): void {
+	db!.exec({
+		sql: `INSERT INTO Annotation (id, bookId, cfiRange, excerpt, note, color, tags, createdAt, updatedAt, serverKnown, dirty)
+		      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		      ON CONFLICT(id) DO UPDATE SET
+		        bookId = excluded.bookId,
+		        cfiRange = excluded.cfiRange,
+		        excerpt = excluded.excerpt,
+		        note = excluded.note,
+		        color = excluded.color,
+		        tags = excluded.tags,
+		        createdAt = excluded.createdAt,
+		        updatedAt = excluded.updatedAt,
+		        serverKnown = MAX(Annotation.serverKnown, excluded.serverKnown),
+		        dirty = excluded.dirty`,
+		bind: [
+			a.id,
+			a.bookId,
+			a.cfiRange,
+			a.excerpt,
+			a.note,
+			a.color,
+			JSON.stringify(a.tags ?? []),
+			a.createdAt,
+			a.updatedAt,
+			serverKnown ? 1 : 0,
+			dirty ? 1 : 0
+		]
+	});
 }
 
 type Handler = (args: unknown[]) => unknown;
@@ -187,32 +270,8 @@ const handlers: Record<string, Handler> = {
 			returnValue: 'resultRows'
 		}) as unknown as ReadingProgress[];
 	},
-	saveAnnotation([annotation]: unknown[]): void {
-		const a = annotation as Annotation;
-		db!.exec({
-			sql: `INSERT INTO Annotation (id, bookId, cfiRange, excerpt, note, color, tags, createdAt, updatedAt)
-			      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-			      ON CONFLICT(id) DO UPDATE SET
-			        bookId = excluded.bookId,
-			        cfiRange = excluded.cfiRange,
-			        excerpt = excluded.excerpt,
-			        note = excluded.note,
-			        color = excluded.color,
-			        tags = excluded.tags,
-			        createdAt = excluded.createdAt,
-			        updatedAt = excluded.updatedAt`,
-			bind: [
-				a.id,
-				a.bookId,
-				a.cfiRange,
-				a.excerpt,
-				a.note,
-				a.color,
-				JSON.stringify(a.tags ?? []),
-				a.createdAt,
-				a.updatedAt
-			]
-		});
+	saveAnnotation([annotation, serverKnown, dirty]: unknown[]): void {
+		upsertAnnotation(annotation as Annotation, serverKnown as boolean, dirty as boolean);
 	},
 	allAnnotationsForBook([bookId]: unknown[]): Annotation[] {
 		const rows = db!.exec({
@@ -233,21 +292,66 @@ const handlers: Record<string, Handler> = {
 			returnValue: 'resultRows'
 		}) as unknown as { bookId: string; highlightCount: number; noteCount: number }[];
 	},
-	deleteAnnotation([id]: unknown[]): void {
-		db!.exec({ sql: 'DELETE FROM Annotation WHERE id = ?', bind: [id as string] });
+	/** Alle lokalen Markierungen samt Abgleich-Merkern - die Grundlage des Abgleichs. */
+	pendingAnnotations(): SyncedAnnotation[] {
+		const rows = db!.exec({
+			sql: 'SELECT id, bookId, cfiRange, excerpt, note, color, tags, createdAt, updatedAt, serverKnown, dirty FROM Annotation ORDER BY createdAt',
+			rowMode: 'object',
+			returnValue: 'resultRows'
+		}) as unknown as (Omit<Annotation, 'tags'> & {
+			tags: string;
+			serverKnown: number;
+			dirty: number;
+		})[];
+		return rows.map(({ serverKnown, dirty, ...a }) => ({
+			annotation: { ...a, tags: parseTags(a.tags) },
+			serverKnown: serverKnown !== 0,
+			dirty: dirty !== 0
+		}));
 	},
-	// Wipe-and-reinsert in one transaction: the backend is the source of truth
-	// for which annotations still exist (sync-at-startup replace strategy).
-	replaceAllAnnotations([annotations]: unknown[]): void {
-		const all = annotations as Annotation[];
+	/**
+	 * Ein Push ist durchgegangen: Die Zeile gilt jetzt als bekannt.
+	 *
+	 * `dirty` wird nur zurückgesetzt, wenn die Zeile noch genau den Stand trägt,
+	 * der hochgereicht wurde (`syncedUpdatedAt`). Der Push wird bewusst nicht
+	 * abgewartet - der Nutzer kann in der Zwischenzeit dieselbe Notiz erneut
+	 * ändern. Ohne diesen Vergleich würde die neuere Änderung als abgeglichen
+	 * abgehakt, obwohl das Backend noch die alte Fassung hat: lokal und im
+	 * Backend stünde Verschiedenes, ohne dass es je auffiele.
+	 *
+	 * `serverKnown` wird dagegen bedingungslos gesetzt - der Eintrag ist im
+	 * Backend angelegt, unabhängig davon, was seither daran geändert wurde.
+	 */
+	markAnnotationSynced([id, syncedUpdatedAt]: unknown[]): void {
+		db!.exec({
+			sql: 'UPDATE Annotation SET serverKnown = 1, dirty = (updatedAt <> ?) WHERE id = ?',
+			bind: [syncedUpdatedAt as string, id as string]
+		});
+	},
+	// Löschen heißt: Zeile weg UND Grabstein setzen, in einer Transaktion - ein
+	// halb ausgeführtes Löschen brächte den Abgleich durcheinander (Zeile weg,
+	// aber kein DELETE ans Backend, also käme sie beim nächsten Lauf zurück).
+	//
+	// Ausnahme: Eine Zeile mit serverKnown=0 hat das Backend nie gesehen. Ein
+	// DELETE dorthin wäre sinnlos, und der Grabstein würde nie abgeräumt - über
+	// die Zeit sammelte sich so eine wachsende Liste von IDs, die es nirgends
+	// gibt und die jeder Abgleich erneut durchginge.
+	deleteAnnotation([id, deletedAt]: unknown[]): void {
 		db!.exec('BEGIN');
 		try {
-			db!.exec('DELETE FROM Annotation');
-			for (const a of all) {
+			const rows = db!.exec({
+				sql: 'SELECT serverKnown FROM Annotation WHERE id = ?',
+				bind: [id as string],
+				rowMode: 'object',
+				returnValue: 'resultRows'
+			}) as unknown as { serverKnown: number }[];
+			const serverKnown = rows[0] !== undefined && rows[0].serverKnown !== 0;
+			db!.exec({ sql: 'DELETE FROM Annotation WHERE id = ?', bind: [id as string] });
+			if (serverKnown) {
 				db!.exec({
-					sql: `INSERT INTO Annotation (id, bookId, cfiRange, excerpt, note, color, tags, createdAt, updatedAt)
-					      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-					bind: [a.id, a.bookId, a.cfiRange, a.excerpt, a.note, a.color, JSON.stringify(a.tags ?? []), a.createdAt, a.updatedAt]
+					sql: `INSERT INTO DeletedAnnotation (id, deletedAt) VALUES (?, ?)
+					      ON CONFLICT(id) DO UPDATE SET deletedAt = excluded.deletedAt`,
+					bind: [id as string, deletedAt as string]
 				});
 			}
 			db!.exec('COMMIT');
@@ -255,6 +359,105 @@ const handlers: Record<string, Handler> = {
 			db!.exec('ROLLBACK');
 			throw error;
 		}
+	},
+	/** Die IDs aller hier gelöschten, im Backend aber noch nicht abgeräumten Markierungen. */
+	annotationTombstones(): string[] {
+		const rows = db!.exec({
+			sql: 'SELECT id FROM DeletedAnnotation ORDER BY deletedAt',
+			rowMode: 'object',
+			returnValue: 'resultRows'
+		}) as unknown as { id: string }[];
+		return rows.map((r) => r.id);
+	},
+	/** Das DELETE ist im Backend angekommen - der Grabstein hat seinen Zweck erfüllt. */
+	clearAnnotationTombstone([id]: unknown[]): void {
+		db!.exec({ sql: 'DELETE FROM DeletedAnnotation WHERE id = ?', bind: [id as string] });
+	},
+	// Das Ergebnis eines Abgleichs in einer Transaktion, damit der lokale Bestand
+	// nie halb zusammengeführt dasteht. Alles aus `toSave` stammt aus der
+	// Serverantwort, gilt also als bekannt und sauber; alles aus `toRemove` ist
+	// serverseitig bereits weg und braucht deshalb KEINEN Grabstein.
+	applyAnnotationSync([toSave, toRemove]: unknown[]): void {
+		db!.exec('BEGIN');
+		try {
+			for (const a of toSave as Annotation[]) upsertAnnotation(a, true, false);
+			for (const id of toRemove as string[]) {
+				db!.exec({ sql: 'DELETE FROM Annotation WHERE id = ?', bind: [id] });
+			}
+			db!.exec('COMMIT');
+		} catch (error) {
+			db!.exec('ROLLBACK');
+			throw error;
+		}
+	},
+	// Wipe-and-reinsert in einer Transaktion: Anders als bei den Markierungen
+	// ist der Server hier alleinige Quelle der Wahrheit - der Katalog entsteht
+	// nie offline. Ein dort gelöschtes Buch muss also auch aus dem lokalen
+	// Spiegel verschwinden; ein Zusammenführen hinterließe Karteileichen.
+	replaceCatalog([books]: unknown[]): void {
+		const all = books as CatalogBook[];
+		db!.exec('BEGIN');
+		try {
+			db!.exec('DELETE FROM Book');
+			// `sortOrder` hält die Reihenfolge fest, in der der Server den Katalog
+			// geliefert hat (dort: neueste zuerst). Ohne sie stünde die Bibliothek
+			// offline in einer anderen Reihenfolge da als online.
+			all.forEach((b, index) => {
+				db!.exec({
+					sql: `INSERT INTO Book (id, title, author, fileHash, processingStatus, tags, coverUrl,
+					                        hasDossier, aiCostUsd, archived, originalFilename, dossierCostUsd,
+					                        sortOrder)
+					      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					bind: [
+						b.id,
+						b.title,
+						b.author,
+						b.fileHash,
+						b.processingStatus,
+						JSON.stringify(b.tags ?? []),
+						b.coverUrl,
+						b.hasDossier ? 1 : 0,
+						b.aiCostUsd,
+						b.archived ? 1 : 0,
+						b.originalFilename,
+						b.dossierCostUsd,
+						index
+					]
+				});
+			});
+			db!.exec('COMMIT');
+		} catch (error) {
+			db!.exec('ROLLBACK');
+			throw error;
+		}
+	},
+	// The mirror stores only what the *server* owns. `progress`,
+	// `highlightCount` and `noteCount` are derived from the ReadingProgress and
+	// Annotation tables on every read anyway (see the loadCatalog reactor), so
+	// storing them here would just be a second, staler copy - they come back as
+	// the same "nothing known yet" values a fresh catalog response carries.
+	allCachedBooks(): CatalogBook[] {
+		const rows = db!.exec({
+			sql: `SELECT id, title, author, fileHash, processingStatus, tags, coverUrl,
+			             hasDossier, aiCostUsd, archived, originalFilename, dossierCostUsd
+			      FROM Book ORDER BY sortOrder`,
+			rowMode: 'object',
+			returnValue: 'resultRows'
+		}) as unknown as (Omit<CatalogBook, 'tags' | 'hasDossier' | 'archived' | 'progress' | 'highlightCount' | 'noteCount'> & {
+			tags: string;
+			hasDossier: number;
+			archived: number;
+		})[];
+		return rows.map((r) => ({
+			...r,
+			tags: parseTags(r.tags),
+			// SQLite has no boolean type - 0/1 going in, 0/1 coming back out.
+			hasDossier: r.hasDossier !== 0,
+			archived: r.archived !== 0,
+			progress: null,
+			highlightCount: 0,
+			noteCount: 0
+		}));
 	}
 };
 
