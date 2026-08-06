@@ -100,7 +100,34 @@ export function readerThemeStyles(theme: ReaderTheme): object {
 		body: {
 			background: `${c.bg} !important`,
 			color: `${c.fg} !important`,
-			'touch-action': 'pan-x pinch-zoom'
+			'touch-action': 'pan-x pinch-zoom',
+			// Senkrechter Freiraum am Spaltenrand, verbindlich gesetzt.
+			//
+			// Er ist kein Zierrat: Die Tinte eines Zeichens ragt über seinen
+			// Zeilenkasten hinaus - unten die Unterlängen (g, j, p), oben die
+			// Umlautpunkte. Steht eine Zeile bündig am Spaltenrand und fehlt der
+			// Freiraum, schneidet `overflow-y: hidden` (setzt epub.js auf den
+			// Körper) genau diese Tinte ab.
+			//
+			// epub.js hat dagegen zwar eine Vorkehrung, die aber nicht mehr
+			// greift: `-webkit-line-box-contain: block glyphs replaced`
+			// (contents.js, "Fix glyph clipping in WebKit") wird von aktuellen
+			// Chromium-Browsern nicht mehr unterstützt - hier nachgemessen mit
+			// CSS.supports(), Ergebnis false.
+			//
+			// Und sein eigener Innenabstand ist ungeschützt: Im waagerechten
+			// Zweig setzt epub.js padding-left/right mit `important`, padding-
+			// top/bottom aber OHNE (contents.js, columns()). Ein Buch mit
+			// `body { padding: 0 !important }` räumt also genau die Ränder weg,
+			// an denen die Tinte hängt. Aus einem Stylesheet mit `!important`
+			// gesetzt, gewinnen diese Werte gegen beides - gegen den Inline-Wert
+			// von epub.js wie gegen die Regel des Buchs (nachgemessen).
+			//
+			// Bewusst dieselben 20px, die epub.js selbst vorsieht: Wo nichts
+			// kaputt ist, ändert sich dadurch nichts an der Seitenaufteilung.
+			// Neu ist allein, dass sie niemand mehr entfernen kann.
+			'padding-top': '20px !important',
+			'padding-bottom': '20px !important'
 		},
 		'p, li, blockquote, td, th, figcaption, div, span': { color: `${c.fg} !important` },
 		'h1, h2, h3, h4, h5, h6': { color: `${c.fg} !important` },

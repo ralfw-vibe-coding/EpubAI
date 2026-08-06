@@ -65,6 +65,28 @@ describe('readerThemeStyles', () => {
 			expect(styles.body['touch-action']).toBe('pan-x pinch-zoom');
 		}
 	});
+
+	it('sichert den senkrechten Freiraum am Spaltenrand mit !important ab', () => {
+		// Ohne diesen Rand schneidet epub.js' `overflow-y: hidden` die Tinte ab,
+		// die über den Zeilenkasten hinausragt: Unterlängen (g, j, p) unten,
+		// Umlautpunkte oben. epub.js setzt padding-top/bottom nur ohne
+		// `important` - ein Buch kann sie also wegräumen. `!important` MUSS
+		// deshalb dranbleiben, sonst ist der Schutz wirkungslos.
+		for (const theme of ['hell', 'sepia', 'dunkel'] as const) {
+			const styles = readerThemeStyles(theme) as Record<string, Record<string, string>>;
+			expect(styles.body['padding-top']).toBe('20px !important');
+			expect(styles.body['padding-bottom']).toBe('20px !important');
+		}
+	});
+
+	it('fasst die seitlichen Ränder nicht an', () => {
+		// Die steuert der Rand-Regler über die Breite unseres eigenen Containers
+		// (siehe MARGIN_PADDING). Würden wir sie hier zusätzlich setzen, ginge
+		// die Einstellung ins Leere oder schlüge doppelt zu.
+		const styles = readerThemeStyles('hell') as Record<string, Record<string, string>>;
+		expect(styles.body['padding-left']).toBeUndefined();
+		expect(styles.body['padding-right']).toBeUndefined();
+	});
 });
 
 describe('MARGIN_PADDING', () => {
