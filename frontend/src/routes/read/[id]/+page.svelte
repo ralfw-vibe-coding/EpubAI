@@ -30,6 +30,8 @@
 	import { colorHex, HIGHLIGHT_COLORS, highlightStyles } from './colors';
 	import { normalizeTag } from './tags';
 	import { detectSwipe, type Swipe } from './swipe';
+	import { initialGate, nextGate, type SelectionEvent } from './selectionGate';
+	import { selectionBarTop, SELECTION_BAR_HEIGHT_PX } from './selectionBarPlacement';
 	import { searchBook, highlightExcerpt, type BookSearchResult, MAX_BOOK_SEARCH_RESULTS } from './bookSearch';
 	import { resolveTocHref } from './tocHref';
 	import { AVAILABLE_LANGUAGES } from './languages';
@@ -135,7 +137,70 @@
 	// shown after a text selection; `editing` drives the note-editor bottom sheet.
 	let annotations = $state<Annotation[]>([]);
 	let notesOpen = $state(false);
-	let selection = $state<{ cfiRange: string; excerpt: string } | null>(null);
+	/**
+	 * Die Farbleiste erscheint erst, wenn das Auswählen abgeschlossen ist -
+	 * sonst steht sie mitten im Weg, während man die Auswahl noch zieht. Die
+	 * Regeln dafür stecken in selectionGate.ts (rein und dort geprüft, weil die
+	 * Reihenfolge der Ereignisse das Kniffelige ist); hier bleiben nur die
+	 * Wartezeit und das Einspeisen der Ereignisse.
+	 */
+	const SELECTION_SETTLE_MS = 350;
+	type PendingSelection = {
+		cfiRange: string;
+		excerpt: string;
+		/** Oberer Rand der Farbleiste in px - siehe barTopFor / selectionBarPlacement.ts. */
+		barTop: number;
+	};
+	let selectionGate = $state(initialGate<PendingSelection>());
+	let selection = $derived(selectionGate.visible);
+	let selectionSettleTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function gate(event: SelectionEvent<PendingSelection>) {
+		selectionGate = nextGate(selectionGate, event);
+	}
+
+	/**
+	 * Wo die Leiste stehen muss, damit sie nah an der Markierung steht, ohne
+	 * sie zu verdecken. Die Regel steckt in selectionBarPlacement.ts; hier nur
+	 * das Ausmessen.
+	 *
+	 * Über mehrere Zeilen liefert getClientRects() ein Rechteck je Zeile: Das
+	 * ERSTE beginnt die Auswahl, das LETZTE beendet sie. Beide werden
+	 * gebraucht - unterhalb wird am Ende ausgerichtet, oberhalb am Anfang.
+	 *
+	 * Die Koordinaten sind schon die des sichtbaren Bereichs im iframe. epub.js
+	 * legt dessen Höhe auf die der Leseseite fest (lock("height", …) im
+	 * horizontalen Zweig) und blättert über waagerechte Spalten - senkrecht ist
+	 * also nichts verschoben, und innerHeight ist genau die Seitenhöhe.
+	 *
+	 * Lässt sich nichts messen (leere Auswahl, gelöste Bereiche), landet die
+	 * Leiste mittig - immer vollständig sichtbar und nie grob daneben.
+	 */
+	function barTopFor(sel: Selection | null, win: Window): number {
+		const centered = Math.max(0, (win.innerHeight - SELECTION_BAR_HEIGHT_PX) / 2);
+		if (!sel || sel.rangeCount === 0) return centered;
+		const rects = sel.getRangeAt(0).getClientRects();
+		const first = rects[0];
+		const last = rects[rects.length - 1];
+		if (!first || !last) return centered;
+		return selectionBarTop(first.top, last.bottom, win.innerHeight);
+	}
+
+	/** Fertig mit dieser Auswahl: markiert, abgebrochen, danebengetippt. */
+	function dismissSelection() {
+		gate({ type: 'dismiss' });
+	}
+
+	/** Die Auswahl hat sich geändert - Leiste weg, Wartezeit von vorn. */
+	function onSelectionChanged(getText: () => string) {
+		gate({ type: 'changed' });
+		if (selectionSettleTimer) clearTimeout(selectionSettleTimer);
+		selectionSettleTimer = setTimeout(() => {
+			selectionSettleTimer = null;
+			gate({ type: 'settled', text: getText() });
+		}, SELECTION_SETTLE_MS);
+	}
+
 	let editing = $state<Annotation | null>(null);
 	let noteDraft = $state('');
 	// Free-form tag chips being edited alongside the note (the same `#flashcard`
@@ -375,7 +440,7 @@
 	async function createHighlight(color: AnnotationColor) {
 		if (!selection) return;
 		const sel = selection;
-		selection = null;
+		dismissSelection();
 		try {
 			const created = await getProcessor().createAnnotation(
 				bookId,
@@ -508,7 +573,7 @@
 			);
 			annotations = [...annotations, created];
 			applyHighlight(created);
-			selection = null;
+			dismissSelection();
 			aiResult = null;
 			openNoteEditor(created, true);
 		} catch {
@@ -843,10 +908,19 @@
 			});
 
 			// Text selection inside the rendered EPUB → offer the "Markieren" action.
+			// Nur gemerkt, nicht gezeigt: Sichtbar wird die Leiste erst, wenn die
+			// Auswahl zur Ruhe gekommen ist (siehe selectionGate.ts).
+			// epub.js liefert hier den CFI, den wir selbst nicht berechnen wollen -
+			// deshalb bleibt dieses Ereignis die Quelle der Auswahl-Daten, während
+			// über das Anzeigen unten entschieden wird.
 			rendition.on('selected', (cfiRange: string, contents: { window: Window }) => {
-				const text = contents.window.getSelection()?.toString().trim() ?? '';
+				const sel = contents.window.getSelection();
+				const text = sel?.toString().trim() ?? '';
 				if (!text) return;
-				selection = { cfiRange, excerpt: text };
+				gate({
+					type: 'candidate',
+					selection: { cfiRange, excerpt: text, barTop: barTopFor(sel, contents.window) }
+				});
 			});
 
 			// epub.js only ever emits 'selected' for a *non-empty* selection - tapping
@@ -858,8 +932,12 @@
 			rendition.on('click', (_event: MouseEvent, contents: { window: Window }) => {
 				const text = contents.window.getSelection()?.toString().trim() ?? '';
 				if (text) return;
-				if (selection) {
-					selection = null;
+				// Der noch gemerkte Stand zählt mit: Beim Wegtippen ist die Leiste
+				// womöglich schon durch selectionchange verschwunden, der Tipp
+				// verwirft aber trotzdem eine Auswahl und darf dann nicht
+				// zusätzlich die Bedienleisten umschalten.
+				if (selectionGate.visible || selectionGate.pending) {
+					dismissSelection();
 				} else {
 					toggleChrome();
 				}
@@ -881,9 +959,28 @@
 			// yet at this point in the same event tick. `contents.on` isn't in
 			// epub.js's own .d.ts (same gap as Section.find(), see bookSearch.ts),
 			// hence the local inline type instead of importing Contents for this.
-			rendition.hooks.content.register((contents: { on(event: string, cb: (href: string) => void): void }) => {
-				contents.on('linkClicked', () => pushHistory());
-			});
+			rendition.hooks.content.register(
+				(contents: {
+					on(event: string, cb: (href: string) => void): void;
+					document: Document;
+					window: Window;
+				}) => {
+					contents.on('linkClicked', () => pushHistory());
+					// Rohes selectionchange, nicht epub.js' entprelltes 'selected':
+					// Nur so merken wir JEDE Änderung sofort und können die
+					// Farbleiste wieder ausblenden, solange noch gezogen wird
+					// (siehe onSelectionChanged). Pro Abschnitt registriert, weil
+					// jeder Abschnitt sein eigenes Dokument im iframe hat.
+					contents.document.addEventListener(
+						'selectionchange',
+						() =>
+							onSelectionChanged(
+								() => contents.window.getSelection()?.toString().trim() ?? ''
+							),
+						{ passive: true }
+					);
+				}
+			);
 
 			// Re-apply this book's stored highlights from the LOCAL cache (never a
 			// network call here — offline-first Reader). Added before display() so
@@ -1080,8 +1177,16 @@
 		contentTouchX = t.clientX;
 		contentTouchY = t.clientY;
 		contentTouchTime = Date.now();
+		// Solange der Finger liegt, bleibt die Farbleiste weg - ein langes
+		// Antippen wählt ein Wort aus, und die Leiste soll erst beim Loslassen
+		// kommen, nicht schon während man noch hält.
+		gate({ type: 'touchStart' });
 	}
 	function onContentTouchEnd(e: TouchEvent, contents: { window: Window }) {
+		// Finger weg: Steht die Auswahl bereits still, darf die Leiste jetzt
+		// erscheinen. Zieht der Nutzer weiter, setzt selectionchange sie erneut
+		// zurück, bevor es dazu kommt.
+		gate({ type: 'touchEnd' });
 		const t = e.changedTouches[0];
 		const dx = t.clientX - contentTouchX;
 		const dy = t.clientY - contentTouchY;
@@ -1193,6 +1298,7 @@
 		if (toastTimer) clearTimeout(toastTimer);
 		if (chromeHideTimer) clearTimeout(chromeHideTimer);
 		if (noteSavedFlashTimer) clearTimeout(noteSavedFlashTimer);
+		if (selectionSettleTimer) clearTimeout(selectionSettleTimer);
 		void save();
 		rendition?.destroy();
 		book?.destroy();
@@ -1287,7 +1393,13 @@
 		{/if}
 
 		{#if selection && !aiResult && !chat}
-			<div class="absolute inset-x-0 bottom-4 z-40 flex justify-center">
+			<!--
+				Steht direkt an der Markierung statt am Seitenrand: knapp unter
+				deren Ende, bei Platzmangel über deren Anfang, notfalls mittig
+				(siehe selectionBarPlacement.ts). Deshalb hier ein gerechneter
+				Wert statt einer festen Klasse.
+			-->
+			<div class="absolute inset-x-0 z-40 flex justify-center" style="top: {selection.barTop}px">
 				<div class="flex items-center gap-1.5 border-2 border-[var(--color-divider)] bg-[var(--color-bg)] px-2 py-1.5 shadow">
 					{#each HIGHLIGHT_COLORS as color (color.value)}
 						<button
@@ -1319,7 +1431,7 @@
 						<MessagesSquare size={18} />
 					</button>
 					<button
-						onclick={() => (selection = null)}
+						onclick={dismissSelection}
 						aria-label="Abbrechen"
 						class="ml-1 flex h-9 w-9 flex-none items-center justify-center border-l-2 border-[var(--color-divider)] text-[var(--color-neutral-700)]"
 					>
