@@ -188,6 +188,17 @@
 		// Erst sperren, dann auflösen: Das Auflösen feuert selectionchange, und
 		// ohne die Sperre nähme uns das die eben gezeigte Leiste sofort weg.
 		gate({ type: 'taken' });
+		// Deckt sich die Auswahl exakt mit einer bestehenden Markierung, KEINE
+		// vorläufige setzen: epub.js schlüsselt Anmerkungen über cfiRange+Typ
+		// (annotations.js), beide bekämen also denselben Schlüssel. Die
+		// vorläufige verdrängte die echte, und das Verwerfen nähme sie
+		// anschließend ganz weg - die gespeicherte Markierung wäre bis zum
+		// nächsten Öffnen des Buchs verschwunden. Sichtbar ist die Stelle in
+		// diesem Fall ohnehin schon.
+		if (annotations.some((a) => a.cfiRange === cfiRange)) {
+			clearNativeSelection();
+			return;
+		}
 		try {
 			rendition?.annotations.add(
 				'highlight',
@@ -268,6 +279,11 @@
 	/** Fertig mit dieser Auswahl: markiert, abgebrochen, danebengetippt. */
 	function dismissSelection() {
 		removePendingMark();
+		// Auch hier aufheben, nicht nur bei der Übernahme: Ist die Auswahl aus
+		// irgendeinem Grund noch da (oder vom System wiederhergestellt worden),
+		// bliebe sie sonst nach dem Markieren stehen - genau dann will man sie
+		// am wenigsten sehen, die Stelle trägt jetzt ja ihre Farbe.
+		clearNativeSelection();
 		gate({ type: 'dismiss' });
 	}
 
@@ -501,6 +517,13 @@
 
 	/** Render one stored annotation as an epub.js highlight (click opens its note editor). */
 	function applyHighlight(a: Annotation) {
+		// Erst entfernen: epub.js schlüsselt Anmerkungen über cfiRange+Typ
+		// (annotations.js), ein zweites `add` unter demselben Schlüssel
+		// überschreibt aber nur die Buchführung - die bereits gezeichnete SVG-
+		// Ebene bliebe hängen. Zwei Markierungen lägen dann übereinander, etwa
+		// die vorläufige aus der Auswahl unter der eben gewählten Farbe.
+		// `remove` auf einen unbekannten Schlüssel ist ein No-op.
+		rendition?.annotations.remove(a.cfiRange, 'highlight');
 		rendition?.annotations.add(
 			'highlight',
 			a.cfiRange,
@@ -573,7 +596,31 @@
 		noteDraft.trim() !== originalNoteDraft.trim() || !sameTags(noteDraftTags, originalNoteDraftTags)
 	);
 
+	/**
+	 * Zeitpunkt, zu dem der Notiz-Editor aufging - gegen den Geister-Klick.
+	 *
+	 * epub.js hängt den Klick-Rückruf einer Markierung an BEIDE Ereignisse,
+	 * `click` UND `touchstart` (managers/views/iframe.js). Auf dem Telefon
+	 * öffnet also bereits das touchstart den Editor; dessen Abdunkelung legt
+	 * sich über die Seite, und der erst danach synthetisierte click trifft
+	 * nicht mehr den Buchtext, sondern sie - der Editor ginge sofort wieder zu.
+	 *
+	 * Deshalb ignoriert die Abdunkelung Klicks, die praktisch gleichzeitig mit
+	 * dem Öffnen ankommen. Bewusst diese Sperre und nicht ein Umstellen auf
+	 * pointerdown: Damit schlösse zwar auch der Geister-Klick nicht mehr, aber
+	 * ein echtes Tippen würde durchschlagen und darunter eine Seite weiter-
+	 * blättern.
+	 */
+	const GHOST_CLICK_GUARD_MS = 400;
+	let noteEditorOpenedAt = 0;
+
+	function closeNoteEditorByBackdrop() {
+		if (Date.now() - noteEditorOpenedAt < GHOST_CLICK_GUARD_MS) return;
+		editing = null;
+	}
+
 	function openNoteEditor(a: Annotation, justCreated = false) {
+		noteEditorOpenedAt = Date.now();
 		editing = a;
 		noteDraft = a.note ?? '';
 		noteDraftTags = [...a.tags];
@@ -680,7 +727,7 @@
 		const updated = await getProcessor().updateAnnotationColor(a, color);
 		annotations = annotations.map((x) => (x.id === updated.id ? updated : x));
 		editing = updated;
-		rendition?.annotations.remove(a.cfiRange, 'highlight');
+		// Das Entfernen der alten Fassung übernimmt applyHighlight selbst.
 		applyHighlight(updated);
 	}
 
@@ -1866,7 +1913,7 @@
 	{#if editing}
 		<button
 			aria-label="Notiz schließen"
-			onclick={() => (editing = null)}
+			onclick={closeNoteEditorByBackdrop}
 			class="absolute inset-0 z-20 bg-black/40"
 		></button>
 		<section
