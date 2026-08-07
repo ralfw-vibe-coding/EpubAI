@@ -123,4 +123,59 @@ describe('selectionGate', () => {
 	it('zeigt nichts, wenn epub.js gar keine Auswahl gemeldet hat', () => {
 		expect(play({ type: 'settled', text: 'Text ohne Meldung' }).visible).toBeNull();
 	});
+
+	// Sobald die Leiste steht, lösen wir die native Auswahl auf - sonst legt
+	// iOS sein eigenes Menü als System-Oberfläche unerreichbar darüber.
+	describe('nach der Übernahme der Auswahl', () => {
+		const taken = () =>
+			play(
+				{ type: 'candidate', selection: SEL },
+				{ type: 'settled', text: SEL.excerpt },
+				{ type: 'taken' }
+			);
+
+		it('bleibt die Leiste stehen', () => {
+			expect(taken().visible).toEqual(SEL);
+		});
+
+		// Das Auflösen der Auswahl feuert selbst ein selectionchange. Ohne diese
+		// Sperre räumten wir uns die eigene Anzeige sofort wieder weg.
+		it('nimmt das eigene selectionchange die Leiste nicht weg', () => {
+			expect(nextGate(taken(), { type: 'changed' }).visible).toEqual(SEL);
+		});
+
+		it('bleibt sie auch bei einem nachlaufenden settled stehen', () => {
+			// Der Wartezeit-Zeitgeber läuft womöglich noch und meldet jetzt leeren
+			// Text - die Auswahl ist ja aufgelöst.
+			expect(nextGate(taken(), { type: 'settled', text: '' }).visible).toEqual(SEL);
+		});
+
+		it('stören Berührungen sie nicht mehr', () => {
+			const state = nextGate(nextGate(taken(), { type: 'touchStart' }), { type: 'touchEnd' });
+			expect(state.visible).toEqual(SEL);
+		});
+
+		it('beendet nur ein Verwerfen den Zustand', () => {
+			const done = nextGate(taken(), { type: 'dismiss' });
+			expect(done.visible).toBeNull();
+			expect(done.taken).toBe(false);
+		});
+
+		it('funktioniert die nächste Auswahl danach wieder normal', () => {
+			const done = nextGate(taken(), { type: 'dismiss' });
+			const next = [
+				{ type: 'changed' } as const,
+				{ type: 'candidate', selection: OTHER } as const,
+				{ type: 'settled', text: OTHER.excerpt } as const
+			].reduce(nextGate<Sel>, done);
+			expect(next.visible).toEqual(OTHER);
+		});
+
+		it('zeigt eine neue Auswahl nicht ohne eigene Wartezeit', () => {
+			// `settled` muss beim Verwerfen zurückgesetzt werden - sonst spränge
+			// die Leiste bei der nächsten Auswahl sofort an.
+			const done = nextGate(taken(), { type: 'dismiss' });
+			expect(nextGate(done, { type: 'candidate', selection: OTHER }).visible).toBeNull();
+		});
+	});
 });

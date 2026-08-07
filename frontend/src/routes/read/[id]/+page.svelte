@@ -156,7 +156,86 @@
 	let selectionSettleTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function gate(event: SelectionEvent<PendingSelection>) {
+		const wasVisible = selectionGate.visible;
 		selectionGate = nextGate(selectionGate, event);
+		// Genau im Moment des Erscheinens die Auswahl übernehmen (siehe dort).
+		if (!wasVisible && selectionGate.visible) takeOverSelection(selectionGate.visible.cfiRange);
+	}
+
+	/**
+	 * Die native Textauswahl auflösen und die Stelle stattdessen selbst
+	 * markieren, sobald unsere Leiste steht.
+	 *
+	 * Grund ist iOS: Zu einer bestehenden Auswahl blendet es sein eigenes Menü
+	 * ein ("Kopieren", "Nachschlagen") - als System-Oberfläche, die immer über
+	 * der Seite liegt. Dagegen kommt keine Webseite an, unsere Leiste
+	 * verschwindet schlicht darunter. Abschalten lässt sich das Menü nicht
+	 * (`-webkit-touch-callout` betrifft nur das Halte-Menü über Links und
+	 * Bildern), wohl aber seine Voraussetzung: Ohne Auswahl kein Menü.
+	 *
+	 * Damit die Stelle sichtbar bleibt, tritt an ihre Stelle eine vorläufige
+	 * Markierung - dieselbe Technik wie bei gespeicherten Markierungen, nur mit
+	 * eigener Klasse, damit sie sich beim Verwerfen gezielt entfernen lässt.
+	 *
+	 * Was das kostet: Nachjustieren an den Greifpunkten geht nur noch, solange
+	 * die Leiste NICHT steht - also während des Ziehens, was durch die
+	 * Wartezeit ohnehin schon der Fall ist (siehe selectionGate.ts).
+	 */
+	const PENDING_MARK_CLASS = 'epubai-pending-mark';
+	let pendingMarkCfi: string | null = null;
+
+	function takeOverSelection(cfiRange: string) {
+		// Erst sperren, dann auflösen: Das Auflösen feuert selectionchange, und
+		// ohne die Sperre nähme uns das die eben gezeigte Leiste sofort weg.
+		gate({ type: 'taken' });
+		try {
+			rendition?.annotations.add(
+				'highlight',
+				cfiRange,
+				{},
+				undefined,
+				PENDING_MARK_CLASS,
+				// Bewusst die neutrale Standardfarbe: Die vorläufige Markierung
+				// zeigt nur, WAS ausgewählt ist, sie greift der Farbwahl nicht vor.
+				highlightStyles('accent')
+			);
+			pendingMarkCfi = cfiRange;
+		} catch (error) {
+			// Ohne vorläufige Markierung ist die Stelle unsichtbar, die Leiste
+			// funktioniert aber - kein Grund, deshalb ganz aufzugeben.
+			console.error('[Reader] Vorläufige Markierung konnte nicht gesetzt werden:', error);
+		}
+		clearNativeSelection();
+	}
+
+	/**
+	 * Die Auswahl in JEDEM gerenderten Abschnitt aufheben - das Menü hängt daran.
+	 *
+	 * `getContents()` liefert zur Laufzeit eine Liste (rendition.js gibt
+	 * `manager.getContents()` bzw. `[]` zurück), die Typdeklaration von epub.js
+	 * behauptet aber ein einzelnes Contents-Objekt. Dieselbe Lücke wie bei
+	 * Section.find() (siehe bookSearch.ts), daher die Umdeutung hier.
+	 */
+	function clearNativeSelection() {
+		const all = (rendition?.getContents() ?? []) as unknown as { window: Window }[];
+		for (const contents of all) {
+			try {
+				contents.window.getSelection()?.removeAllRanges();
+			} catch {
+				// Ein Abschnitt, der gerade abgeräumt wird, hat kein Fenster mehr.
+			}
+		}
+	}
+
+	/** Die vorläufige Markierung wieder entfernen. */
+	function removePendingMark() {
+		if (!pendingMarkCfi) return;
+		try {
+			rendition?.annotations.remove(pendingMarkCfi, 'highlight');
+		} catch (error) {
+			console.error('[Reader] Vorläufige Markierung konnte nicht entfernt werden:', error);
+		}
+		pendingMarkCfi = null;
 	}
 
 	/**
@@ -188,6 +267,7 @@
 
 	/** Fertig mit dieser Auswahl: markiert, abgebrochen, danebengetippt. */
 	function dismissSelection() {
+		removePendingMark();
 		gate({ type: 'dismiss' });
 	}
 
@@ -1045,6 +1125,13 @@
 				currentCfi = location.start.cfi;
 				percent = pct(currentCfi);
 				currentPage = pageOf(currentCfi);
+				// Wer weiterblättert, ist mit der Auswahl fertig. Nötig, seit wir
+				// sie übernehmen: Früher räumte das Neuzeichnen die native Auswahl
+				// weg und selectionchange nahm die Leiste mit. Jetzt hört der Gate
+				// nach der Übernahme nicht mehr auf selectionchange - ohne dies
+				// stünde die Leiste samt vorläufiger Markierung auf der nächsten
+				// Seite weiter im Bild.
+				if (selectionGate.visible || selectionGate.pending) dismissSelection();
 				void save();
 			});
 

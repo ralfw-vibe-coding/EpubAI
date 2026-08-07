@@ -29,6 +29,19 @@ export interface SelectionGate<S> {
 	settled: boolean;
 	/** Liegt gerade ein Finger auf der Seite? */
 	touching: boolean;
+	/**
+	 * Haben wir die Auswahl übernommen?
+	 *
+	 * Sobald die Leiste steht, lösen wir die native Auswahl auf und markieren
+	 * die Stelle selbst - sonst legt iOS sein eigenes Menü ("Kopieren",
+	 * "Nachschlagen") als System-Oberfläche darüber, und zwar unerreichbar
+	 * oben: Gegen natives UI kommt keine Webseite an.
+	 *
+	 * Das Auflösen löst selbst ein selectionchange aus. Ohne diesen Merker
+	 * würde die Leiste daran sofort wieder verschwinden - wir hätten uns die
+	 * eigene Anzeige weggeräumt.
+	 */
+	taken: boolean;
 }
 
 export type SelectionEvent<S> =
@@ -43,11 +56,17 @@ export type SelectionEvent<S> =
 	| { type: 'candidate'; selection: S }
 	| { type: 'touchStart' }
 	| { type: 'touchEnd' }
+	/**
+	 * Wir haben die native Auswahl aufgelöst und die Stelle selbst markiert.
+	 * Ab hier ist die Anzeige festgestellt: Was danach an selectionchange
+	 * hereinkommt, stammt von uns.
+	 */
+	| { type: 'taken' }
 	/** Fertig mit dieser Auswahl: markiert, abgebrochen, danebengetippt. */
 	| { type: 'dismiss' };
 
 export function initialGate<S>(): SelectionGate<S> {
-	return { visible: null, pending: null, settled: false, touching: false };
+	return { visible: null, pending: null, settled: false, touching: false, taken: false };
 }
 
 /** Zeigen, sobald Auswahl UND Finger zur Ruhe gekommen sind. */
@@ -57,6 +76,12 @@ function reveal<S>(state: SelectionGate<S>): SelectionGate<S> {
 }
 
 export function nextGate<S>(state: SelectionGate<S>, event: SelectionEvent<S>): SelectionGate<S> {
+	// Nach der Übernahme kommt jedes selectionchange von uns selbst (das
+	// Auflösen der nativen Auswahl) oder ist bedeutungslos - eine Auswahl, an
+	// der man noch ziehen könnte, gibt es dann nicht mehr. Also nichts mehr
+	// verstecken oder neu bewerten; nur `dismiss` beendet diesen Zustand.
+	if (state.taken && event.type !== 'dismiss') return state;
+
 	switch (event.type) {
 		case 'changed':
 			// Jede Änderung nimmt die Leiste sofort wieder weg und lässt die
@@ -71,6 +96,8 @@ export function nextGate<S>(state: SelectionGate<S>, event: SelectionEvent<S>): 
 		}
 		case 'candidate':
 			return reveal({ ...state, pending: event.selection });
+		case 'taken':
+			return { ...state, taken: true };
 		case 'touchStart':
 			return { ...state, touching: true };
 		case 'touchEnd':
@@ -78,7 +105,8 @@ export function nextGate<S>(state: SelectionGate<S>, event: SelectionEvent<S>): 
 		case 'dismiss':
 			// `pending` MUSS mit weg: Die markierte Stelle bleibt im Dokument oft
 			// ausgewählt stehen, und sonst käme die Leiste gleich darauf von
-			// selbst zurück.
-			return { ...state, visible: null, pending: null };
+			// selbst zurück. `settled` ebenso zurück auf Anfang, sonst zeigte die
+			// nächste gemeldete Auswahl die Leiste ohne eigene Wartezeit.
+			return { ...state, visible: null, pending: null, taken: false, settled: false };
 	}
 }
