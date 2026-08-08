@@ -528,13 +528,31 @@
 			'highlight',
 			a.cfiRange,
 			{},
-			() => onHighlightClick(a.cfiRange),
+			(event: Event) => onHighlightTapped(event, a.cfiRange),
 			'epubai-highlight',
 			highlightStyles(a.color)
 		);
 	}
 
-	function onHighlightClick(cfiRange: string) {
+	/**
+	 * Antippen einer Markierung öffnet ihre Notiz - aber NUR auf `click`.
+	 *
+	 * epub.js meldet jeden Treffer zweimal: Es hängt denselben Rückruf an
+	 * `click` UND an `touchstart` (managers/views/iframe.js). Auf dem Telefon
+	 * käme also zuerst das touchstart, der Editor ginge auf, seine Abdunkelung
+	 * legte sich über die Seite - und der erst danach synthetisierte click
+	 * träfe nicht mehr den Buchtext, sondern sie. Der Editor schlösse sich
+	 * selbst wieder.
+	 *
+	 * Genau das hier abzufangen ist die Wurzel: Wartet man auf den click, ist
+	 * der Editor erst offen, wenn dieses Ereignis bereits zugestellt ist -
+	 * danach kommt keines mehr, das ihn schließen könnte. Die Zeitsperre auf
+	 * der Abdunkelung (siehe closeNoteEditorByBackdrop) bleibt als zweites
+	 * Netz, reicht aber allein nicht: Bei einem langsameren Tippen liegen
+	 * touchstart und click weiter auseinander als ihr Fenster.
+	 */
+	function onHighlightTapped(event: Event, cfiRange: string) {
+		if (event?.type !== 'click') return;
 		const a = annotations.find((x) => x.cfiRange === cfiRange);
 		if (a) openNoteEditor(a);
 	}
