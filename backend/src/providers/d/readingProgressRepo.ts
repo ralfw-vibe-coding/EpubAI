@@ -33,6 +33,16 @@ export async function listByUser(userId: string): Promise<ReadingProgress[]> {
   return result.rows.map(toReadingProgress);
 }
 
+/**
+ * Alle Lesepositionen zu einem Buch löschen - Teil des Aufräumens beim Löschen
+ * eines Buchs. Bewusst NICHT auf den Nutzer eingegrenzt: Beim Entfernen des
+ * Buchs muss jede Zeile weg, die noch darauf verweist, sonst blockiert der
+ * Fremdschlüssel das Löschen des Buchs selbst.
+ */
+export async function deleteByBookId(bookId: string): Promise<void> {
+  await pool.query(`delete from reading_progress where book_id = $1`, [bookId]);
+}
+
 export async function findByUserAndBook(userId: string, bookId: string): Promise<ReadingProgress | null> {
   const result = await pool.query<ReadingProgressRow>(
     `select ${SELECT_FIELDS} from reading_progress where user_id = $1 and book_id = $2`,
