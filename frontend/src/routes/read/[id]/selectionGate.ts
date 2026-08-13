@@ -58,10 +58,30 @@ export type SelectionEvent<S> =
 	| { type: 'touchEnd' }
 	/**
 	 * Wir haben die native Auswahl aufgelöst und die Stelle selbst markiert.
-	 * Ab hier ist die Anzeige festgestellt: Was danach an selectionchange
-	 * hereinkommt, stammt von uns.
+	 * Ab hier ist die Anzeige festgestellt - bis entweder `dismiss` sie
+	 * beendet oder `reasserted` sie zurücknimmt.
 	 */
 	| { type: 'taken' }
+	/**
+	 * Die native Auswahl ist NACH der Übernahme zurückgekommen - der Nutzer
+	 * zieht noch an den Greifpunkten.
+	 *
+	 * Das ist der iOS-Fall, der die Übernahme als reinen Endzustand gebrochen
+	 * hat: Die Greifpunkte sind System-UI, ihr Ziehen liefert der Seite keine
+	 * Touch-Ereignisse - den Abschluss der Geste kann die Seite also
+	 * prinzipiell nicht erkennen, und die Wartezeit feuert zwangsläufig
+	 * manchmal mitten im Zug. Dann hebt die Übernahme die Auswahl auf, WebKit
+	 * setzt den laufenden Zug aber fort und stellt sie sofort wieder her -
+	 * und ein eingefrorener `taken`-Zustand hätte das nie wieder korrigiert:
+	 * Leiste und iOS-Menü stünden dauerhaft übereinander.
+	 *
+	 * Deshalb ist die Übernahme rücknehmbar. `reasserted` setzt alles zurück
+	 * und der normale Ablauf (warten, zeigen, übernehmen) beginnt von vorn.
+	 * Damit sind die einzigen stabilen Zustände: Auswahl vorhanden und Leiste
+	 * weg, oder Auswahl weg und Leiste da. Menü über Leiste kann kein
+	 * Dauerzustand mehr sein - egal, wie iOS sich im Detail verhält.
+	 */
+	| { type: 'reasserted' }
 	/** Fertig mit dieser Auswahl: markiert, abgebrochen, danebengetippt. */
 	| { type: 'dismiss' };
 
@@ -76,11 +96,11 @@ function reveal<S>(state: SelectionGate<S>): SelectionGate<S> {
 }
 
 export function nextGate<S>(state: SelectionGate<S>, event: SelectionEvent<S>): SelectionGate<S> {
-	// Nach der Übernahme kommt jedes selectionchange von uns selbst (das
-	// Auflösen der nativen Auswahl) oder ist bedeutungslos - eine Auswahl, an
-	// der man noch ziehen könnte, gibt es dann nicht mehr. Also nichts mehr
-	// verstecken oder neu bewerten; nur `dismiss` beendet diesen Zustand.
-	if (state.taken && event.type !== 'dismiss') return state;
+	// Nach der Übernahme ist die Anzeige festgestellt: Das leere selectionchange
+	// aus unserem eigenen Auflösen darf sie nicht wieder wegnehmen. Nur zwei
+	// Wege führen hier heraus - `dismiss` (fertig) und `reasserted` (die
+	// Auswahl ist zurück, die Übernahme wird zurückgenommen; siehe dort).
+	if (state.taken && event.type !== 'dismiss' && event.type !== 'reasserted') return state;
 
 	switch (event.type) {
 		case 'changed':
@@ -98,6 +118,12 @@ export function nextGate<S>(state: SelectionGate<S>, event: SelectionEvent<S>): 
 			return reveal({ ...state, pending: event.selection });
 		case 'taken':
 			return { ...state, taken: true };
+		case 'reasserted':
+			// Zurück auf Anfang, auch `pending`: Der Nutzer zieht noch, der alte
+			// CFI ist womöglich schon veraltet. epub.js meldet die geänderte
+			// Auswahl von selbst als neuen Kandidaten (sein 'selected' feuert vor
+			// unserer längeren Wartezeit), es geht also nichts verloren.
+			return { ...state, visible: null, pending: null, settled: false, taken: false };
 		case 'touchStart':
 			return { ...state, touching: true };
 		case 'touchEnd':

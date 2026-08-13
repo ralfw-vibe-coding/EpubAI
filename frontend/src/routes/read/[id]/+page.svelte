@@ -177,9 +177,11 @@
 	 * Markierung - dieselbe Technik wie bei gespeicherten Markierungen, nur mit
 	 * eigener Klasse, damit sie sich beim Verwerfen gezielt entfernen lässt.
 	 *
-	 * Was das kostet: Nachjustieren an den Greifpunkten geht nur noch, solange
-	 * die Leiste NICHT steht - also während des Ziehens, was durch die
-	 * Wartezeit ohnehin schon der Fall ist (siehe selectionGate.ts).
+	 * Die Übernahme ist KEIN Endzustand: Kommt danach ein nicht-leeres
+	 * selectionchange, war sie verfrüht (iOS setzt einen laufenden Zug an den
+	 * Greifpunkten fort und stellt die Auswahl wieder her) und wird
+	 * zurückgenommen - siehe onSelectionChanged. Deshalb darf hier auch nichts
+	 * stehen, was sich nicht rückstandsfrei zurücknehmen lässt.
 	 */
 	const PENDING_MARK_CLASS = 'epubai-pending-mark';
 	let pendingMarkCfi: string | null = null;
@@ -287,8 +289,28 @@
 		gate({ type: 'dismiss' });
 	}
 
-	/** Die Auswahl hat sich geändert - Leiste weg, Wartezeit von vorn. */
+	/**
+	 * Die Auswahl hat sich geändert - Leiste weg, Wartezeit von vorn.
+	 *
+	 * Nach einer Übernahme wird hier zweierlei auseinandergehalten:
+	 *  - LEER ist das Echo unseres eigenen Auflösens - ignorieren, sonst
+	 *    räumten wir uns die eben gezeigte Leiste selbst wieder weg.
+	 *  - NICHT-LEER heißt: Die Auswahl ist zurück. Auf iOS passiert das, wenn
+	 *    die Wartezeit mitten im Zug an den Greifpunkten feuerte (deren Ziehen
+	 *    liefert der Seite keine Touch-Ereignisse, eine Pause ist von einem
+	 *    Abschluss nicht zu unterscheiden) - WebKit setzt den Zug fort und
+	 *    stellt die Auswahl wieder her. Dann wird die Übernahme zurückgenommen
+	 *    (vorläufige Markierung weg, Gate zurück auf Anfang) und der normale
+	 *    Ablauf beginnt von vorn. Hört der Nutzer wirklich auf, hält die
+	 *    nächste Übernahme; solange er zieht, wiederholt sich das eben. So
+	 *    kann "iOS-Menü über unserer Leiste" kein Dauerzustand mehr sein.
+	 */
 	function onSelectionChanged(getText: () => string) {
+		if (selectionGate.taken) {
+			if (!getText()) return;
+			removePendingMark();
+			gate({ type: 'reasserted' });
+		}
 		gate({ type: 'changed' });
 		if (selectionSettleTimer) clearTimeout(selectionSettleTimer);
 		selectionSettleTimer = setTimeout(() => {

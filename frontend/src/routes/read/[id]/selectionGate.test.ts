@@ -178,4 +178,53 @@ describe('selectionGate', () => {
 			expect(nextGate(done, { type: 'candidate', selection: OTHER }).visible).toBeNull();
 		});
 	});
+
+	// Der iOS-Fall aus der Praxis: Die Wartezeit feuert mitten im Zug an den
+	// Greifpunkten (deren Ziehen liefert der Seite keine Touch-Ereignisse),
+	// die Übernahme hebt die Auswahl auf, WebKit stellt sie sofort wieder her.
+	// Ein eingefrorener taken-Zustand ließe Leiste und iOS-Menü dauerhaft
+	// übereinander stehen - die Übernahme muss rücknehmbar sein.
+	describe('Rücknahme der Übernahme (reasserted)', () => {
+		const takenState = () =>
+			play(
+				{ type: 'candidate', selection: SEL },
+				{ type: 'settled', text: SEL.excerpt },
+				{ type: 'taken' }
+			);
+
+		it('nimmt Leiste und Übernahme zurück', () => {
+			const state = nextGate(takenState(), { type: 'reasserted' });
+			expect(state.visible).toBeNull();
+			expect(state.taken).toBe(false);
+			expect(state.pending).toBeNull();
+		});
+
+		it('durchbricht die taken-Sperre (anders als jedes andere Ereignis)', () => {
+			// Ohne diese Ausnahme wäre reasserted wirkungslos - genau der
+			// eingefrorene Zustand, der auf dem iPhone beobachtet wurde.
+			const state = nextGate(takenState(), { type: 'reasserted' });
+			expect(state).not.toEqual(takenState());
+		});
+
+		it('spielt danach den normalen Ablauf: warten, zeigen, wieder übernehmen', () => {
+			// Die vollständige Folge von den Screenshots: Übernahme zu früh,
+			// Auswahl kommt zurück, Nutzer zieht weiter und hört dann auf.
+			const state = [
+				{ type: 'reasserted' } as const,
+				{ type: 'changed' } as const,
+				{ type: 'candidate', selection: OTHER } as const,
+				{ type: 'settled', text: OTHER.excerpt } as const
+			].reduce(nextGate<Sel>, takenState());
+			expect(state.visible).toEqual(OTHER);
+			// Und die zweite Übernahme sperrt wieder wie die erste.
+			expect(nextGate(state, { type: 'taken' }).taken).toBe(true);
+		});
+
+		it('zeigt nach der Rücknahme nichts ohne neue Wartezeit', () => {
+			// settled muss mit zurückgesetzt werden, sonst spränge die Leiste beim
+			// nächsten Kandidaten sofort an - mitten in den fortgesetzten Zug.
+			const state = nextGate(takenState(), { type: 'reasserted' });
+			expect(nextGate(state, { type: 'candidate', selection: OTHER }).visible).toBeNull();
+		});
+	});
 });
