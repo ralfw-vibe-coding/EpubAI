@@ -7,6 +7,19 @@
 			content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
 		/>
 		<meta name="theme-color" content="#f6f2ea" />
+		<!--
+			Als eigenständige App vom Home-Screen starten (ohne Safari-Adress- und
+			Werkzeugleiste): Das entscheidet iOS BEIM ABLEGEN des Icons anhand des
+			Manifests (display: standalone). Das apple-touch-icon darunter liefert
+			nur das Bild des Icons, nicht diesen Modus - deshalb lief die App
+			bisher als bloßes Lesezeichen im Browser. Die apple-*-Metas sind der
+			ältere Weg für dasselbe; iOS liest heute das Manifest, die Metas
+			bleiben als Absicherung für ältere Stände.
+		-->
+		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-title" content="EpubAI" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 		<link rel="icon" type="image/png" sizes="32x32" href="%sveltekit.assets%/favicon-32.png" />
 		<link rel="icon" type="image/png" sizes="16x16" href="%sveltekit.assets%/favicon-16.png" />
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
