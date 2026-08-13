@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { authRequestCode } from "../processor/authRequestCode.js";
 import { authVerifyCode } from "../processor/authVerifyCode.js";
+import { refreshSession } from "../processor/refreshSession.js";
 
 // Portal: pure HTTP-to-Reactor translation, no business logic.
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
@@ -13,6 +14,11 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post("/auth/login/verify", async (request, reply) => {
     const body = (request.body ?? {}) as { email?: unknown; code?: unknown };
     const result = await authVerifyCode({ email: body.email, code: body.code });
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.post("/auth/refresh", async (request, reply) => {
+    const result = await refreshSession(request.headers.authorization);
     return reply.code(result.status).send(result.body);
   });
 }

@@ -239,6 +239,12 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 			translationLanguage: 'de',
 			defaultFlashcardColor: 'yellow'
 		}),
+		refreshSession: record('refreshSession', {
+			token: 'tok-neu',
+			userId: 'u1',
+			translationLanguage: 'de',
+			defaultFlashcardColor: 'yellow'
+		}),
 		getBooks: record('getBooks', [defaultBook]),
 		getBook: record('getBook', defaultBook),
 		createLoan: record('createLoan', defaultLoan),

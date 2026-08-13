@@ -51,15 +51,107 @@ describe('processor reactors', () => {
 		expect(auth.get()).toEqual(session);
 	});
 
-	it('signOut clears the session', async () => {
-		const { deps, auth } = makeDeps({
-			auth: fakeAuthStore({
-				token: 't',
+	describe('refreshSession', () => {
+		const JETZT = '2026-07-13T12:00:00.000Z';
+		/** Token mit gegebenem Alter - nur der iat-Anteil zählt. */
+		function tokenAlt(stunden: number): string {
+			const iat = (Date.parse(JETZT) - stunden * 60 * 60 * 1000) / 1000;
+			const b64 = (o: object) =>
+				btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+			return `h.${b64({ userId: 'u', iat })}.s`;
+		}
+		/**
+		 * Der Auth-Speicher wird hier selbst gehalten und zurückgegeben:
+		 * makeDeps legt intern einen eigenen an und gibt DIESEN zurück, nicht
+		 * den übergebenen - über das Rückgabeobjekt sähe man also nie, was der
+		 * Reactor tatsächlich geschrieben hat.
+		 */
+		function mitToken(token: string, extra: Partial<ReactorDeps> = {}) {
+			const auth = fakeAuthStore({
+				token,
 				userId: 'u',
 				translationLanguage: 'de',
 				defaultFlashcardColor: 'yellow'
-			})
+			});
+			const made = makeDeps({ auth, clock: fakeClock(JETZT), ...extra });
+			return { ...made, auth };
+		}
+
+		// Der Kern: Wer an Tag 6 die App öffnet, soll nicht an Tag 7 ausgesperrt
+		// werden. Die Frist läuft ab der letzten Nutzung.
+		it('tauscht einen tagealten Token gegen einen frischen', async () => {
+			const { deps, auth, http } = mitToken(tokenAlt(6 * 24));
+
+			await expect(createProcessor(deps).refreshSession()).resolves.toBe(true);
+
+			expect(auth.get()?.token).toBe('tok-neu');
+			expect(http.calls.some((c) => c.method === 'refreshSession')).toBe(true);
 		});
+
+		// Auf iOS wird die App beim Zurückwechseln nur wieder sichtbar - das
+		// kann dutzendfach am Tag passieren und darf nicht jedes Mal anfragen.
+		it('fragt für einen frischen Token gar nicht erst an', async () => {
+			const { deps, auth, http } = mitToken(tokenAlt(0.25));
+
+			await expect(createProcessor(deps).refreshSession()).resolves.toBe(false);
+
+			expect(http.calls.some((c) => c.method === 'refreshSession')).toBe(false);
+			expect(auth.get()?.token).toBe(tokenAlt(0.25));
+		});
+
+		it('tut nichts, wenn niemand angemeldet ist', async () => {
+			const { deps, http } = makeDeps();
+
+			await expect(createProcessor(deps).refreshSession()).resolves.toBe(false);
+
+			expect(http.calls.some((c) => c.method === 'refreshSession')).toBe(false);
+		});
+
+		// Ohne Netz muss der bisherige Token stehen bleiben - sonst stünde man
+		// ausgerechnet offline ohne Anmeldung da.
+		it('behält den Token, wenn das Backend nicht erreichbar ist', async () => {
+			const http = fakeHttp({
+				refreshSession: async () => {
+					throw new TypeError('Failed to fetch');
+				}
+			});
+			const { deps, auth } = mitToken(tokenAlt(48), { http: http.impl });
+
+			await expect(createProcessor(deps).refreshSession()).resolves.toBe(false);
+
+			expect(auth.get()?.token).toBe(tokenAlt(48));
+		});
+
+		// Ein 401 heißt: wirklich abgelaufen. Trotzdem NICHT von sich aus
+		// abmelden - das würde offline entstandene, noch nicht hochgereichte
+		// Änderungen wegwerfen.
+		it('meldet bei abgelaufener Frist nicht von sich aus ab', async () => {
+			const http = fakeHttp({
+				refreshSession: async () => {
+					throw Object.assign(new Error('unauthorized'), { status: 401 });
+				}
+			});
+			const { deps, auth } = mitToken(tokenAlt(48), { http: http.impl });
+
+			await expect(createProcessor(deps).refreshSession()).resolves.toBe(false);
+
+			expect(auth.get()).not.toBeNull();
+		});
+	});
+
+	it('signOut clears the session', async () => {
+		// `auth` bewusst selbst gehalten: makeDeps gibt seinen INTERNEN Speicher
+		// zurück, nicht den übergebenen. Vorher prüfte dieser Test deshalb einen
+		// von Anfang an leeren Speicher und wäre auch grün geblieben, wenn
+		// signOut gar nichts täte.
+		const auth = fakeAuthStore({
+			token: 't',
+			userId: 'u',
+			translationLanguage: 'de',
+			defaultFlashcardColor: 'yellow'
+		});
+		const { deps } = makeDeps({ auth });
+		expect(auth.get()).not.toBeNull();
 		await createProcessor(deps).signOut();
 		expect(auth.get()).toBeNull();
 	});

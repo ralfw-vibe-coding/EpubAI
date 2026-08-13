@@ -88,6 +88,8 @@ export type ReadingProgressDto = ReadingProgress;
 export interface HttpClient {
 	requestLoginCode(email: string): Promise<LoginRequestResult>;
 	verifyLoginCode(email: string, code: string): Promise<Session>;
+	/** Laufenden Token gegen einen frischen tauschen (POST /auth/refresh). */
+	refreshSession(): Promise<Session>;
 	getBooks(): Promise<CatalogBook[]>;
 	getBook(bookId: string): Promise<CatalogBook>;
 	createLoan(bookId: string, deviceId: string): Promise<LoanResponse>;

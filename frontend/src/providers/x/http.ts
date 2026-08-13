@@ -81,6 +81,31 @@ export function createHttpClient(
 			return (await res.json()) as LoginRequestResult;
 		},
 
+		/**
+		 * Den laufenden Token gegen einen frischen tauschen. Braucht den
+		 * Authorization-Kopf - der Server prüft ihn samt Ablauf und lehnt einen
+		 * abgelaufenen ab, sonst wäre die Frist wirkungslos.
+		 */
+		async refreshSession(): Promise<Session> {
+			const res = await fetchImpl(`${base}/auth/refresh`, {
+				method: 'POST',
+				headers: { ...authHeaders(), ...ngrokBypass }
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			const body = (await res.json()) as {
+				token: string;
+				userId: string;
+				translationLanguage: string;
+				defaultFlashcardColor: string;
+			};
+			return {
+				token: body.token,
+				userId: body.userId,
+				translationLanguage: body.translationLanguage,
+				defaultFlashcardColor: body.defaultFlashcardColor
+			};
+		},
+
 		async verifyLoginCode(email: string, code: string): Promise<Session> {
 			const res = await fetchImpl(`${base}/auth/login/verify`, {
 				method: 'POST',

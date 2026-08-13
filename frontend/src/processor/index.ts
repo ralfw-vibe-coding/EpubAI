@@ -31,6 +31,7 @@ import { returnLoan } from './reactors/returnLoan';
 import { saveReadingProgress } from './reactors/saveReadingProgress';
 import { setDefaultFlashcardColor } from './reactors/setDefaultFlashcardColor';
 import { setTranslationLanguage } from './reactors/setTranslationLanguage';
+import { refreshSession } from './reactors/refreshSession';
 import { signOut } from './reactors/signOut';
 import { syncAnnotations } from './reactors/syncAnnotations';
 import { syncReadingProgress } from './reactors/syncReadingProgress';
@@ -55,6 +56,8 @@ export function createProcessor(deps: ReactorDeps) {
 		verifyLoginCode: (email: string, code: string): Promise<Session> =>
 			verifyLoginCode(deps, email, code),
 		signOut: (): Promise<void> => signOut(deps),
+		/** Anmeldung beim Öffnen der App verlängern (best effort). */
+		refreshSession: (): Promise<boolean> => refreshSession(deps),
 		loadCatalog: (): Promise<CatalogResult> => loadCatalog(deps),
 		openBookDetail: (bookId: string): Promise<BookDetailResult> => openBookDetail(deps, bookId),
 		borrowBook: (bookId: string, title: string): Promise<Loan> =>
