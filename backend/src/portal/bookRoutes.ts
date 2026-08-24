@@ -9,6 +9,7 @@ import { uploadDossier } from "../processor/uploadDossier.js";
 import { deleteDossier } from "../processor/deleteDossier.js";
 import { archiveBook } from "../processor/archiveBook.js";
 import { unarchiveBook } from "../processor/unarchiveBook.js";
+import { returnAllLoans } from "../processor/returnAllLoans.js";
 import { exportAnnotations } from "../processor/exportAnnotations.js";
 import { importAnnotations } from "../processor/importAnnotations.js";
 import { estimateDossierCost } from "../processor/estimateDossierCost.js";
@@ -99,6 +100,11 @@ export async function registerBookRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>("/books/:id/archive", async (request, reply) => {
     const result = await archiveBook(request.headers.authorization, request.params.id);
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.post<{ Params: { id: string } }>("/books/:id/return-all", async (request, reply) => {
+    const result = await returnAllLoans(request.headers.authorization, request.params.id);
     return reply.code(result.status).send(result.body);
   });
 

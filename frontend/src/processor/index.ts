@@ -27,6 +27,7 @@ import { lookupSelection } from './reactors/lookupSelection';
 import { openBookDetail, type BookDetailResult } from './reactors/openBookDetail';
 import { openBookForReading, type OpenForReadingResult } from './reactors/openBookForReading';
 import { requestLoginCode } from './reactors/requestLoginCode';
+import { returnAllLoans } from './reactors/returnAllLoans';
 import { returnLoan } from './reactors/returnLoan';
 import { saveReadingProgress } from './reactors/saveReadingProgress';
 import { setDefaultFlashcardColor } from './reactors/setDefaultFlashcardColor';
@@ -63,6 +64,8 @@ export function createProcessor(deps: ReactorDeps) {
 		borrowBook: (bookId: string, title: string): Promise<Loan> =>
 			borrowBook(deps, bookId, title),
 		returnLoan: (bookId: string): Promise<void> => returnLoan(deps, bookId),
+		/** Alle offenen Ausleihen beenden - auch die anderer Geräte. */
+		returnAllLoans: (bookId: string): Promise<{ returned: number }> => returnAllLoans(deps, bookId),
 		openBookForReading: (bookId: string): Promise<OpenForReadingResult> =>
 			openBookForReading(deps, bookId),
 		saveReadingProgress: (

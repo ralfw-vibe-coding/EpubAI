@@ -139,6 +139,53 @@ describe('processor reactors', () => {
 		});
 	});
 
+	describe('returnAllLoans', () => {
+		// Der Fall, fuer den es die Aktion gibt: Das Buch haengt an einem Geraet,
+		// dessen Kontext es nicht mehr gibt. Hier liegt nichts, trotzdem muss die
+		// Ausleihe aufloesbar sein - sonst laesst sich das Buch nie archivieren.
+		it('beendet die Ausleihe auch, wenn das Buch hier gar nicht liegt', async () => {
+			const { deps, http, files } = makeDeps();
+
+			const res = await createProcessor(deps).returnAllLoans('b1');
+
+			expect(res).toEqual({ returned: 1 });
+			expect(http.calls.some((c) => c.method === 'returnAllLoans')).toBe(true);
+			expect(files.store.size).toBe(0);
+		});
+
+		it('raeumt die eigene Kopie mit weg, wenn das Buch hier ausgeliehen ist', async () => {
+			const { deps, files, domain } = makeDeps();
+			const p = createProcessor(deps);
+			await p.borrowBook('b1', 'Titel');
+			expect(files.store.has('b1')).toBe(true);
+
+			await p.returnAllLoans('b1');
+
+			expect(files.store.has('b1')).toBe(false);
+			expect(await domain.isLocal('b1')).toBe(false);
+		});
+
+		// Anders als beim geraete-eigenen Zurueckgeben liegt die Wirkung auf den
+		// ANDEREN Geraeten - schlaegt das Backend fehl, darf hier nichts
+		// aufgeraeumt werden, sonst waere die eigene Kopie weg und die Ausleihe
+		// trotzdem noch offen.
+		it('raeumt nichts weg, wenn das Backend den Aufruf ablehnt', async () => {
+			const http = fakeHttp({
+				returnAllLoans: async () => {
+					throw Object.assign(new Error('not_found'), { status: 404 });
+				}
+			});
+			const { deps, files, domain } = makeDeps({ http: http.impl });
+			const p = createProcessor(deps);
+			await p.borrowBook('b1', 'Titel');
+
+			await expect(p.returnAllLoans('b1')).rejects.toThrow();
+
+			expect(files.store.has('b1')).toBe(true);
+			expect(await domain.isLocal('b1')).toBe(true);
+		});
+	});
+
 	it('signOut clears the session', async () => {
 		// `auth` bewusst selbst gehalten: makeDeps gibt seinen INTERNEN Speicher
 		// zurück, nicht den übergebenen. Vorher prüfte dieser Test deshalb einen

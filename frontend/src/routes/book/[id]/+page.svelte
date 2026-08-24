@@ -205,7 +205,8 @@
 	};
 
 	const ARCHIVE_ERROR_MESSAGES: Record<string, string> = {
-		book_on_loan: 'Das Buch muss erst zurückgegeben werden, bevor es archiviert werden kann.'
+		book_on_loan:
+			'Das Buch ist noch ausgeliehen und muss erst zurückgegeben werden — auch auf anderen Geräten.'
 	};
 
 	const GENERATE_ERROR_MESSAGES: Record<string, string> = {
@@ -273,6 +274,29 @@
 			error = BORROW_ERROR_MESSAGES[code] ?? 'Ausleihen fehlgeschlagen.';
 		} finally {
 			borrowing = false;
+		}
+	}
+
+	// Hält ein ANDERES Gerät das Buch noch? Der Client kennt nur seine eigene
+	// Ausleihe; die Gesamtzahl kommt aus den Buchdetails. Ohne diesen Hinweis
+	// stünde man vor einem 409 beim Archivieren, ohne zu erkennen, woran es
+	// liegt - und ohne Möglichkeit, es aufzulösen.
+	let onOtherDevice = $derived(
+		detail ? (detail.activeLoanCount ?? 0) - (detail.isLocal ? 1 : 0) > 0 : false
+	);
+	let returningAll = $state(false);
+
+	async function returnEverywhere() {
+		if (returningAll) return;
+		returningAll = true;
+		error = null;
+		try {
+			await getProcessor().returnAllLoans(bookId);
+			await load();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Zurückgeben fehlgeschlagen.';
+		} finally {
+			returningAll = false;
 		}
 	}
 
@@ -604,6 +628,9 @@
 					{/if}
 					<p class="mt-2 text-xs text-[var(--color-neutral-700)]">
 						Status: {detail.isLocal ? 'auf diesem Gerät' : 'nicht ausgeliehen'}
+						{#if onOtherDevice}
+							&nbsp;/&nbsp; auch auf einem anderen Gerät ausgeliehen
+						{/if}
 						{#if detail.archived}
 							&nbsp;/&nbsp; archiviert
 						{/if}
@@ -684,6 +711,28 @@
 						class="w-full bg-[var(--color-accent)] px-4 py-3 text-left font-semibold text-[var(--color-bg)] disabled:opacity-45"
 					>
 						{borrowing ? 'Lade herunter…' : 'Ausleihen'}
+					</button>
+				{/if}
+
+				<!--
+					Der Ausweg, wenn ein anderes Gerät das Buch noch hält: Von DORT
+					zurückzugeben ist unmöglich, sobald dessen Kontext nicht mehr
+					existiert (anderer Browser, gelöschte Daten, eigener Speicher der
+					Home-Screen-App) - und archivieren lässt sich ein ausgeliehenes
+					Buch nicht. Bewusst in beiden Zweigen sichtbar: Der häufigere Fall
+					ist gerade der, dass hier NICHT ausgeliehen ist.
+				-->
+				{#if onOtherDevice}
+					<p class="mt-4 text-xs text-[var(--color-neutral-700)]">
+						Dieses Buch ist noch auf einem anderen Gerät ausgeliehen. Solange das so ist, lässt es
+						sich nicht archivieren.
+					</p>
+					<button
+						onclick={returnEverywhere}
+						disabled={returningAll}
+						class="mt-2 w-full border border-[var(--color-divider)] px-4 py-3 text-left font-semibold disabled:opacity-45"
+					>
+						{returningAll ? 'Wird zurückgegeben…' : 'Auf allen Geräten zurückgeben'}
 					</button>
 				{/if}
 			</div>

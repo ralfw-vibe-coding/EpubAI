@@ -57,6 +57,38 @@ export async function hasActiveLoan(bookId: string): Promise<boolean> {
  * returned. Keeps the row for history instead of deleting it. Returns the
  * updated loan, or null if no matching active loan exists.
  */
+/**
+ * Zaehlt die offenen Ausleihen eines Buchs - ueber ALLE Geraete des Nutzers.
+ * Die Buchdetails brauchen die Zahl, um "haelt noch ein anderes Geraet dieses
+ * Buch?" beantworten zu koennen; nur so laesst sich eine Ausleihe aufloesen,
+ * deren Geraet es nicht mehr gibt.
+ */
+export async function countActiveLoans(bookId: string, userId: string): Promise<number> {
+  const result = await pool.query<{ n: string }>(
+    "select count(*)::text as n from loan where book_id = $1 and user_id = $2 and returned_at is null",
+    [bookId, userId]
+  );
+  return Number(result.rows[0]?.n ?? 0);
+}
+
+/**
+ * Beendet ALLE offenen Ausleihen eines Buchs fuer diesen Nutzer und meldet,
+ * wie viele es waren.
+ *
+ * Das Gegenstueck zu markReturned, das auf ein Geraet eingegrenzt ist: Genau
+ * diese Eingrenzung machte eine Ausleihe unaufloesbar, sobald ihr Geraet nicht
+ * mehr existierte (anderer Browser, geloeschte Daten, eigener Speicher der
+ * Home-Screen-App). Das Buch liess sich dann fuer immer nicht archivieren.
+ */
+export async function markAllReturned(bookId: string, userId: string): Promise<number> {
+  const result = await pool.query(
+    `update loan set returned_at = now()
+     where book_id = $1 and user_id = $2 and returned_at is null`,
+    [bookId, userId]
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function markReturned(bookId: string, userId: string, deviceId: string): Promise<Loan | null> {
   const result = await pool.query<LoanRow>(
     `update loan set returned_at = now()

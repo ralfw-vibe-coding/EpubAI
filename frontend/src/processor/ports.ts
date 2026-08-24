@@ -94,6 +94,8 @@ export interface HttpClient {
 	getBook(bookId: string): Promise<CatalogBook>;
 	createLoan(bookId: string, deviceId: string): Promise<LoanResponse>;
 	returnLoan(bookId: string, deviceId: string): Promise<void>;
+	/** Alle offenen Ausleihen eines Buchs beenden, geräteübergreifend. */
+	returnAllLoans(bookId: string): Promise<{ returned: number }>;
 	getBookFile(bookId: string): Promise<ArrayBuffer>;
 	uploadEpub(
 		file: Blob | ArrayBuffer,

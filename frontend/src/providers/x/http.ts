@@ -161,6 +161,15 @@ export function createHttpClient(
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 		},
 
+		async returnAllLoans(bookId: string): Promise<{ returned: number }> {
+			const res = await fetchImpl(`${base}/books/${encodeURIComponent(bookId)}/return-all`, {
+				method: 'POST',
+				headers: { ...authHeaders(), ...ngrokBypass }
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return (await res.json()) as { returned: number };
+		},
+
 		async getBookFile(bookId: string): Promise<ArrayBuffer> {
 			const res = await fetchImpl(
 				`${base}/books/${encodeURIComponent(bookId)}/file`,

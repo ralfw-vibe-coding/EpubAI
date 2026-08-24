@@ -6,10 +6,14 @@ vi.mock("../../src/providers/d/bookRepo.js", () => ({
 vi.mock("../../src/providers/x/r2.js", () => ({
   getPresignedUrl: vi.fn()
 }));
+vi.mock("../../src/providers/d/loanRepo.js", () => ({
+  countActiveLoans: vi.fn()
+}));
 
 import { getBook } from "../../src/processor/getBook.js";
 import * as bookRepo from "../../src/providers/d/bookRepo.js";
 import * as r2 from "../../src/providers/x/r2.js";
+import * as loanRepo from "../../src/providers/d/loanRepo.js";
 import { sign } from "../../src/providers/x/jwt.js";
 import type { Book } from "../../src/domain/types.js";
 
@@ -36,6 +40,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
 describe("getBook reactor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (loanRepo.countActiveLoans as ReturnType<typeof vi.fn>).mockResolvedValue(0);
   });
 
   it("returns 401 without a token", async () => {
@@ -80,7 +85,8 @@ describe("getBook reactor", () => {
         archived: false,
         originalFilename: null,
         dossierCostUsd: 0,
-        addedAt: "2026-01-01T00:00:00.000Z"
+        addedAt: "2026-01-01T00:00:00.000Z",
+        activeLoanCount: 0
       }
     });
   });

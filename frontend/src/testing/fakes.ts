@@ -250,6 +250,7 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		getBook: record('getBook', defaultBook),
 		createLoan: record('createLoan', defaultLoan),
 		returnLoan: record('returnLoan', undefined as void),
+		returnAllLoans: record('returnAllLoans', { returned: 1 }),
 		getBookFile: record('getBookFile', new ArrayBuffer(8)),
 		uploadEpub: record('uploadEpub', defaultUpload),
 		updateBookMetadata: record('updateBookMetadata', defaultBook),

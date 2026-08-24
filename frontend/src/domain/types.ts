@@ -45,6 +45,13 @@ export interface CatalogBook {
 	 * "zuletzt gelesen": Ein nie geöffnetes Buch hat keinen Lesezeitpunkt.
 	 */
 	addedAt: string;
+	/**
+	 * Auf wie vielen Geräten das Buch gerade ausgeliehen ist - nur in den
+	 * Buchdetails gefüllt (GET /books/:id), in der Katalogliste undefined.
+	 * Der Client kennt sonst nur seine EIGENE Ausleihe und könnte nicht
+	 * erkennen, dass ein anderes Gerät das Buch noch hält.
+	 */
+	activeLoanCount?: number;
 }
 
 /** A local loan: the book's EPUB is present in OPFS on this device. */
