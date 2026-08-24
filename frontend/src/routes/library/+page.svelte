@@ -4,6 +4,7 @@
 	import { Check, Highlighter, StickyNote, Upload } from 'lucide-svelte';
 	import type { BookDetail, CatalogBook } from '../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../portal/runtime';
+	import type { RestoreProgress } from '../../processor/reactors/restoreLoans';
 	import { filterBooks, filterByLocal, tagsFrom, visibleBooks } from './filterBooks';
 	import { SORT_OPTIONS, sortBooks, type LibrarySort } from './sortBooks';
 	import {
@@ -24,6 +25,17 @@
 	// Kein Fehlerzustand, sondern ein eigener Betriebszustand (siehe
 	// processor/reactors/loadCatalog.ts), deshalb ein eigenes Flag neben `error`.
 	let offline = $state(false);
+
+	// Wiederherstellung nach einer Speicherräumung durch iOS. OPFS ist jederzeit
+	// räumbar (Safari gewährt navigator.storage.persist() praktisch nie); dann
+	// sind Dateien und lokale Ausleihen weg, während der Server noch weiß, was
+	// dieses Gerät ausgeliehen hatte. Das darf nicht stillschweigend passieren -
+	// deshalb hier sichtbar, mit Titel und Balken.
+	let restoring = $state<RestoreProgress | null>(null);
+	let restoreFailed = $state(0);
+	// Bleibt stehen, bis der Nutzer es wegklickt: Der Verlust soll nicht
+	// unbemerkt vorbeigehen, nur weil man beim Nachladen gerade nicht hinsah.
+	let restoreDone = $state<{ restored: number; downloaded: number } | null>(null);
 
 	// Upload flow, one phase at a time. Selecting a file uploads AND creates the
 	// book in one step (metadata as-is, edited later on the book detail page) -
@@ -147,6 +159,18 @@
 			.syncReadingProgress()
 			.catch(() => undefined);
 		await reload();
+		// Erst nach dem Katalog: Die Bibliothek soll sofort dastehen, das
+		// Nachladen läuft sichtbar daneben. Ohne Netz tut es nichts.
+		try {
+			const result = await getProcessor().restoreLoans((p) => (restoring = p));
+			restoreFailed = result.failed;
+			if (result.restored > 0) {
+				restoreDone = { restored: result.restored, downloaded: result.downloaded };
+				await reload();
+			}
+		} finally {
+			restoring = null;
+		}
 	});
 
 	onDestroy(() => {
@@ -317,6 +341,53 @@
 	{#if offline}
 		<p class="mb-4 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
 			Achtung, offline — nur ausgeliehene Bücher sichtbar.
+		</p>
+	{/if}
+
+	<!--
+		Sichtbar machen, dass iOS den lokalen Speicher geräumt hat: Titel und
+		Balken, statt Bücher kommentarlos verschwinden zu lassen. Der Balken
+		zählt Bücher, nicht Bytes - eine Datei laden wir am Stück, ein
+		Fortschritt INNERHALB eines Buchs wäre also nicht ehrlich zu füllen.
+	-->
+	{#if restoring}
+		<div class="mb-4 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
+			<p>
+				Deine Bücher werden wiederhergestellt — {restoring.current} von {restoring.total}:
+				„{restoring.title}“
+			</p>
+			<div class="mt-2 h-1.5 w-full bg-[var(--color-accent-100)] ring-1 ring-[var(--color-accent-800)]/25">
+				<div
+					class="h-full bg-[var(--color-accent-800)] transition-[width] duration-300"
+					style="width: {Math.round((restoring.current / restoring.total) * 100)}%"
+				></div>
+			</div>
+		</div>
+	{/if}
+
+	{#if restoreDone && !restoring}
+		<div
+			class="mb-4 flex items-start gap-3 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]"
+		>
+			<p class="flex-1">
+				Der lokale Speicher dieses Geräts war verloren.
+				{restoreDone.restored === 1 ? 'Ein Buch' : `${restoreDone.restored} Bücher`} wurden
+				wiederhergestellt{restoreDone.downloaded > 0
+					? `, davon ${restoreDone.downloaded} neu geladen`
+					: ' (die Dateien waren noch da)'}.
+			</p>
+			<button
+				onclick={() => (restoreDone = null)}
+				aria-label="Hinweis schließen"
+				class="flex-none font-bold">✕</button
+			>
+		</div>
+	{/if}
+
+	{#if restoreFailed > 0 && !restoring}
+		<p class="mb-4 bg-[var(--color-accent-100)] px-3 py-2 text-sm text-[var(--color-accent-800)]">
+			{restoreFailed === 1 ? 'Ein Buch' : `${restoreFailed} Bücher`} konnten nicht wiederhergestellt
+			werden. Beim nächsten Start wird es erneut versucht.
 		</p>
 	{/if}
 

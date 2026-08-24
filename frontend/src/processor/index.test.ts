@@ -139,6 +139,147 @@ describe('processor reactors', () => {
 		});
 	});
 
+	describe('restoreLoans', () => {
+		const ausleihe = (bookId: string, title: string, deviceId = 'dev1') => ({
+			bookId,
+			deviceId,
+			fileHash: 'h1',
+			borrowedAt: '2026-08-01T00:00:00.000Z',
+			title
+		});
+
+		// Der Fall aus der Praxis: iOS raeumt OPFS, Dateien und lokale Ausleihen
+		// sind weg, die Geraete-ID im localStorage ueberlebt. Der Server weiss
+		// noch, was dieses Geraet hatte.
+		it('holt geraeumte Buecher dieses Geraets zurueck', async () => {
+			const http = fakeHttp({ openLoans: async () => [ausleihe('b1', 'Ein Buch')] });
+			const { deps, files, domain } = makeDeps({ http: http.impl });
+
+			const res = await createProcessor(deps).restoreLoans();
+
+			expect(res).toEqual({ restored: 1, downloaded: 1, failed: 0 });
+			expect(files.store.has('b1')).toBe(true);
+			expect(await domain.isLocal('b1')).toBe(true);
+		});
+
+		it('meldet Titel und Zaehlerstand je Buch', async () => {
+			const http = fakeHttp({
+				openLoans: async () => [ausleihe('b1', 'Erstes'), ausleihe('b2', 'Zweites')]
+			});
+			const { deps } = makeDeps({ http: http.impl });
+			const gemeldet: string[] = [];
+
+			await createProcessor(deps).restoreLoans((p) =>
+				gemeldet.push(`${p.current}/${p.total} ${p.title}`)
+			);
+
+			expect(gemeldet).toEqual(['1/2 Erstes', '2/2 Zweites']);
+		});
+
+		// Die Eingrenzung auf das Geraet macht der Server; der Client reicht
+		// seine ID durch. Ein Buch auf einem ANDEREN Geraet fehlt hier zu Recht
+		// und darf nicht ungefragt Speicher belegen.
+		it('fragt nur die Ausleihen DIESES Geraets ab', async () => {
+			let gefragtNach: string | undefined;
+			const http = fakeHttp({
+				openLoans: async (...args: unknown[]) => {
+					gefragtNach = args[0] as string;
+					return [];
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+
+			await createProcessor(deps).restoreLoans();
+
+			expect(gefragtNach).toBe('dev1');
+		});
+
+		// Der Fall, den die erste Fassung verfehlt haette: Die EPUB-Dateien
+		// liegen direkt in OPFS, die Ausleihen in der SQLite-Datenbank. Geht nur
+		// die Datenbank verloren, sind die Buecher noch da - eine Pruefung
+		// "fehlt die Datei?" faende nichts zu tun, und die Ausleihe bliebe fuer
+		// immer verschwunden.
+		it('stellt die Ausleihe ohne Download wieder her, wenn die Datei noch da ist', async () => {
+			const http = fakeHttp({ openLoans: async () => [ausleihe('b1', 'Ein Buch')] });
+			const { deps, files, domain } = makeDeps({ http: http.impl });
+			// Datei da, Ausleih-Eintrag fehlt - genau der Zustand nach dem Verlust.
+			await files.impl.write('b1', new ArrayBuffer(8));
+			expect(await domain.isLocal('b1')).toBe(false);
+
+			const res = await createProcessor(deps).restoreLoans();
+
+			expect(res).toEqual({ restored: 1, downloaded: 0, failed: 0 });
+			expect(await domain.isLocal('b1')).toBe(true);
+			expect(http.calls.some((c) => c.method === 'getBookFile')).toBe(false);
+		});
+
+		it('laedt nichts, was ohnehin schon da ist', async () => {
+			const http = fakeHttp({ openLoans: async () => [ausleihe('b1', 'Ein Buch')] });
+			const { deps, http: _h, files } = makeDeps({ http: http.impl });
+			const p = createProcessor(deps);
+			await p.borrowBook('b1', 'Ein Buch');
+			const vorher = http.calls.filter((c) => c.method === 'getBookFile').length;
+
+			expect(await p.restoreLoans()).toEqual({ restored: 0, downloaded: 0, failed: 0 });
+			expect(http.calls.filter((c) => c.method === 'getBookFile').length).toBe(vorher);
+			expect(files).toBeDefined();
+		});
+
+		// DIE Zusicherung: Der Ausleih-Haken darf nie an einem Buch stehen,
+		// dessen Daten fehlen. Scheitert der Download, bleibt es nicht ausgeliehen.
+		it('setzt keinen Ausleih-Eintrag, wenn die Datei nicht geladen werden konnte', async () => {
+			const http = fakeHttp({
+				openLoans: async () => [ausleihe('b1', 'Ein Buch')],
+				getBookFile: async () => {
+					throw new Error('Download gescheitert');
+				}
+			});
+			const { deps, files, domain } = makeDeps({ http: http.impl });
+
+			expect(await createProcessor(deps).restoreLoans()).toEqual({
+				restored: 0,
+				downloaded: 0,
+				failed: 1
+			});
+			expect(files.store.has('b1')).toBe(false);
+			expect(await domain.isLocal('b1')).toBe(false);
+		});
+
+		it('haelt ein gescheitertes Buch die uebrigen nicht auf', async () => {
+			const http = fakeHttp({
+				openLoans: async () => [ausleihe('b1', 'Kaputt'), ausleihe('b2', 'Heil')],
+				getBookFile: async (...args: unknown[]) => {
+					if (args[0] === 'b1') throw new Error('Download gescheitert');
+					return new ArrayBuffer(8);
+				}
+			});
+			const { deps, domain } = makeDeps({ http: http.impl });
+
+			expect(await createProcessor(deps).restoreLoans()).toEqual({
+				restored: 1,
+				downloaded: 1,
+				failed: 1
+			});
+			expect(await domain.isLocal('b2')).toBe(true);
+		});
+
+		// Ohne Netz einfach nichts tun - der naechste Start versucht es erneut.
+		it('tut ohne Netz nichts und wirft nicht', async () => {
+			const http = fakeHttp({
+				openLoans: async () => {
+					throw new TypeError('Failed to fetch');
+				}
+			});
+			const { deps } = makeDeps({ http: http.impl });
+
+			await expect(createProcessor(deps).restoreLoans()).resolves.toEqual({
+				restored: 0,
+				downloaded: 0,
+				failed: 0
+			});
+		});
+	});
+
 	describe('returnAllLoans', () => {
 		// Der Fall, fuer den es die Aktion gibt: Das Buch haengt an einem Geraet,
 		// dessen Kontext es nicht mehr gibt. Hier liegt nichts, trotzdem muss die

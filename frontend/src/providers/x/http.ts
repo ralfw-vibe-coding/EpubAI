@@ -7,6 +7,7 @@ import type {
 	ChatReply,
 	HttpClient,
 	LoanResponse,
+	OpenLoan,
 	LoginRequestResult,
 	ReadingProgressDto,
 	Session,
@@ -140,6 +141,14 @@ export function createHttpClient(
 			});
 			if (!res.ok) throw new HttpError(res.status, await readError(res));
 			return (await res.json()) as CatalogBook;
+		},
+
+		async openLoans(deviceId: string): Promise<OpenLoan[]> {
+			const res = await fetchImpl(`${base}/loans?deviceId=${encodeURIComponent(deviceId)}`, {
+				headers: authHeaders()
+			});
+			if (!res.ok) throw new HttpError(res.status, await readError(res));
+			return ((await res.json()) as { loans: OpenLoan[] }).loans;
 		},
 
 		async createLoan(bookId: string, deviceId: string): Promise<LoanResponse> {

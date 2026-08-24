@@ -19,6 +19,15 @@ export interface Session {
 	defaultFlashcardColor: string;
 }
 
+/** Eine offene Ausleihe, wie GET /loans sie liefert - samt Buchtitel. */
+export interface OpenLoan {
+	bookId: string;
+	deviceId: string;
+	fileHash: string;
+	borrowedAt: string;
+	title: string;
+}
+
 export interface LoanResponse {
 	id: string;
 	bookId: string;
@@ -92,6 +101,8 @@ export interface HttpClient {
 	refreshSession(): Promise<Session>;
 	getBooks(): Promise<CatalogBook[]>;
 	getBook(bookId: string): Promise<CatalogBook>;
+	/** Die offenen Ausleihen DIESES Geräts (GET /loans?deviceId=…). */
+	openLoans(deviceId: string): Promise<OpenLoan[]>;
 	createLoan(bookId: string, deviceId: string): Promise<LoanResponse>;
 	returnLoan(bookId: string, deviceId: string): Promise<void>;
 	/** Alle offenen Ausleihen eines Buchs beenden, geräteübergreifend. */

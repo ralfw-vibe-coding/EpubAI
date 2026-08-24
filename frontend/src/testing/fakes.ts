@@ -11,6 +11,7 @@ import type {
 	HttpClient,
 	IdProvider,
 	LoanResponse,
+	OpenLoan,
 	Session,
 	UploadEpubResult
 } from '../processor/ports';
@@ -248,6 +249,7 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		}),
 		getBooks: record('getBooks', [defaultBook]),
 		getBook: record('getBook', defaultBook),
+		openLoans: record('openLoans', [] as OpenLoan[]),
 		createLoan: record('createLoan', defaultLoan),
 		returnLoan: record('returnLoan', undefined as void),
 		returnAllLoans: record('returnAllLoans', { returned: 1 }),

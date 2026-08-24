@@ -24,6 +24,56 @@ function toLoan(row: LoanRow): Loan {
   };
 }
 
+/** Eine offene Ausleihe samt Buchtitel - genug, um sie wiederherzustellen. */
+export interface OpenLoan {
+  bookId: string;
+  deviceId: string;
+  fileHash: string;
+  borrowedAt: string;
+  title: string;
+}
+
+/**
+ * Die offenen Ausleihen EINES Geraets.
+ *
+ * Grundlage der Wiederherstellung: Raeumt iOS den lokalen Speicher (OPFS ist
+ * jederzeit raeumbar, Safari gewaehrt navigator.storage.persist() praktisch
+ * nie), sind Dateien UND lokale Ausleihen weg - die Geraete-ID im
+ * localStorage ueberlebt aber. Der Server weiss dann noch, was dieses Geraet
+ * ausgeliehen hatte, und genau daraus laesst es sich zurueckholen.
+ *
+ * Der Titel kommt mit, weil der lokale Ausleih-Eintrag ihn fuehrt (der Reader
+ * zeigt ihn ohne Netz an) - sonst muesste der Client ihn je Buch einzeln
+ * nachschlagen.
+ *
+ * Bewusst auf das Geraet eingegrenzt und nicht der ganze Kontostand: Ein Buch,
+ * das auf einem ANDEREN Geraet ausgeliehen ist, fehlt hier zu Recht. Es
+ * herunterzuladen wuerde ungefragt Speicher belegen, und "ausgeliehen" heisst
+ * in dieser App genau: liegt auf DIESEM Geraet und ist ohne Netz da.
+ */
+export async function listOpenByDevice(userId: string, deviceId: string): Promise<OpenLoan[]> {
+  const result = await pool.query<{
+    book_id: string;
+    device_id: string;
+    file_hash: string;
+    borrowed_at: Date;
+    title: string;
+  }>(
+    `select l.book_id, l.device_id, l.file_hash, l.borrowed_at, b.title
+     from loan l join book b on b.id = l.book_id
+     where l.user_id = $1 and l.device_id = $2 and l.returned_at is null
+     order by l.borrowed_at`,
+    [userId, deviceId]
+  );
+  return result.rows.map((r) => ({
+    bookId: r.book_id,
+    deviceId: r.device_id,
+    fileHash: r.file_hash,
+    borrowedAt: r.borrowed_at.toISOString(),
+    title: r.title
+  }));
+}
+
 export async function insert(userId: string, draft: LoanDraft): Promise<Loan> {
   const result = await pool.query<LoanRow>(
     `insert into loan (book_id, user_id, device_id, file_hash)

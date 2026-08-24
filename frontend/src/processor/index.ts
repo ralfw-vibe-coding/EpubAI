@@ -27,6 +27,7 @@ import { lookupSelection } from './reactors/lookupSelection';
 import { openBookDetail, type BookDetailResult } from './reactors/openBookDetail';
 import { openBookForReading, type OpenForReadingResult } from './reactors/openBookForReading';
 import { requestLoginCode } from './reactors/requestLoginCode';
+import { restoreLoans, type RestoreProgress, type RestoreResult } from './reactors/restoreLoans';
 import { returnAllLoans } from './reactors/returnAllLoans';
 import { returnLoan } from './reactors/returnLoan';
 import { saveReadingProgress } from './reactors/saveReadingProgress';
@@ -66,6 +67,9 @@ export function createProcessor(deps: ReactorDeps) {
 		returnLoan: (bookId: string): Promise<void> => returnLoan(deps, bookId),
 		/** Alle offenen Ausleihen beenden - auch die anderer Geräte. */
 		returnAllLoans: (bookId: string): Promise<{ returned: number }> => returnAllLoans(deps, bookId),
+		/** Von iOS geräumte Bücher zurückholen (siehe restoreLoans). */
+		restoreLoans: (onProgress?: (p: RestoreProgress) => void): Promise<RestoreResult> =>
+			restoreLoans(deps, onProgress),
 		openBookForReading: (bookId: string): Promise<OpenForReadingResult> =>
 			openBookForReading(deps, bookId),
 		saveReadingProgress: (
