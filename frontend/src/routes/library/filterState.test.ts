@@ -18,15 +18,24 @@ describe('parseLibraryFilters', () => {
 			tags: ['Roman', 'Krimi'],
 			includeArchived: true,
 			onlyLocal: true,
-			viewMode: 'list'
+			viewMode: 'list',
+			sort: 'zuletzt'
 		});
 		expect(parseLibraryFilters(raw)).toEqual({
 			query: 'kafka',
 			tags: ['Roman', 'Krimi'],
 			includeArchived: true,
 			onlyLocal: true,
-			viewMode: 'list'
+			viewMode: 'list',
+			sort: 'zuletzt'
 		});
+	});
+
+	it('merkt sich die Reihenfolge und faellt bei Unbekanntem auf Zugang zurueck', () => {
+		expect(parseLibraryFilters(JSON.stringify({ sort: 'zuletzt' })).sort).toBe('zuletzt');
+		expect(parseLibraryFilters(JSON.stringify({ sort: 'zugang' })).sort).toBe('zugang');
+		expect(parseLibraryFilters(JSON.stringify({ sort: 'quatsch' })).sort).toBe('zugang');
+		expect(parseLibraryFilters(null).sort).toBe('zugang');
 	});
 
 	it('restores the Cover/Liste toggle, falling back to cover for anything unknown', () => {

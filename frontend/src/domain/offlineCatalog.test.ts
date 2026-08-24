@@ -19,6 +19,7 @@ function book(id: string, overrides: Partial<CatalogBook> = {}): CatalogBook {
 		highlightCount: 0,
 		noteCount: 0,
 		dossierCostUsd: 0,
+		addedAt: '2026-01-01T00:00:00.000Z',
 		...overrides
 	};
 }

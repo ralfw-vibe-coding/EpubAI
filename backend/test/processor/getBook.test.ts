@@ -79,7 +79,8 @@ describe("getBook reactor", () => {
         aiCostUsd: 0,
         archived: false,
         originalFilename: null,
-        dossierCostUsd: 0
+        dossierCostUsd: 0,
+        addedAt: "2026-01-01T00:00:00.000Z"
       }
     });
   });

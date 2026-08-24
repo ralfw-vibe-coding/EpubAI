@@ -132,6 +132,7 @@ async function boot(): Promise<Database> {
 			archived INTEGER NOT NULL DEFAULT 0,
 			originalFilename TEXT,
 			dossierCostUsd REAL NOT NULL DEFAULT 0,
+			addedAt TEXT NOT NULL DEFAULT '',
 			sortOrder INTEGER NOT NULL DEFAULT 0
 		);
 	`);
@@ -142,6 +143,11 @@ async function boot(): Promise<Database> {
 	// (existing rows get NULL - the Reader falls back to the EPUB's own
 	// metadata for those until the loan is renewed or the book re-edited).
 	addColumnIfMissing(database, 'Loan', 'title TEXT');
+	// Migration fuer Spiegel, die vor dem Sortieren nach "zuletzt gelesen"
+	// angelegt wurden. Bestandszeilen bekommen einen leeren Zeitstempel; die
+	// Sortierung stellt sie damit ans Ende, bis der naechste Online-Abgleich
+	// den Katalog samt Zugangsdatum neu schreibt.
+	addColumnIfMissing(database, 'Book', "addedAt TEXT NOT NULL DEFAULT ''");
 	// Migration for installations whose Annotation table predates colors.
 	// SQLite backfills existing rows with the DEFAULT, so old local highlights
 	// become 'accent' - matching the backend default and keeping them looking
@@ -406,8 +412,8 @@ const handlers: Record<string, Handler> = {
 				db!.exec({
 					sql: `INSERT INTO Book (id, title, author, fileHash, processingStatus, tags, coverUrl,
 					                        hasDossier, aiCostUsd, archived, originalFilename, dossierCostUsd,
-					                        sortOrder)
-					      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					                        addedAt, sortOrder)
+					      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					bind: [
 						b.id,
 						b.title,
@@ -421,6 +427,7 @@ const handlers: Record<string, Handler> = {
 						b.archived ? 1 : 0,
 						b.originalFilename,
 						b.dossierCostUsd,
+						b.addedAt ?? '',
 						index
 					]
 				});
@@ -439,7 +446,8 @@ const handlers: Record<string, Handler> = {
 	allCachedBooks(): CatalogBook[] {
 		const rows = db!.exec({
 			sql: `SELECT id, title, author, fileHash, processingStatus, tags, coverUrl,
-			             hasDossier, aiCostUsd, archived, originalFilename, dossierCostUsd
+			             hasDossier, aiCostUsd, archived, originalFilename, dossierCostUsd,
+			             addedAt
 			      FROM Book ORDER BY sortOrder`,
 			rowMode: 'object',
 			returnValue: 'resultRows'

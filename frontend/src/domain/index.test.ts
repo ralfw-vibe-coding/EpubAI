@@ -18,7 +18,8 @@ const book: CatalogBook = {
 	originalFilename: null,
 	highlightCount: 0,
 	noteCount: 0,
-	dossierCostUsd: 0
+	dossierCostUsd: 0,
+	addedAt: '2026-01-01T00:00:00.000Z'
 };
 
 describe('createReaderDomain', () => {
@@ -54,7 +55,7 @@ describe('createReaderDomain', () => {
 			expect(details[1]).toMatchObject({
 				id: 'b2',
 				isLocal: false,
-				progress: { percent: 33, page: 4, totalPages: 40 }
+				progress: { percent: 33, page: 4, totalPages: 40, updatedAt: 'ts' }
 			});
 		});
 
@@ -86,7 +87,8 @@ describe('createReaderDomain', () => {
 		expect((await domain.detailFor(book)).progress).toEqual({
 			percent: 33,
 			page: 4,
-			totalPages: 40
+			totalPages: 40,
+			updatedAt: 'ts'
 		});
 	});
 

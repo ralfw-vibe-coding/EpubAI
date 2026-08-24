@@ -5,6 +5,7 @@
 	import type { BookDetail, CatalogBook } from '../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../portal/runtime';
 	import { filterBooks, filterByLocal, tagsFrom, visibleBooks } from './filterBooks';
+	import { SORT_OPTIONS, sortBooks, type LibrarySort } from './sortBooks';
 	import {
 		LIBRARY_FILTERS_STORAGE_KEY,
 		parseLibraryFilters,
@@ -63,6 +64,10 @@
 	// Cover/Liste-Umschalter (Segmented Control) - Cover-Ansicht ist Standard.
 	let viewMode = $state<LibraryViewMode>(storedFilters.viewMode);
 
+	// Reihenfolge: nach Zugang (Standard, wie bisher) oder nach letztem Öffnen.
+	// Die Regel steckt in sortBooks.ts.
+	let sort = $state<LibrarySort>(storedFilters.sort);
+
 	// Tag-Filter: distinct Tags aus allen geladenen Büchern, alphabetisch.
 	// Aktive Tags werden ODER-verknüpft (Buch muss mindestens einen tragen).
 	let activeTags = $state<Set<string>>(new Set(storedFilters.tags));
@@ -82,7 +87,7 @@
 
 	let visible = $derived(filterByLocal(visibleBooks(books, includeArchived), onlyLocal));
 	let allTags = $derived(tagsFrom(visible));
-	let filteredBooks = $derived(filterBooks(visible, searchQuery, activeTags));
+	let filteredBooks = $derived(sortBooks(filterBooks(visible, searchQuery, activeTags), sort));
 
 	function toggleTag(tag: string) {
 		const next = new Set(activeTags);
@@ -111,7 +116,8 @@
 			tags: [...activeTags],
 			includeArchived,
 			onlyLocal,
-			viewMode
+			viewMode,
+			sort
 		};
 		try {
 			localStorage.setItem(LIBRARY_FILTERS_STORAGE_KEY, serializeLibraryFilters(filters));
@@ -464,8 +470,26 @@
 			</div>
 		{/if}
 
-		<div class="mb-4 flex items-center justify-between gap-4">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
 			<h2 class="sr-only">Ansicht</h2>
+			<!--
+				Reihenfolge: "Zugang" ist der bisherige Standard (das Backend
+				liefert bereits nach Zugang absteigend), "Zuletzt gelesen" nutzt
+				den Zeitpunkt der Leseposition - siehe sortBooks.ts.
+			-->
+			<div class="seg flex border border-[var(--color-divider)]">
+				{#each SORT_OPTIONS as option (option.value)}
+					<button
+						onclick={() => (sort = option.value)}
+						aria-pressed={sort === option.value}
+						class="seg-opt px-3 py-1.5 text-sm font-semibold {sort === option.value
+							? 'bg-[var(--color-accent)] text-[var(--color-bg)]'
+							: 'bg-[var(--color-surface)]'}"
+					>
+						{option.label}
+					</button>
+				{/each}
+			</div>
 			<div class="seg flex border border-[var(--color-divider)]">
 				<button
 					onclick={() => (viewMode = 'cover')}

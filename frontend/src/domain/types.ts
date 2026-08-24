@@ -14,8 +14,18 @@ export interface CatalogBook {
 	tags: string[];
 	/** Ready-to-use cover image URL, or null if the book has no cover. */
 	coverUrl: string | null;
-	/** Locally stored reading progress for this book, or null if never opened. */
-	progress: { percent: number; page: number | null; totalPages: number | null } | null;
+	/**
+	 * Locally stored reading progress for this book, or null if never opened.
+	 * `updatedAt` ist zugleich der Zeitpunkt des letzten Öffnens - beim
+	 * Anzeigen einer Seite wird die Position mit frischem Stempel gespeichert
+	 * (siehe routes/library/sortBooks.ts).
+	 */
+	progress: {
+		percent: number;
+		page: number | null;
+		totalPages: number | null;
+		updatedAt: string;
+	} | null;
 	/** True once a dossier has been uploaded (background knowledge for the book chat). */
 	hasDossier: boolean;
 	/** Cumulative Claude chat cost for this book, in USD - a rough spend figure. */
@@ -30,6 +40,11 @@ export interface CatalogBook {
 	noteCount: number;
 	/** Cumulative cost of Claude-generated dossiers for this book, in USD. */
 	dossierCostUsd: number;
+	/**
+	 * Wann das Buch in den Katalog kam. Dient als Rückfall beim Sortieren nach
+	 * "zuletzt gelesen": Ein nie geöffnetes Buch hat keinen Lesezeitpunkt.
+	 */
+	addedAt: string;
 }
 
 /** A local loan: the book's EPUB is present in OPFS on this device. */

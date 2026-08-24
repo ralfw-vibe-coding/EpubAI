@@ -111,7 +111,12 @@ export function toBookDetail(
 		...book,
 		isLocal: isBookLocal(loans, book.id),
 		progress: progress
-			? { percent: progress.percent, page: progress.page, totalPages: progress.totalPages }
+			? {
+					percent: progress.percent,
+					page: progress.page,
+					totalPages: progress.totalPages,
+					updatedAt: progress.updatedAt
+				}
 			: null
 	};
 }

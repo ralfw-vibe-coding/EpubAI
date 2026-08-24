@@ -5,6 +5,8 @@
 // read/[id]/preferences.ts, dessen Aufbau dieses Modul spiegelt) - kein
 // Zustand, der über Geräte hinweg gelten oder Konflikte auflösen müsste.
 
+import { isLibrarySort, type LibrarySort } from './sortBooks';
+
 export type LibraryViewMode = 'cover' | 'list';
 
 const VIEW_MODES: readonly LibraryViewMode[] = ['cover', 'list'];
@@ -17,6 +19,8 @@ export interface LibraryFilters {
 	onlyLocal: boolean;
 	/** Streng genommen kein Filter, aber dieselbe Frage: "wie ich es verlassen habe". */
 	viewMode: LibraryViewMode;
+	/** Reihenfolge der Liste - siehe sortBooks.ts. */
+	sort: LibrarySort;
 }
 
 export const LIBRARY_FILTERS_STORAGE_KEY = 'epubai:library-filters';
@@ -26,7 +30,8 @@ export const DEFAULT_LIBRARY_FILTERS: LibraryFilters = {
 	tags: [],
 	includeArchived: false,
 	onlyLocal: false,
-	viewMode: 'cover'
+	viewMode: 'cover',
+	sort: 'zugang'
 };
 
 /**
@@ -51,7 +56,8 @@ export function parseLibraryFilters(raw: string | null): LibraryFilters {
 				typeof obj?.onlyLocal === 'boolean' ? obj.onlyLocal : DEFAULT_LIBRARY_FILTERS.onlyLocal,
 			viewMode: VIEW_MODES.includes(obj?.viewMode as LibraryViewMode)
 				? (obj!.viewMode as LibraryViewMode)
-				: DEFAULT_LIBRARY_FILTERS.viewMode
+				: DEFAULT_LIBRARY_FILTERS.viewMode,
+			sort: isLibrarySort(obj?.sort) ? obj.sort : DEFAULT_LIBRARY_FILTERS.sort
 		};
 	} catch {
 		return { ...DEFAULT_LIBRARY_FILTERS };

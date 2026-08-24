@@ -147,7 +147,8 @@ describe('toBookDetail', () => {
 		originalFilename: null,
 		highlightCount: 0,
 		noteCount: 0,
-		dossierCostUsd: 0
+		dossierCostUsd: 0,
+		addedAt: '2026-01-01T00:00:00.000Z'
 	};
 	it('marks isLocal true when loaned', () => {
 		const loans: Loan[] = [
@@ -167,10 +168,13 @@ describe('toBookDetail', () => {
 			totalPages: 200,
 			updatedAt: 'now'
 		};
+		// `updatedAt` gehoert bewusst dazu: Es ist zugleich der Zeitpunkt des
+		// letzten Oeffnens und traegt die Sortierung "zuletzt gelesen".
 		expect(toBookDetail(book, [], progress).progress).toEqual({
 			percent: 55,
 			page: 12,
-			totalPages: 200
+			totalPages: 200,
+			updatedAt: 'now'
 		});
 	});
 	it('leaves progress null when none stored', () => {

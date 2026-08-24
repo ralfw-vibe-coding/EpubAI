@@ -95,6 +95,12 @@ export interface BookSummary {
   originalFilename: string | null;
   /** Cumulative cost of Claude-generated dossiers for this book, in USD. */
   dossierCostUsd: number;
+  /**
+   * Wann das Buch in den Katalog kam. Der Client braucht es, um nach
+   * "zuletzt geöffnet" sortieren zu können: Ein nie geöffnetes Buch hat
+   * keinen Lesezeitpunkt, und dann gilt der Zugang als solcher.
+   */
+  addedAt: string;
 }
 
 export interface DetectedMeta {

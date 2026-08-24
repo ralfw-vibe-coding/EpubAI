@@ -99,7 +99,8 @@ export function toBookSummary(book: Book, coverUrl: string | null): BookSummary 
     aiCostUsd: book.aiCostUsd,
     archived: book.archivedAt != null,
     originalFilename: book.originalFilename,
-    dossierCostUsd: book.dossierCostUsd
+    dossierCostUsd: book.dossierCostUsd,
+    addedAt: book.addedAt
   };
 }
 

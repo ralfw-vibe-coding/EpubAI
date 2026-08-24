@@ -175,7 +175,12 @@ describe('processor reactors', () => {
 		await p.saveReadingProgress('b1', 'epubcfi(/6/2)', 40, 8, 20);
 
 		const { books } = await p.loadCatalog();
-		expect(books[0].progress).toEqual({ percent: 40, page: 8, totalPages: 20 });
+		expect(books[0].progress).toEqual({
+			percent: 40,
+			page: 8,
+			totalPages: 20,
+			updatedAt: '2026-07-13T12:00:00.000Z'
+		});
 	});
 
 	it('loadCatalog marks a borrowed book as isLocal', async () => {
@@ -509,7 +514,8 @@ describe('processor reactors', () => {
 				originalFilename: null,
 				highlightCount: 0,
 				noteCount: 0,
-				dossierCostUsd: 0
+				dossierCostUsd: 0,
+				addedAt: '2026-01-01T00:00:00.000Z'
 			})
 		});
 		const { deps, domain } = makeDeps({ http: http.impl });
@@ -1281,6 +1287,7 @@ describe('Offline-Rückfall auf den lokalen Katalog-Spiegel', () => {
 			highlightCount: 0,
 			noteCount: 0,
 			dossierCostUsd: 0,
+			addedAt: '2026-01-01T00:00:00.000Z',
 			...overrides
 		};
 	}
