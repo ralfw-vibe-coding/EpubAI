@@ -538,6 +538,22 @@
 	}
 
 	/** Render one stored annotation as an epub.js highlight (click opens its note editor). */
+	/**
+	 * Markierungen MIT Notiz bekommen zusätzlich eine Unterstreichung.
+	 *
+	 * Bewusst nicht über die Farbe: Die ist schon vergeben - der Nutzer wählt
+	 * aus sechs Tönen, die tragen bereits Bedeutung. Ein zweites Merkmal auf
+	 * demselben Kanal wäre nicht unterscheidbar. Also über die Form, und dafür
+	 * genügt epub.js' eigener `underline`-Typ; eine selbstgebaute Geometrie
+	 * braucht es nicht. Beide Typen teilen sich denselben Bereich, ohne sich in
+	 * die Quere zu kommen - der Schlüssel ist cfiRange + TYP (annotations.js).
+	 *
+	 * Die Farbe der Linie steckt in CSS und folgt über --reader-fg dem
+	 * eingestellten Theme; würde sie hier fest gesetzt, bliebe sie bei einem
+	 * Theme-Wechsel stehen und wäre auf dunklem Grund unsichtbar.
+	 */
+	const NOTE_UNDERLINE_CLASS = 'epubai-note-underline';
+
 	function applyHighlight(a: Annotation) {
 		// Erst entfernen: epub.js schlüsselt Anmerkungen über cfiRange+Typ
 		// (annotations.js), ein zweites `add` unter demselben Schlüssel
@@ -546,6 +562,7 @@
 		// die vorläufige aus der Auswahl unter der eben gewählten Farbe.
 		// `remove` auf einen unbekannten Schlüssel ist ein No-op.
 		rendition?.annotations.remove(a.cfiRange, 'highlight');
+		rendition?.annotations.remove(a.cfiRange, 'underline');
 		rendition?.annotations.add(
 			'highlight',
 			a.cfiRange,
@@ -554,25 +571,23 @@
 			'epubai-highlight',
 			highlightStyles(a.color)
 		);
+		if (a.note !== null) {
+			// DERSELBE Rückruf, nicht keiner: marks-pane stellt einen Tipp der
+			// ZULETZT hinzugefügten Ebene zu, die ihn überdeckt (events.js läuft
+			// die Liste rückwärts und bricht beim ersten Treffer ab). Ohne dies
+			// schluckte die Unterstreichung jeden Tipp, und die Notiz einer
+			// markierten Stelle ließe sich nicht mehr öffnen.
+			rendition?.annotations.add(
+				'underline',
+				a.cfiRange,
+				{},
+				(event: Event) => onHighlightTapped(event, a.cfiRange),
+				NOTE_UNDERLINE_CLASS,
+				{}
+			);
+		}
 	}
 
-	/**
-	 * Antippen einer Markierung öffnet ihre Notiz - aber NUR auf `click`.
-	 *
-	 * epub.js meldet jeden Treffer zweimal: Es hängt denselben Rückruf an
-	 * `click` UND an `touchstart` (managers/views/iframe.js). Auf dem Telefon
-	 * käme also zuerst das touchstart, der Editor ginge auf, seine Abdunkelung
-	 * legte sich über die Seite - und der erst danach synthetisierte click
-	 * träfe nicht mehr den Buchtext, sondern sie. Der Editor schlösse sich
-	 * selbst wieder.
-	 *
-	 * Genau das hier abzufangen ist die Wurzel: Wartet man auf den click, ist
-	 * der Editor erst offen, wenn dieses Ereignis bereits zugestellt ist -
-	 * danach kommt keines mehr, das ihn schließen könnte. Die Zeitsperre auf
-	 * der Abdunkelung (siehe closeNoteEditorByBackdrop) bleibt als zweites
-	 * Netz, reicht aber allein nicht: Bei einem langsameren Tippen liegen
-	 * touchstart und click weiter auseinander als ihr Fenster.
-	 */
 	function onHighlightTapped(event: Event, cfiRange: string) {
 		if (event?.type !== 'click') return;
 		const a = annotations.find((x) => x.cfiRange === cfiRange);
@@ -700,6 +715,9 @@
 		try {
 			const updated = await withTimeout(getProcessor().updateAnnotationNote(a, note, tags), SAVE_TIMEOUT_MS);
 			annotations = annotations.map((x) => (x.id === updated.id ? updated : x));
+			// Neu zeichnen: Erst eine Notiz macht aus der Markierung eine
+			// unterstrichene - und ihr Entfernen wieder eine schlichte.
+			applyHighlight(updated);
 			if (editing?.id === updated.id) {
 				editing = updated;
 				originalNoteDraft = noteDraft;
@@ -775,6 +793,7 @@
 		await getProcessor().deleteAnnotation(a.id);
 		annotations = annotations.filter((x) => x.id !== a.id);
 		rendition?.annotations.remove(a.cfiRange, 'highlight');
+		rendition?.annotations.remove(a.cfiRange, 'underline');
 		if (editing?.id === a.id) editing = null;
 	}
 
@@ -1547,9 +1566,8 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="relative flex-1 overflow-hidden"
-		style="background: {THEME_COLORS[prefs.theme].bg}; padding: 0 {MARGIN_PADDING[
-			prefs.margin
-		]}"
+		style="background: {THEME_COLORS[prefs.theme].bg}; --reader-fg: {THEME_COLORS[prefs.theme]
+			.fg}; padding: 0 {MARGIN_PADDING[prefs.margin]}"
 		ontouchstart={onTouchStart}
 		ontouchend={onTouchEnd}
 		onclick={onMarginClick}
@@ -2239,6 +2257,30 @@
 </div>
 
 <style>
+	/*
+	   Unterstreichung für Markierungen MIT Notiz (siehe applyHighlight).
+
+	   Die Ebene der Anmerkungen liegt im ELTERNdokument, nicht im iframe des
+	   Buchs - deshalb greift diese Regel überhaupt. `:global`, weil Svelte
+	   sonst die Klassen wegoptimiert: Die Elemente entstehen zur Laufzeit in
+	   epub.js, nicht in diesem Markup.
+
+	   Farbe über --reader-fg, das der Lesebehälter aus dem gewählten Theme
+	   setzt: So passt sich die Linie hell/sepia/dunkel automatisch an. Fest
+	   gesetzt bliebe sie beim Theme-Wechsel stehen und wäre auf dunklem Grund
+	   unsichtbar.
+	*/
+	:global(.epubai-note-underline) {
+		/* epub.js setzt sonst mix-blend-mode: multiply - auf dunklem Grund
+		   verschluckt das eine dunkle Linie vollständig. */
+		mix-blend-mode: normal;
+	}
+	:global(.epubai-note-underline line) {
+		stroke: var(--reader-fg, currentColor);
+		stroke-width: 1.5;
+		stroke-opacity: 0.55;
+	}
+
 	/* Page-turn cue (see triggerPageTurn) - a bar sweeping across the reading
 	   pane, not a page-curl/flip simulation. Es gibt ihn in beiden Achsen: Der
 	   Strich läuft dorthin, wohin gewischt wurde. */
