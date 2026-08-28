@@ -30,7 +30,35 @@ export const THEME_OPTIONS: { value: ReaderTheme; label: string }[] = [
 
 export const DEFAULT_PREFS: ReaderPrefs = { fontIndex: 2, margin: 'normal', theme: 'hell' };
 
+/**
+ * Zwei Ebenen, weil zwei verschiedene Fragen dahinterstehen.
+ *
+ * Der Modus (hell/sepia/dunkel) haengt am Leser und an der Umgebung - abends
+ * dunkel, tagsueber hell -, nicht am Buch. Er gilt geraeteweit.
+ *
+ * Schriftgroesse und Rand haengen dagegen am BUCH: Ein eng gesetztes Sachbuch
+ * braucht andere Werte als ein luftiger Roman, und ein kleines Telefon andere
+ * als ein grosser Bildschirm. Der Geltungsbereich ist deshalb Buch UND Geraet.
+ * Dass beides in localStorage liegt, erledigt den Geraeteteil von selbst.
+ *
+ * Bewusst hier und nicht im lokalen Ausleih-Eintrag, obwohl der genau dieses
+ * Paar (Buch, Geraet) schon fuehrt: Der liegt in der SQLite-Datenbank in OPFS,
+ * und die kann verlorengehen - genau das ist passiert. localStorage hat
+ * ueberlebt. Eine Einstellung, die eine Speicherraeumung ueberdauert, ist
+ * einer sauberen Modellierung hier vorzuziehen.
+ */
 export const STORAGE_KEY = 'epubai:reader-prefs';
+
+/** Einstellungen fuer EIN Buch auf DIESEM Geraet. */
+export function bookStorageKey(bookId: string): string {
+	return `${STORAGE_KEY}:${bookId}`;
+}
+
+/** Was je Buch gilt. */
+export interface BookReaderPrefs {
+	fontIndex: number;
+	margin: ReaderMargin;
+}
 
 // Padding (left/right) applied to the reader's own container per margin
 // preset - not to the EPUB content itself. epub.js sets its own inline
@@ -133,6 +161,35 @@ export function readerThemeStyles(theme: ReaderTheme): object {
 		'h1, h2, h3, h4, h5, h6': { color: `${c.fg} !important` },
 		a: { color: `${c.fg} !important` }
 	};
+}
+
+/**
+ * Die Einstellungen fuer ein bestimmtes Buch: Modus aus der geraeteweiten
+ * Ablage, Schriftgroesse und Rand aus der des Buchs.
+ *
+ * Hat ein Buch noch keine eigenen Werte, gelten die ZULETZT VERWENDETEN (die
+ * geraeteweite Ablage fuehrt sie mit). Ein neu geoeffnetes Buch beginnt damit
+ * dort, wo man aufgehoert hat, statt beim Standard - und sobald man es einmal
+ * anpasst, behaelt es seine eigenen Werte.
+ */
+export function prefsForBook(deviceRaw: string | null, bookRaw: string | null): ReaderPrefs {
+	const device = parsePrefs(deviceRaw);
+	if (!bookRaw) return device;
+	try {
+		const obj = JSON.parse(bookRaw) as Partial<BookReaderPrefs> | null;
+		return {
+			theme: device.theme,
+			fontIndex: obj?.fontIndex === undefined ? device.fontIndex : clampFontIndex(obj.fontIndex),
+			margin: isMargin(obj?.margin) ? obj.margin : device.margin
+		};
+	} catch {
+		return device;
+	}
+}
+
+/** Was fuer dieses Buch abgelegt wird - der Modus gehoert nicht dazu. */
+export function bookPrefsOf(prefs: ReaderPrefs): BookReaderPrefs {
+	return { fontIndex: prefs.fontIndex, margin: prefs.margin };
 }
 
 export function parsePrefs(raw: string | null): ReaderPrefs {

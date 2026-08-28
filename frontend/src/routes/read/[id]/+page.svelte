@@ -45,6 +45,9 @@
 		clampFontIndex,
 		fontSizePx,
 		parsePrefs,
+		prefsForBook,
+		bookPrefsOf,
+		bookStorageKey,
 		readerThemeStyles,
 		STORAGE_KEY,
 		type ReaderMargin,
@@ -1006,7 +1009,11 @@
 			await goto('/login', { replaceState: true });
 			return;
 		}
-		prefs = parsePrefs(localStorage.getItem(STORAGE_KEY));
+		// Modus geräteweit, Schriftgröße und Rand je Buch (siehe preferences.ts).
+		prefs = prefsForBook(
+			localStorage.getItem(STORAGE_KEY),
+			localStorage.getItem(bookStorageKey(bookId))
+		);
 		translationLanguage = getSession()?.translationLanguage ?? 'de';
 		flashcardColor = (getSession()?.defaultFlashcardColor as AnnotationColor) ?? 'yellow';
 		try {
@@ -1419,9 +1426,18 @@
 		(rendition as unknown as { resize(): void } | null)?.resize();
 	}
 
+	/**
+	 * Ablegen auf beiden Ebenen.
+	 *
+	 * In die geräteweite Ablage wandern Schriftgröße und Rand ebenfalls - dort
+	 * bedeuten sie "zuletzt verwendet" und dienen als Ausgangswert für Bücher,
+	 * die noch keine eigenen haben. Ein neu geöffnetes Buch beginnt damit dort,
+	 * wo man aufgehört hat, statt beim Standard.
+	 */
 	function persistPrefs() {
 		try {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+			localStorage.setItem(bookStorageKey(bookId), JSON.stringify(bookPrefsOf(prefs)));
 		} catch {
 			// Best effort; a full/blocked storage shouldn't break reading.
 		}

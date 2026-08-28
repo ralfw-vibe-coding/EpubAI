@@ -6,6 +6,9 @@ import {
 	FONT_SIZES,
 	MARGIN_PADDING,
 	parsePrefs,
+	bookPrefsOf,
+	bookStorageKey,
+	prefsForBook,
 	readerThemeStyles,
 	THEME_COLORS
 } from './preferences';
@@ -116,5 +119,69 @@ describe('parsePrefs', () => {
 			margin: DEFAULT_PREFS.margin,
 			theme: DEFAULT_PREFS.theme
 		});
+	});
+});
+
+describe('Aufteilung geräteweit / je Buch', () => {
+	const geraet = JSON.stringify({ fontIndex: 5, margin: 'breit', theme: 'dunkel' });
+
+	it('schlüsselt je Buch getrennt', () => {
+		expect(bookStorageKey('b1')).not.toBe(bookStorageKey('b2'));
+		expect(bookStorageKey('b1')).toContain('b1');
+	});
+
+	// Der Kern: Zwei Bücher dürfen sich Schriftgröße und Rand nicht teilen.
+	it('nimmt Schriftgröße und Rand aus der Ablage des Buchs', () => {
+		const buch = JSON.stringify({ fontIndex: 0, margin: 'schmal' });
+		expect(prefsForBook(geraet, buch)).toEqual({
+			fontIndex: 0,
+			margin: 'schmal',
+			theme: 'dunkel'
+		});
+	});
+
+	// Der Modus gehört dem Gerät, nicht dem Buch - abends dunkel, tagsüber
+	// hell, und zwar überall.
+	it('nimmt den Modus immer vom Gerät', () => {
+		const buch = JSON.stringify({ fontIndex: 0, margin: 'schmal', theme: 'hell' });
+		expect(prefsForBook(geraet, buch).theme).toBe('dunkel');
+	});
+
+	// Ein neu geöffnetes Buch beginnt dort, wo man aufgehört hat.
+	it('fällt ohne eigene Werte auf die zuletzt verwendeten zurück', () => {
+		expect(prefsForBook(geraet, null)).toEqual({
+			fontIndex: 5,
+			margin: 'breit',
+			theme: 'dunkel'
+		});
+	});
+
+	it('füllt einzeln fehlende Felder aus der Geräte-Ablage auf', () => {
+		expect(prefsForBook(geraet, JSON.stringify({ margin: 'schmal' }))).toEqual({
+			fontIndex: 5,
+			margin: 'schmal',
+			theme: 'dunkel'
+		});
+	});
+
+	it('fällt bei kaputtem Buch-Eintrag auf die Geräte-Werte zurück', () => {
+		expect(prefsForBook(geraet, '{kein json')).toEqual({
+			fontIndex: 5,
+			margin: 'breit',
+			theme: 'dunkel'
+		});
+		expect(prefsForBook(geraet, JSON.stringify({ fontIndex: 'gross', margin: 'riesig' }))).toEqual({
+			fontIndex: 2,
+			margin: 'breit',
+			theme: 'dunkel'
+		});
+	});
+
+	// Der Modus darf nicht je Buch abgelegt werden - sonst zöge das erste
+	// geöffnete Buch ihn beim nächsten Mal wieder zurück.
+	it('legt den Modus nicht beim Buch ab', () => {
+		const abgelegt = bookPrefsOf({ fontIndex: 3, margin: 'schmal', theme: 'sepia' });
+		expect(abgelegt).toEqual({ fontIndex: 3, margin: 'schmal' });
+		expect('theme' in abgelegt).toBe(false);
 	});
 });
