@@ -82,6 +82,9 @@ export async function importAnnotations(
       excerpt: candidate.excerpt,
       note: candidate.note,
       color: candidate.color,
+      // Der Austauschstand kennt nur Markierungen; Lesezeichen kamen spaeter
+      // dazu und stehen nicht in exportierten Dateien.
+      kind: "highlight" as const,
       // Imported files don't carry tags (out of scope for export/import) -
       // annotations always land with an empty tag set.
       tags: []

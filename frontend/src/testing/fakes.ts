@@ -207,7 +207,8 @@ export function fakeHttp(overrides: Partial<HttpClient> = {}) {
 		color: 'accent',
 		tags: [],
 		createdAt: '2026-07-13T00:00:00.000Z',
-		updatedAt: '2026-07-13T00:00:00.000Z'
+		updatedAt: '2026-07-13T00:00:00.000Z',
+		kind: 'highlight'
 	};
 	const defaultProgress: ReadingProgress = {
 		bookId: 'b1',

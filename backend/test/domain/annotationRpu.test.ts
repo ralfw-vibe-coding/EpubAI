@@ -32,7 +32,7 @@ describe("parseCreateAnnotation", () => {
     const result = parseCreateAnnotation({ cfiRange: "  cfi-1  ", excerpt: "  Some text  " });
     expect(result).toEqual({
       valid: true,
-      draft: { cfiRange: "cfi-1", excerpt: "Some text", note: null, color: "accent", tags: [] }
+      draft: { cfiRange: "cfi-1", excerpt: "Some text", note: null, color: "accent", tags: [], kind: "highlight" }
     });
   });
 
@@ -40,7 +40,7 @@ describe("parseCreateAnnotation", () => {
     const result = parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text", note: "  my note  " });
     expect(result).toEqual({
       valid: true,
-      draft: { cfiRange: "cfi-1", excerpt: "text", note: "my note", color: "accent", tags: [] }
+      draft: { cfiRange: "cfi-1", excerpt: "text", note: "my note", color: "accent", tags: [], kind: "highlight" }
     });
   });
 
@@ -48,7 +48,7 @@ describe("parseCreateAnnotation", () => {
     const result = parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text", note: "   " });
     expect(result).toEqual({
       valid: true,
-      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "accent", tags: [] }
+      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "accent", tags: [], kind: "highlight" }
     });
   });
 
@@ -56,7 +56,7 @@ describe("parseCreateAnnotation", () => {
     const result = parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text", color: "yellow" });
     expect(result).toEqual({
       valid: true,
-      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "yellow", tags: [] }
+      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "yellow", tags: [], kind: "highlight" }
     });
   });
 
@@ -64,7 +64,7 @@ describe("parseCreateAnnotation", () => {
     const result = parseCreateAnnotation({ cfiRange: "cfi-1", excerpt: "text", tags: ["  #Vocab  ", "Chapter-1"] });
     expect(result).toEqual({
       valid: true,
-      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "accent", tags: ["vocab", "chapter-1"] }
+      draft: { cfiRange: "cfi-1", excerpt: "text", note: null, color: "accent", tags: ["vocab", "chapter-1"], kind: "highlight" }
     });
   });
 
@@ -135,7 +135,8 @@ describe("parseCreateAnnotation", () => {
         excerpt: "text",
         note: null,
         color: "accent",
-        tags: []
+        tags: [],
+        kind: "highlight"
       }
     });
   });
@@ -206,6 +207,30 @@ describe("parseColor", () => {
 
   it("is case-sensitive - rejects an uppercase variant", () => {
     expect(parseColor("Yellow")).toEqual({ valid: false });
+  });
+});
+
+describe("parseCreateAnnotation: Art", () => {
+  const basis = { cfiRange: "cfi-1", excerpt: "text" };
+
+  // Aeltere Clients schicken keine Art - die duerfen sich nicht aendern.
+  it("ist ohne Angabe eine Markierung", () => {
+    const r = parseCreateAnnotation(basis);
+    expect(r.valid && r.draft.kind).toBe("highlight");
+    const r2 = parseCreateAnnotation({ ...basis, kind: undefined });
+    expect(r2.valid && r2.draft.kind).toBe("highlight");
+  });
+
+  it("nimmt ein Lesezeichen an", () => {
+    const r = parseCreateAnnotation({ ...basis, kind: "bookmark" });
+    expect(r.valid && r.draft.kind).toBe("bookmark");
+  });
+
+  // Kein stilles Zurueckfallen: Ein Tippfehler landete sonst als Markierung
+  // in der Datenbank, und niemand erfuehre davon.
+  it("weist eine unbekannte Art zurueck", () => {
+    expect(parseCreateAnnotation({ ...basis, kind: "merkzettel" })).toEqual({ valid: false });
+    expect(parseCreateAnnotation({ ...basis, kind: 7 })).toEqual({ valid: false });
   });
 });
 

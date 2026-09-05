@@ -157,7 +157,8 @@ describe('createReaderDomain', () => {
 			color: 'accent',
 			tags: [],
 			createdAt: 'c1',
-			updatedAt: 'c1'
+			updatedAt: 'c1',
+			kind: 'highlight'
 		};
 
 		it('saves an annotation and reads it back for its book', async () => {
@@ -249,7 +250,8 @@ describe('createReaderDomain', () => {
 				color: 'blue',
 				tags: ['flashcard'],
 				createdAt: 'c1',
-				updatedAt: 'c1'
+				updatedAt: 'c1',
+				kind: 'highlight'
 			});
 			expect(await domain.annotationSyncState()).toEqual([
 				{ annotation: created, serverKnown: false, dirty: true }

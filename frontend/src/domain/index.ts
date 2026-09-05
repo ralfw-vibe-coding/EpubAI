@@ -9,7 +9,15 @@ import {
 	withEditedColor,
 	withEditedNote
 } from './rpus';
-import type { Annotation, AnnotationColor, BookDetail, CatalogBook, Loan, ReadingProgress } from './types';
+import type {
+	Annotation,
+	AnnotationColor,
+	AnnotationKind,
+	BookDetail,
+	CatalogBook,
+	Loan,
+	ReadingProgress
+} from './types';
 
 /**
  * The reader client's single coherent Domain object ("Last Object",
@@ -136,9 +144,10 @@ export function createReaderDomain(d: DProvider) {
 			note: string | null,
 			color: AnnotationColor,
 			tags: string[],
-			now: string
+			now: string,
+			kind: AnnotationKind = 'highlight'
 		): Promise<Annotation> {
-			const annotation = makeAnnotation(id, bookId, cfiRange, excerpt, note, color, tags, now);
+			const annotation = makeAnnotation(id, bookId, cfiRange, excerpt, note, color, tags, now, kind);
 			await d.saveAnnotation(annotation, false, true);
 			return annotation;
 		},

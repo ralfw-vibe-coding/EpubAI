@@ -10,6 +10,15 @@ export type ProcessingStatus = "pending" | "processing" | "ready" | "failed";
 // frontend-only rendering concern; the backend only stores/validates the slug.
 export type AnnotationColor = "accent" | "orange" | "yellow" | "green" | "blue" | "purple";
 
+/**
+ * Art einer Anmerkung. Ein Lesezeichen haelt nur eine Stelle fest, ohne Text
+ * zu markieren - es teilt sich aber Tabelle und Abgleich mit der Markierung,
+ * weil beide dieselben Anforderungen haben (offline anlegen, Warteschlange,
+ * Grabsteine). 'highlight' ist die Vorgabe, damit Bestandszeilen unveraendert
+ * Markierungen bleiben.
+ */
+export type AnnotationKind = "highlight" | "bookmark";
+
 export interface User {
   id: string;
   email: string;
@@ -120,6 +129,7 @@ export interface Annotation {
   // Free-form tags (e.g. for "remember as vocabulary flashcard" and
   // tag-based filtering) - stored without a leading '#'. Empty when none set.
   tags: string[];
+  kind: AnnotationKind;
   createdAt: string;
   updatedAt: string;
 }
@@ -133,6 +143,7 @@ export interface AnnotationSummary {
   note: string | null;
   color: AnnotationColor;
   tags: string[];
+  kind: AnnotationKind;
   createdAt: string;
   updatedAt: string;
 }

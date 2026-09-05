@@ -15,9 +15,12 @@
 		Sparkles,
 		Eye,
 		Check,
+		Copy,
+		Bookmark,
 		X
 	} from 'lucide-svelte';
 	import { marked } from 'marked';
+	import { bookCitation, copyText } from '../../../lib/clipboard';
 	import DOMPurify from 'dompurify';
 	import type { Annotation, AnnotationColor, BookDetail } from '../../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../../portal/runtime';
@@ -300,6 +303,24 @@
 		}
 	}
 
+	// Rückmeldung fürs Kopieren: Ohne sie wüsste man nicht, ob etwas passiert
+	// ist - in der Zwischenablage sieht man ja nichts.
+	const COPIED_FLASH_MS = 1500;
+	let copied = $state(false);
+	let copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+	async function copyCitation() {
+		if (!detail) return;
+		const ok = await copyText(bookCitation(detail.title, detail.author));
+		if (!ok) {
+			error = 'Kopieren in die Zwischenablage hat nicht geklappt.';
+			return;
+		}
+		copied = true;
+		if (copyTimer) clearTimeout(copyTimer);
+		copyTimer = setTimeout(() => (copied = false), COPIED_FLASH_MS);
+	}
+
 	async function returnBook() {
 		if (returning) return;
 		returning = true;
@@ -580,6 +601,17 @@
 				{:else}
 					<div class="flex items-center gap-2">
 						<h1 class="font-[var(--font-heading)] text-2xl font-extrabold tracking-tight">{detail.title}</h1>
+						<button
+							onclick={copyCitation}
+							aria-label={copied ? 'Titel und Autor kopiert' : 'Titel und Autor kopieren'}
+							class="flex h-[18px] w-[18px] flex-none items-center justify-center text-[var(--color-accent-700)] transition hover:text-[var(--color-accent-800)]"
+						>
+							{#if copied}
+								<Check size={18} />
+							{:else}
+								<Copy size={18} />
+							{/if}
+						</button>
 						<button
 							onclick={startEdit}
 							aria-label="Metadaten bearbeiten"
@@ -950,14 +982,20 @@
 										onclick={() => toggleAnnotationExpanded(a.id)}
 										class="flex w-full items-start gap-2 px-3 py-2 text-left text-sm"
 									>
-										<span
-											class="mt-1 h-2.5 w-2.5 flex-none rounded-full"
-											style="background-color: {colorHex(a.color)}"
-										></span>
-										{#if a.note === null}
-											<Highlighter size={14} class="mt-0.5 flex-none text-[var(--color-neutral-700)]" />
+										{#if a.kind === 'bookmark'}
+											<!-- Kein Farbpunkt: Ein Lesezeichen trägt keine Farbe,
+											     es hält nur eine Stelle fest. -->
+											<Bookmark size={14} fill="currentColor" class="mt-0.5 flex-none text-[#c0392b]" />
 										{:else}
-											<StickyNote size={14} class="mt-0.5 flex-none text-[var(--color-neutral-700)]" />
+											<span
+												class="mt-1 h-2.5 w-2.5 flex-none rounded-full"
+												style="background-color: {colorHex(a.color)}"
+											></span>
+											{#if a.note === null}
+												<Highlighter size={14} class="mt-0.5 flex-none text-[var(--color-neutral-700)]" />
+											{:else}
+												<StickyNote size={14} class="mt-0.5 flex-none text-[var(--color-neutral-700)]" />
+											{/if}
 										{/if}
 										<span class="min-w-0 flex-1">
 											<span class="block truncate">{a.excerpt}</span>

@@ -1,4 +1,4 @@
-import type { Annotation, AnnotationColor, CatalogBook, Loan, ReadingProgress } from '../domain/types';
+import type { Annotation, AnnotationColor, AnnotationKind, CatalogBook, Loan, ReadingProgress } from '../domain/types';
 import type { ReactorDeps } from './deps';
 import type {
 	AnnotationExport,
@@ -97,8 +97,10 @@ export function createProcessor(deps: ReactorDeps) {
 			excerpt: string,
 			note?: string,
 			color?: AnnotationColor,
-			tags?: string[]
-		): Promise<Annotation> => createAnnotation(deps, bookId, cfiRange, excerpt, note, color, tags),
+			tags?: string[],
+			kind?: AnnotationKind
+		): Promise<Annotation> =>
+			createAnnotation(deps, bookId, cfiRange, excerpt, note, color, tags, kind),
 		updateAnnotationNote: (
 			annotation: Annotation,
 			note: string | null,

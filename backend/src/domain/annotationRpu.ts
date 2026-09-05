@@ -1,4 +1,4 @@
-import type { Annotation, AnnotationColor, AnnotationSummary } from "./types.js";
+import type { Annotation, AnnotationColor, AnnotationKind, AnnotationSummary } from "./types.js";
 
 const MAX_EXCERPT_LENGTH = 2000;
 const MAX_TAG_LENGTH = 40;
@@ -21,6 +21,7 @@ export interface AnnotationDraft {
   note: string | null;
   color: AnnotationColor;
   tags: string[];
+  kind: AnnotationKind;
 }
 
 export type ParseCreateAnnotationResult = { valid: true; draft: AnnotationDraft } | { valid: false };
@@ -68,6 +69,7 @@ export function parseCreateAnnotation(input: {
   note?: unknown;
   color?: unknown;
   tags?: unknown;
+  kind?: unknown;
 }): ParseCreateAnnotationResult {
   const idResult = parseId(input.id);
   if (!idResult.valid) return { valid: false };
@@ -89,6 +91,13 @@ export function parseCreateAnnotation(input: {
   const tagsResult = parseTags(input.tags);
   if (!tagsResult.valid) return { valid: false };
 
+  // Fehlt die Art, ist es eine Markierung - so verhalten sich aeltere Clients
+  // weiter wie bisher. Ein unbekannter Wert ist dagegen ein Fehler und keine
+  // stille Vorgabe: Sonst landete ein Tippfehler als Markierung in der
+  // Datenbank, und niemand erfuehre davon.
+  const kindResult = parseKind(input.kind);
+  if (!kindResult.valid) return { valid: false };
+
   return {
     valid: true,
     draft: {
@@ -97,7 +106,8 @@ export function parseCreateAnnotation(input: {
       excerpt,
       note: noteResult.note,
       color: colorResult.color,
-      tags: tagsResult.tags
+      tags: tagsResult.tags,
+      kind: kindResult.kind
     }
   };
 }
@@ -174,6 +184,14 @@ export function authorizeAnnotationAccess(annotation: Annotation | null, userId:
  * Projects an Annotation into its public AnnotationSummary shape (camelCase,
  * no userId - the caller already knows it's theirs).
  */
+type ParseKindResult = { valid: true; kind: AnnotationKind } | { valid: false };
+
+function parseKind(value: unknown): ParseKindResult {
+  if (value === undefined || value === null) return { valid: true, kind: "highlight" };
+  if (value === "highlight" || value === "bookmark") return { valid: true, kind: value };
+  return { valid: false };
+}
+
 export function toAnnotationSummary(annotation: Annotation): AnnotationSummary {
   return {
     id: annotation.id,
@@ -183,6 +201,7 @@ export function toAnnotationSummary(annotation: Annotation): AnnotationSummary {
     note: annotation.note,
     color: annotation.color,
     tags: annotation.tags,
+    kind: annotation.kind,
     createdAt: annotation.createdAt,
     updatedAt: annotation.updatedAt
   };

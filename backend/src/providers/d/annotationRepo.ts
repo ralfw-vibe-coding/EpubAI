@@ -1,4 +1,4 @@
-import type { Annotation, AnnotationColor } from "../../domain/types.js";
+import type { Annotation, AnnotationColor, AnnotationKind } from "../../domain/types.js";
 import type { AnnotationDraft } from "../../domain/annotationRpu.js";
 import { pool } from "./db.js";
 
@@ -11,11 +11,13 @@ interface AnnotationRow {
   note: string | null;
   color: AnnotationColor;
   tags: string[];
+  kind: AnnotationKind;
   created_at: Date;
   updated_at: Date;
 }
 
-const SELECT_FIELDS = "id, book_id, user_id, cfi_range, excerpt, note, color, tags, created_at, updated_at";
+const SELECT_FIELDS =
+  "id, book_id, user_id, cfi_range, excerpt, note, color, tags, kind, created_at, updated_at";
 
 function toAnnotation(row: AnnotationRow): Annotation {
   return {
@@ -27,6 +29,7 @@ function toAnnotation(row: AnnotationRow): Annotation {
     note: row.note,
     color: row.color,
     tags: row.tags ?? [],
+    kind: row.kind,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString()
   };
@@ -72,20 +75,20 @@ export async function findById(annotationId: string): Promise<Annotation | null>
 export async function insert(bookId: string, userId: string, draft: AnnotationDraft): Promise<Annotation | null> {
   if (draft.id !== undefined) {
     const result = await pool.query<AnnotationRow>(
-      `insert into annotation (id, book_id, user_id, cfi_range, excerpt, note, color, tags)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
+      `insert into annotation (id, book_id, user_id, cfi_range, excerpt, note, color, tags, kind)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        on conflict (id) do nothing
        returning ${SELECT_FIELDS}`,
-      [draft.id, bookId, userId, draft.cfiRange, draft.excerpt, draft.note, draft.color, draft.tags]
+      [draft.id, bookId, userId, draft.cfiRange, draft.excerpt, draft.note, draft.color, draft.tags, draft.kind]
     );
     return result.rows[0] ? toAnnotation(result.rows[0]) : null;
   }
 
   const result = await pool.query<AnnotationRow>(
-    `insert into annotation (book_id, user_id, cfi_range, excerpt, note, color, tags)
-     values ($1, $2, $3, $4, $5, $6, $7)
+    `insert into annotation (book_id, user_id, cfi_range, excerpt, note, color, tags, kind)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
      returning ${SELECT_FIELDS}`,
-    [bookId, userId, draft.cfiRange, draft.excerpt, draft.note, draft.color, draft.tags]
+    [bookId, userId, draft.cfiRange, draft.excerpt, draft.note, draft.color, draft.tags, draft.kind]
   );
   return toAnnotation(result.rows[0]);
 }

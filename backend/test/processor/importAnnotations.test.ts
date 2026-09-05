@@ -150,7 +150,8 @@ describe("importAnnotations reactor", () => {
       excerpt: "e1",
       note: "n1",
       color: "yellow",
-      tags: []
+      tags: [],
+      kind: "highlight"
     });
     expect(result).toEqual({ status: 200, body: { imported: 2, skipped: 0 } });
   });
@@ -176,7 +177,8 @@ describe("importAnnotations reactor", () => {
       excerpt: "e2",
       note: null,
       color: "blue",
-      tags: []
+      tags: [],
+      kind: "highlight"
     });
     expect(result).toEqual({ status: 200, body: { imported: 1, skipped: 1 } });
   });
@@ -228,7 +230,8 @@ describe("importAnnotations reactor", () => {
       excerpt: "e2",
       note: null,
       color: "accent",
-      tags: []
+      tags: [],
+      kind: "highlight"
     });
     expect(result).toEqual({ status: 200, body: { imported: 1, skipped: 1 } });
   });

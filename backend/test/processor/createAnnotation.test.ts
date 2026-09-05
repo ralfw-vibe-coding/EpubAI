@@ -144,7 +144,8 @@ describe("createAnnotation reactor", () => {
       excerpt: "Some text",
       note: null,
       color: "accent",
-      tags: []
+      tags: [],
+      kind: "highlight"
     });
     expect(result).toEqual({
       status: 201,
@@ -189,7 +190,8 @@ describe("createAnnotation reactor", () => {
       excerpt: "Some text",
       note: "my note",
       color: "accent",
-      tags: []
+      tags: [],
+      kind: "highlight"
     });
     expect((result.body as { note: string }).note).toBe("my note");
     expect(result.status).toBe(201);
@@ -222,7 +224,8 @@ describe("createAnnotation reactor", () => {
       excerpt: "Some text",
       note: null,
       color: "purple",
-      tags: []
+      tags: [],
+      kind: "highlight"
     });
     expect((result.body as { color: string }).color).toBe("purple");
     expect(result.status).toBe(201);
@@ -247,7 +250,8 @@ describe("createAnnotation reactor", () => {
     const result = await createAnnotation(`Bearer ${token}`, "book-1", {
       cfiRange: "cfi-1",
       excerpt: "Some text",
-      tags: ["  #Vocab  ", "Chapter-1"]
+      tags: ["  #Vocab  ", "Chapter-1"],
+      kind: "highlight"
     });
 
     expect(annotationRepo.insert).toHaveBeenCalledWith("book-1", "user-1", {
@@ -255,7 +259,8 @@ describe("createAnnotation reactor", () => {
       excerpt: "Some text",
       note: null,
       color: "accent",
-      tags: ["vocab", "chapter-1"]
+      tags: ["vocab", "chapter-1"],
+      kind: "highlight"
     });
     expect((result.body as { tags: string[] }).tags).toEqual(["vocab", "chapter-1"]);
     expect(result.status).toBe(201);
@@ -268,7 +273,8 @@ describe("createAnnotation reactor", () => {
     const result = await createAnnotation(`Bearer ${token}`, "book-1", {
       cfiRange: "cfi-1",
       excerpt: "text",
-      tags: "not-an-array"
+      tags: "not-an-array",
+      kind: "highlight"
     });
     expect(result).toEqual({ status: 400, body: { error: "invalid_request" } });
     expect(annotationRepo.insert).not.toHaveBeenCalled();
@@ -324,7 +330,8 @@ describe("createAnnotation reactor", () => {
         excerpt: "Some text",
         note: null,
         color: "accent",
-        tags: []
+        tags: [],
+        kind: "highlight"
       });
       expect(result.status).toBe(201);
       expect((result.body as { id: string }).id).toBe(clientId);

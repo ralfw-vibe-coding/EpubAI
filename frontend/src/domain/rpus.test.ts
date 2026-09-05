@@ -67,7 +67,8 @@ describe('withEditedColor', () => {
 		color: 'accent',
 		tags: [],
 		createdAt: 'c1',
-		updatedAt: 'c1'
+		updatedAt: 'c1',
+		kind: 'highlight'
 	};
 
 	it('changes only the color and re-stamps updatedAt', () => {
@@ -100,7 +101,8 @@ describe('withEditedNote', () => {
 		color: 'accent',
 		tags: [],
 		createdAt: 'c1',
-		updatedAt: 'c1'
+		updatedAt: 'c1',
+		kind: 'highlight'
 	};
 
 	it('sets the note and tags and re-stamps updatedAt', () => {
@@ -108,7 +110,8 @@ describe('withEditedNote', () => {
 			...ann,
 			note: 'Eine Notiz',
 			tags: ['flashcard'],
-			updatedAt: 'c2'
+			updatedAt: 'c2',
+			kind: 'highlight'
 		});
 	});
 

@@ -22,7 +22,9 @@
 		Eye,
 		Pencil,
 		Search,
-		ArrowLeft
+		ArrowLeft,
+		Copy,
+		Bookmark
 	} from 'lucide-svelte';
 	import type { Annotation, AnnotationColor } from '../../../domain/types';
 	import type { ChatMessage } from '../../../processor/ports';
@@ -30,6 +32,7 @@
 	import { colorHex, HIGHLIGHT_COLORS, highlightStyles } from './colors';
 	import { normalizeTag } from './tags';
 	import { detectSwipe, type Swipe } from './swipe';
+	import { copyText } from '../../../lib/clipboard';
 	import { initialGate, nextGate, type SelectionEvent } from './selectionGate';
 	import { selectionBarTop, SELECTION_BAR_HEIGHT_PX } from './selectionBarPlacement';
 	import { searchBook, highlightExcerpt, type BookSearchResult, MAX_BOOK_SEARCH_RESULTS } from './bookSearch';
@@ -105,7 +108,10 @@
 	// shows nothing for the page read-out until then (see below).
 	let currentPage = $state<number | null>(null);
 	let totalPages = $state<number | null>(null);
-	let currentCfi = '';
+	// $state, seit das Lesezeichen-Symbol daraus abgeleitet wird: Ohne
+	// Reaktivität bliebe es beim Blättern auf dem Stand der ersten Seite
+	// stehen und zeigte "gesetzt", wo keines ist.
+	let currentCfi = $state('');
 	let bookTitle = $state('');
 
 	let toc = $state<NavItem[]>([]);
@@ -316,6 +322,7 @@
 		}
 		gate({ type: 'changed' });
 		if (selectionSettleTimer) clearTimeout(selectionSettleTimer);
+		if (excerptCopyTimer) clearTimeout(excerptCopyTimer);
 		selectionSettleTimer = setTimeout(() => {
 			selectionSettleTimer = null;
 			gate({ type: 'settled', text: getText() });
@@ -558,6 +565,9 @@
 	const NOTE_UNDERLINE_CLASS = 'epubai-note-underline';
 
 	function applyHighlight(a: Annotation) {
+		// Ein Lesezeichen markiert keinen Text - es hält nur die Stelle fest.
+		// Gezeichnet würde daraus ein Rechteck ohne Ausdehnung.
+		if (a.kind === 'bookmark') return;
 		// Erst entfernen: epub.js schlüsselt Anmerkungen über cfiRange+Typ
 		// (annotations.js), ein zweites `add` unter demselben Schlüssel
 		// überschreibt aber nur die Buchführung - die bereits gezeichnete SVG-
@@ -675,6 +685,81 @@
 	function closeNoteEditorByBackdrop() {
 		if (Date.now() - noteEditorOpenedAt < GHOST_CLICK_GUARD_MS) return;
 		editing = null;
+	}
+
+	// Rückmeldung fürs Kopieren - in der Zwischenablage sieht man nichts.
+	const COPIED_FLASH_MS = 1500;
+	let excerptCopied = $state(false);
+	let excerptCopyTimer: ReturnType<typeof setTimeout> | null = null;
+
+	async function copyExcerpt() {
+		if (!editing) return;
+		if (!(await copyText(editing.excerpt))) {
+			showToast('Kopieren in die Zwischenablage hat nicht geklappt.');
+			return;
+		}
+		excerptCopied = true;
+		if (excerptCopyTimer) clearTimeout(excerptCopyTimer);
+		excerptCopyTimer = setTimeout(() => (excerptCopied = false), COPIED_FLASH_MS);
+	}
+
+	/**
+	 * Lesezeichen auf der aktuellen Seite.
+	 *
+	 * Ein Lesezeichen ist eine Anmerkung der Art 'bookmark': Es hält nur die
+	 * Stelle fest, ohne Text zu markieren. Dadurch trägt es die gesamte
+	 * vorhandene Maschinerie mit - offline anlegen, Warteschlange, Abgleich,
+	 * Grabsteine - statt sie ein zweites Mal zu brauchen.
+	 *
+	 * Als `cfiRange` dient der Anfang der sichtbaren Seite. Der `excerpt` hält
+	 * den Textanfang fest, damit die Liste die Stelle wiedererkennbar zeigt;
+	 * ohne ihn stünde dort nur eine nackte Seitenzahl.
+	 */
+	const BOOKMARK_EXCERPT_LENGTH = 90;
+	let bookmarking = $state(false);
+
+	/** Das Lesezeichen der aktuellen Seite, falls es eines gibt. */
+	let bookmarkHere = $derived(
+		currentCfi
+			? (annotations.find((a) => a.kind === 'bookmark' && a.cfiRange === currentCfi) ?? null)
+			: null
+	);
+
+	/** Der sichtbare Textanfang - als Wiedererkennung in der Liste. */
+	function visiblePageText(): string {
+		for (const contents of (rendition?.getContents() ?? []) as unknown as { document: Document }[]) {
+			const text = contents.document?.body?.innerText?.trim().replace(/\s+/g, ' ') ?? '';
+			if (text) return text.slice(0, BOOKMARK_EXCERPT_LENGTH);
+		}
+		return '';
+	}
+
+	async function toggleBookmark() {
+		if (bookmarking || !currentCfi) return;
+		bookmarking = true;
+		try {
+			const existing = bookmarkHere;
+			if (existing) {
+				annotations = annotations.filter((a) => a.id !== existing.id);
+				await getProcessor().deleteAnnotation(existing.id);
+			} else {
+				const created = await getProcessor().createAnnotation(
+					bookId,
+					currentCfi,
+					visiblePageText() || 'Lesezeichen',
+					undefined,
+					undefined,
+					undefined,
+					'bookmark'
+				);
+				annotations = [...annotations, created];
+			}
+		} catch (error) {
+			console.error('[toggleBookmark] fehlgeschlagen:', error);
+			showToast('Lesezeichen konnte nicht gespeichert werden.');
+		} finally {
+			bookmarking = false;
+		}
 	}
 
 	function openNoteEditor(a: Annotation, justCreated = false) {
@@ -1212,6 +1297,11 @@
 			const initialDisplay = resumeCfi ? displayCfi(resumeCfi) : rendition.display();
 			navChain = initialDisplay.catch(() => undefined);
 			await initialDisplay;
+			// Die erste Positionierung meldet kein 'relocated' mehr an uns: der
+			// Listener unten wird erst nach diesem await gebunden. Ohne dies
+			// bliebe currentCfi bis zum ersten Blättern leer - und damit der
+			// Lesezeichen-Knopf auf der Seite, die gerade offen ist, deaktiviert.
+			currentCfi = visibleRange()?.start ?? '';
 			if (progress) {
 				percent = progress.percent;
 				// Show the page numbers from the last session immediately; they'll be
@@ -1535,6 +1625,17 @@
 		</button>
 		<span class="min-w-0 flex-1 truncate px-3 text-sm font-medium text-[var(--color-text)]">{bookTitle}</span>
 		<div class="flex flex-none items-center gap-1">
+			<button
+				onclick={toggleBookmark}
+				disabled={bookmarking || !currentCfi}
+				aria-label={bookmarkHere ? 'Lesezeichen entfernen' : 'Lesezeichen setzen'}
+				title={bookmarkHere ? 'Lesezeichen entfernen' : 'Lesezeichen setzen'}
+				class="p-1.5 transition disabled:opacity-45 {bookmarkHere
+					? 'text-[#c0392b]'
+					: 'text-[var(--color-accent-700)] hover:text-[var(--color-accent-800)]'}"
+			>
+				<Bookmark size={20} fill={bookmarkHere ? 'currentColor' : 'none'} />
+			</button>
 			<button
 				onclick={() => (tocOpen = true)}
 				aria-label="Inhaltsverzeichnis"
@@ -1954,25 +2055,42 @@
 			<div class="flex-1 overflow-y-auto py-1">
 				{#if annotations.length === 0}
 					<p class="px-4 py-3 text-sm text-[var(--color-neutral-700)]">
-						Noch keine Markierungen. Text markieren, um eine anzulegen.
+						Noch keine Markierungen. Text markieren, um eine anzulegen — oder oben ein
+						Lesezeichen setzen.
 					</p>
 				{:else}
 					{#each annotations as a (a.id)}
 						<div class="flex items-start gap-2 border-b border-[var(--color-divider)] px-4 py-3">
-							<span
-								aria-hidden="true"
-								class="mt-1.5 h-3 w-3 flex-none rounded-full"
-								style="background-color: {colorHex(a.color)}"
-							></span>
+							{#if a.kind === 'bookmark'}
+								<!-- Rotes Lesezeichen statt Farbpunkt: Es hat keine Farbe zu
+								     tragen, und die Art soll auf einen Blick erkennbar sein. -->
+								<span aria-hidden="true" class="mt-1 flex-none text-[#c0392b]">
+									<Bookmark size={14} fill="currentColor" />
+								</span>
+							{:else}
+								<span
+									aria-hidden="true"
+									class="mt-1.5 h-3 w-3 flex-none rounded-full"
+									style="background-color: {colorHex(a.color)}"
+								></span>
+							{/if}
 							<button onclick={() => jumpToAnnotation(a)} class="min-w-0 flex-1 text-left">
-								<p class="line-clamp-2 text-sm text-[var(--color-text)]">„{a.excerpt}“</p>
-								{#if a.note}
-									<p class="mt-1 line-clamp-2 text-xs text-[var(--color-neutral-700)]">{a.note}</p>
+								{#if a.kind === 'bookmark'}
+									{@const seite = pageOf(a.cfiRange)}
+									<p class="text-sm text-[var(--color-text)]">
+										Lesezeichen{seite !== null ? ` — Seite ${seite}` : ''}
+									</p>
+									<p class="mt-1 line-clamp-2 text-xs text-[var(--color-neutral-700)]">{a.excerpt}</p>
+								{:else}
+									<p class="line-clamp-2 text-sm text-[var(--color-text)]">„{a.excerpt}“</p>
+									{#if a.note}
+										<p class="mt-1 line-clamp-2 text-xs text-[var(--color-neutral-700)]">{a.note}</p>
+									{/if}
 								{/if}
 							</button>
 							<button
 								onclick={() => deleteHighlight(a)}
-								aria-label="Markierung löschen"
+								aria-label={a.kind === 'bookmark' ? 'Lesezeichen löschen' : 'Markierung löschen'}
 								class="flex-none p-1 text-[var(--color-accent-700)]"
 							>
 								<Trash2 size={16} />
@@ -2015,7 +2133,20 @@
 					<X size={20} />
 				</button>
 			</div>
-			<p class="mb-2 line-clamp-3 text-sm text-[var(--color-neutral-700)]">„{editing.excerpt}“</p>
+			<div class="mb-2 flex items-start gap-2">
+				<p class="line-clamp-3 flex-1 text-sm text-[var(--color-neutral-700)]">„{editing.excerpt}“</p>
+				<button
+					onclick={copyExcerpt}
+					aria-label={excerptCopied ? 'Text kopiert' : 'Text der Markierung kopieren'}
+					class="mt-0.5 flex h-[18px] w-[18px] flex-none items-center justify-center text-[var(--color-accent-700)]"
+				>
+					{#if excerptCopied}
+						<Check size={18} />
+					{:else}
+						<Copy size={18} />
+					{/if}
+				</button>
+			</div>
 			<div class="mb-3 flex items-center gap-2.5">
 				{#each HIGHLIGHT_COLORS as color (color.value)}
 					<button

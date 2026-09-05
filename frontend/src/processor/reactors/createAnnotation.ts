@@ -1,4 +1,4 @@
-import type { Annotation, AnnotationColor } from '../../domain/types';
+import type { Annotation, AnnotationColor, AnnotationKind } from '../../domain/types';
 import type { ReactorDeps } from '../deps';
 
 /**
@@ -21,7 +21,10 @@ export async function createAnnotation(
 	excerpt: string,
 	note?: string,
 	color?: AnnotationColor,
-	tags?: string[]
+	tags?: string[],
+	// Angehängt statt eingereiht: bestehende Aufrufe bleiben gültig, und ein
+	// Lesezeichen ist genau dieser eine zusätzliche Wert.
+	kind: AnnotationKind = 'highlight'
 ): Promise<Annotation> {
 	const created = await deps.domain.recordNewAnnotation(
 		deps.ids.newId(),
@@ -31,7 +34,8 @@ export async function createAnnotation(
 		note ?? null,
 		color ?? 'accent',
 		tags ?? [],
-		deps.clock.nowIso()
+		deps.clock.nowIso(),
+		kind
 	);
 	void deps.http
 		.createAnnotation(created)

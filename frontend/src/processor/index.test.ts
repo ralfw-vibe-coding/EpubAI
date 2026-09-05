@@ -402,7 +402,8 @@ describe('processor reactors', () => {
 			color: 'accent',
 			tags: [],
 			createdAt: 'c1',
-			updatedAt: 'c1'
+			updatedAt: 'c1',
+			kind: 'highlight'
 		});
 		await domain.saveAnnotation({
 			id: 'a2',
@@ -413,7 +414,8 @@ describe('processor reactors', () => {
 			color: 'accent',
 			tags: [],
 			createdAt: 'c2',
-			updatedAt: 'c2'
+			updatedAt: 'c2',
+			kind: 'highlight'
 		});
 
 		expect((await p.loadCatalog()).books[0]).toMatchObject({ highlightCount: 1, noteCount: 1 });
@@ -433,7 +435,8 @@ describe('processor reactors', () => {
 			color: 'accent',
 			tags: [],
 			createdAt: 'c1',
-			updatedAt: 'c1'
+			updatedAt: 'c1',
+			kind: 'highlight'
 		});
 		await domain.saveAnnotation({
 			id: 'a2',
@@ -444,7 +447,8 @@ describe('processor reactors', () => {
 			color: 'accent',
 			tags: [],
 			createdAt: 'c2',
-			updatedAt: 'c2'
+			updatedAt: 'c2',
+			kind: 'highlight'
 		});
 
 		expect((await p.openBookDetail('b1')).book).toMatchObject({ highlightCount: 1, noteCount: 0 });
@@ -753,7 +757,8 @@ describe('processor reactors', () => {
 			color: 'accent',
 			tags: [],
 			createdAt: '2026-07-13T00:00:00.000Z',
-			updatedAt: '2026-07-13T00:00:00.000Z'
+			updatedAt: '2026-07-13T00:00:00.000Z',
+			kind: 'highlight'
 		};
 
 		/** Lässt die nicht abgewarteten Push-Aufrufe der local-first Reactors durchlaufen. */

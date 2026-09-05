@@ -279,7 +279,8 @@ describe('createHttpClient', () => {
 		color: 'accent',
 		tags: [],
 		createdAt: 't',
-		updatedAt: 't'
+		updatedAt: 't',
+		kind: 'highlight'
 	};
 
 	it('unwraps the annotations array from GET /annotations', async () => {

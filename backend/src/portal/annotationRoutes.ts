@@ -23,6 +23,7 @@ export async function registerAnnotationRoutes(app: FastifyInstance): Promise<vo
       note?: unknown;
       color?: unknown;
       tags?: unknown;
+      kind?: unknown;
     };
     const result = await createAnnotation(request.headers.authorization, request.params.id, {
       id: body.id,
@@ -30,6 +31,7 @@ export async function registerAnnotationRoutes(app: FastifyInstance): Promise<vo
       excerpt: body.excerpt,
       note: body.note,
       color: body.color,
+      kind: body.kind,
       tags: body.tags
     });
     return reply.code(result.status).send(result.body);

@@ -1,4 +1,4 @@
-import type { Annotation, AnnotationColor, BookDetail, CatalogBook, Loan, ReadingProgress } from './types';
+import type { Annotation, AnnotationColor, AnnotationKind, BookDetail, CatalogBook, Loan, ReadingProgress } from './types';
 
 /**
  * RPUs (Request Processing Units) — nearly-pure functions that know only
@@ -54,7 +54,10 @@ export function makeAnnotation(
 	note: string | null,
 	color: AnnotationColor,
 	tags: string[],
-	now: string
+	now: string,
+	// Angehängt statt eingereiht: So bleiben alle bestehenden Aufrufe gültig,
+	// und eine Markierung anzulegen liest sich weiter wie bisher.
+	kind: AnnotationKind = 'highlight'
 ): Annotation {
 	const trimmed = note?.trim() ?? '';
 	return {
@@ -65,6 +68,7 @@ export function makeAnnotation(
 		note: trimmed === '' ? null : trimmed,
 		color,
 		tags: [...tags],
+		kind,
 		createdAt: now,
 		updatedAt: now
 	};

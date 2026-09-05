@@ -118,6 +118,17 @@ alter table annotation add constraint annotation_color_check
 -- Stored without a leading '#' - that's a display-only convention.
 alter table annotation add column if not exists tags text[] not null default '{}';
 
+-- Art der Anmerkung. Ein Lesezeichen ist eine Anmerkung OHNE Textmarkierung:
+-- es haelt nur eine Stelle fest. Beide teilen sich Tabelle und Abgleich, weil
+-- sie exakt dieselben Anforderungen haben - offline anlegen, Warteschlange,
+-- Grabsteine beim Loeschen. Eine zweite Entitaet muesste diese ganze
+-- Maschinerie ein zweites Mal aufbauen.
+-- Vorgabe 'highlight', damit alle bestehenden Zeilen Markierungen bleiben.
+alter table annotation add column if not exists kind text not null default 'highlight';
+alter table annotation drop constraint if exists annotation_kind_check;
+alter table annotation add constraint annotation_kind_check
+  check (kind in ('highlight', 'bookmark'));
+
 -- Account setting: default color for flashcard notes, geräteübergreifend,
 -- mirrors translation_language above. Reuses the same 6 highlight color slugs.
 alter table "user" add column if not exists default_flashcard_color text not null default 'yellow';

@@ -97,6 +97,15 @@ export interface BookDetail extends CatalogBook {
 export type AnnotationColor = 'accent' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
 
 /**
+ * Art einer Anmerkung. Ein Lesezeichen hält nur eine Stelle fest, ohne Text
+ * zu markieren - es teilt sich aber Tabelle und Abgleich mit der Markierung,
+ * weil beide dieselben Anforderungen haben: offline anlegen, Warteschlange,
+ * Grabsteine beim Löschen. Eine eigene Entität müsste diese ganze Maschinerie
+ * ein zweites Mal aufbauen.
+ */
+export type AnnotationKind = 'highlight' | 'bookmark';
+
+/**
  * A highlight/annotation on a span of book text, optionally carrying a note.
  * Local rows use the same `id` as the backend row (Requirements: sidesteps
  * ID reconciliation). `cfiRange`/`excerpt` are immutable — they identify *what*
@@ -115,6 +124,7 @@ export interface Annotation {
 	 * convention.
 	 */
 	tags: string[];
+	kind: AnnotationKind;
 	createdAt: string;
 	updatedAt: string;
 }

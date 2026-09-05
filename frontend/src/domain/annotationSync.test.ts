@@ -12,7 +12,8 @@ function annotation(id: string, updatedAt: string, note: string | null = null): 
 		color: 'accent',
 		tags: [],
 		createdAt: '2026-01-01T00:00:00.000Z',
-		updatedAt
+		updatedAt,
+		kind: 'highlight'
 	};
 }
 

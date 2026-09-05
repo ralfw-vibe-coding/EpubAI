@@ -12,8 +12,9 @@ import type { Annotation, CatalogBook, Loan, ReadingProgress } from '../../domai
  * Tables (only what the skeleton needs, §4.4):
  *   Loan(bookId PK, deviceId, fileHash, title, borrowedAt)
  *   ReadingProgress(bookId PK, cfi, percent, page, totalPages, updatedAt)
- *   Annotation(id PK, bookId, cfiRange, excerpt, note, color, tags, createdAt,
- *     updatedAt, serverKnown, dirty) — die beiden letzten Spalten sind die
+ *   Annotation(id PK, bookId, cfiRange, excerpt, note, color, tags, kind,
+ *     createdAt, updatedAt, serverKnown, dirty) — `kind` unterscheidet
+ *     Markierung von Lesezeichen; beide teilen sich Tabelle und Abgleich. — die beiden letzten Spalten sind die
  *     Abgleich-Merker (siehe domain/annotationSync.ts): Kennt das Backend die
  *     Zeile schon, und gibt es hier noch nicht hochgereichte Änderungen?
  *   DeletedAnnotation(id PK, deletedAt) — Grabsteine. Eine gelöschte Markierung
@@ -110,6 +111,7 @@ async function boot(): Promise<Database> {
 			note TEXT,
 			color TEXT NOT NULL DEFAULT 'accent',
 			tags TEXT NOT NULL DEFAULT '[]',
+			kind TEXT NOT NULL DEFAULT 'highlight',
 			createdAt TEXT NOT NULL,
 			updatedAt TEXT NOT NULL,
 			serverKnown INTEGER NOT NULL DEFAULT 1,
@@ -163,6 +165,9 @@ async function boot(): Promise<Database> {
 	// lokalen Bestand als "neu" ans Backend schicken.
 	addColumnIfMissing(database, 'Annotation', 'serverKnown INTEGER NOT NULL DEFAULT 1');
 	addColumnIfMissing(database, 'Annotation', 'dirty INTEGER NOT NULL DEFAULT 0');
+	// Migration für Bestände ohne die Art. Vorgabe 'highlight': Alle
+	// vorhandenen Zeilen sind Markierungen, Lesezeichen kamen später dazu.
+	addColumnIfMissing(database, 'Annotation', "kind TEXT NOT NULL DEFAULT 'highlight'");
 	return database;
 }
 
@@ -182,8 +187,8 @@ async function boot(): Promise<Database> {
  */
 function upsertAnnotation(a: Annotation, serverKnown: boolean, dirty: boolean): void {
 	db!.exec({
-		sql: `INSERT INTO Annotation (id, bookId, cfiRange, excerpt, note, color, tags, createdAt, updatedAt, serverKnown, dirty)
-		      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		sql: `INSERT INTO Annotation (id, bookId, cfiRange, excerpt, note, color, tags, kind, createdAt, updatedAt, serverKnown, dirty)
+		      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		      ON CONFLICT(id) DO UPDATE SET
 		        bookId = excluded.bookId,
 		        cfiRange = excluded.cfiRange,
@@ -191,6 +196,7 @@ function upsertAnnotation(a: Annotation, serverKnown: boolean, dirty: boolean): 
 		        note = excluded.note,
 		        color = excluded.color,
 		        tags = excluded.tags,
+		        kind = excluded.kind,
 		        createdAt = excluded.createdAt,
 		        updatedAt = excluded.updatedAt,
 		        serverKnown = MAX(Annotation.serverKnown, excluded.serverKnown),
@@ -203,6 +209,7 @@ function upsertAnnotation(a: Annotation, serverKnown: boolean, dirty: boolean): 
 			a.note,
 			a.color,
 			JSON.stringify(a.tags ?? []),
+			a.kind ?? 'highlight',
 			a.createdAt,
 			a.updatedAt,
 			serverKnown ? 1 : 0,
@@ -281,7 +288,7 @@ const handlers: Record<string, Handler> = {
 	},
 	allAnnotationsForBook([bookId]: unknown[]): Annotation[] {
 		const rows = db!.exec({
-			sql: 'SELECT id, bookId, cfiRange, excerpt, note, color, tags, createdAt, updatedAt FROM Annotation WHERE bookId = ? ORDER BY createdAt',
+			sql: 'SELECT id, bookId, cfiRange, excerpt, note, color, tags, kind, createdAt, updatedAt FROM Annotation WHERE bookId = ? ORDER BY createdAt',
 			bind: [bookId as string],
 			rowMode: 'object',
 			returnValue: 'resultRows'
@@ -293,7 +300,7 @@ const handlers: Record<string, Handler> = {
 			sql: `SELECT bookId,
 			             SUM(CASE WHEN note IS NULL THEN 1 ELSE 0 END) AS highlightCount,
 			             SUM(CASE WHEN note IS NOT NULL THEN 1 ELSE 0 END) AS noteCount
-			      FROM Annotation GROUP BY bookId`,
+			      FROM Annotation WHERE kind = 'highlight' GROUP BY bookId`,
 			rowMode: 'object',
 			returnValue: 'resultRows'
 		}) as unknown as { bookId: string; highlightCount: number; noteCount: number }[];
@@ -301,7 +308,7 @@ const handlers: Record<string, Handler> = {
 	/** Alle lokalen Markierungen samt Abgleich-Merkern - die Grundlage des Abgleichs. */
 	pendingAnnotations(): SyncedAnnotation[] {
 		const rows = db!.exec({
-			sql: 'SELECT id, bookId, cfiRange, excerpt, note, color, tags, createdAt, updatedAt, serverKnown, dirty FROM Annotation ORDER BY createdAt',
+			sql: 'SELECT id, bookId, cfiRange, excerpt, note, color, tags, kind, createdAt, updatedAt, serverKnown, dirty FROM Annotation ORDER BY createdAt',
 			rowMode: 'object',
 			returnValue: 'resultRows'
 		}) as unknown as (Omit<Annotation, 'tags'> & {
