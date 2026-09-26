@@ -37,11 +37,15 @@ const REQUIRED_VARS = [
   "OPENROUTER_API_KEY"
 ] as const;
 
-// Every AI job picks its own model, because they differ a lot: translate and
+// Every AI job CAN pick its own model, because they differ a lot: translate and
 // look up are two-word jobs where latency shows, the chat lives off a cached
 // book prefix, and the dossier feeds a whole book in and wants 8k tokens out.
-// All four default to what this app used before it went through OpenRouter, so
-// an unset environment behaves exactly as it did.
+//
+// But one model for all four is the normal case, so that is one knob:
+// OPENROUTER_MODEL sets all of them, and a per-job variable overrides it where
+// one job really needs something else. Unset, it is the model this app called
+// directly before it went through OpenRouter, so an empty environment behaves
+// exactly as it did.
 const DEFAULT_MODEL = "anthropic/claude-sonnet-5";
 
 // Only for the estimate shown BEFORE a dossier is generated - the cost of a
@@ -73,6 +77,8 @@ function readEnv() {
     throw new Error("JWT_TTL_SECONDS must be a positive number");
   }
 
+  const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
+
   return {
     DATABASE_URL: process.env.DATABASE_URL!,
     R2_BUCKET: process.env.R2_BUCKET!,
@@ -89,10 +95,10 @@ function readEnv() {
     JWT_TTL_SECONDS: ttl,
     PORT: Number(process.env.PORT ?? 3000),
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY!,
-    OPENROUTER_MODEL_TRANSLATE: process.env.OPENROUTER_MODEL_TRANSLATE || DEFAULT_MODEL,
-    OPENROUTER_MODEL_LOOKUP: process.env.OPENROUTER_MODEL_LOOKUP || DEFAULT_MODEL,
-    OPENROUTER_MODEL_CHAT: process.env.OPENROUTER_MODEL_CHAT || DEFAULT_MODEL,
-    OPENROUTER_MODEL_DOSSIER: process.env.OPENROUTER_MODEL_DOSSIER || DEFAULT_MODEL,
+    OPENROUTER_MODEL_TRANSLATE: process.env.OPENROUTER_MODEL_TRANSLATE || model,
+    OPENROUTER_MODEL_LOOKUP: process.env.OPENROUTER_MODEL_LOOKUP || model,
+    OPENROUTER_MODEL_CHAT: process.env.OPENROUTER_MODEL_CHAT || model,
+    OPENROUTER_MODEL_DOSSIER: process.env.OPENROUTER_MODEL_DOSSIER || model,
     // "none" switches thinking off (what this code did directly before). A model
     // whose reasoning is mandatory rejects that, so "default" omits the
     // parameter and lets the model decide - see REASONING in providers/x/llm.ts.

@@ -43,9 +43,14 @@ npm run migrate   # applies db/schema.sql to DATABASE_URL from ../.env (idempote
 
 Every AI call goes through [OpenRouter](https://openrouter.ai) (OpenAI-protocol
 compatible, so the `openai` SDK is pointed at their base URL - this is not an
-OpenAI account). Each of the four jobs picks its own model, because they differ
-a lot; all four default to `anthropic/claude-sonnet-5`, which is what the code
-called directly before, so an unset environment behaves as it did:
+OpenAI account).
+
+`OPENROUTER_MODEL` sets the model for all AI calls. Unset, it is
+`anthropic/claude-sonnet-5` - what the code called directly before - so an empty
+environment behaves as it did.
+
+The four jobs differ enough that any one of them can deviate, and a per-job
+variable overrides `OPENROUTER_MODEL`:
 
 | Variable | Job |
 | --- | --- |
@@ -53,6 +58,10 @@ called directly before, so an unset environment behaves as it did:
 | `OPENROUTER_MODEL_LOOKUP` | explaining a selected word or phrase |
 | `OPENROUTER_MODEL_CHAT` | chat about a book (uses prompt caching) |
 | `OPENROUTER_MODEL_DOSSIER` | generating a dossier from the whole book text |
+
+Mind the context window when setting these: a dossier sends a whole book, so a
+200k-context model (`anthropic/claude-haiku-4.5`, say) is fine for translate and
+lookup but will fail on a long book.
 
 `OPENROUTER_REASONING_EFFORT` defaults to `none`, switching thinking off as this
 code always did. Set it to `default` to omit the parameter - needed for a model
