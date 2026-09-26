@@ -1,12 +1,13 @@
 import { authorizeBookAccess, toBookSummary } from "../domain/bookRpu.js";
-import { chatCostUsd } from "../domain/aiCostRpu.js";
+import { aiCallCostUsd } from "../domain/aiCostRpu.js";
 import type { BookSummary } from "../domain/types.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
 import * as r2 from "../providers/x/r2.js";
 import { presignCoverUrl } from "./shared/coverUrl.js";
-import * as claude from "../providers/x/claude.js";
+import * as llm from "../providers/x/llm.js";
 import { requireUserId, AuthError } from "./shared/requireUserId.js";
 import { ok, type ReactorResult } from "./shared/result.js";
+import { llmErrorCode } from "../domain/llmFailureRpu.js";
 import { dossierKey, ensureBookText } from "./shared/bookText.js";
 
 export type GenerateDossierBody = (BookSummary & { generationCostUsd: number }) | { error: string };
@@ -39,18 +40,18 @@ export async function generateDossier(
   const bookText = await ensureBookText(userId, book);
   if (!bookText) return ok(502, { error: "text_missing" });
 
-  let result: claude.GenerateDossierResult;
+  let result: llm.GenerateDossierResult;
   try {
-    result = await claude.generateDossier(bookText, book.title, book.author);
+    result = await llm.generateDossier(bookText, book.title, book.author);
   } catch (err) {
-    console.error("[dossier] Claude call failed:", err);
-    return ok(502, { error: "generation_failed" });
+    console.error("[dossier] LLM call failed:", err);
+    return ok(502, { error: llmErrorCode(err, "generation_failed") });
   }
 
   await r2.putText(dossierKey(userId, book.currentFileHash), result.text);
   await bookRepo.setDossierUploadedAt(bookId, new Date());
 
-  const costUsd = chatCostUsd(result.usage);
+  const costUsd = aiCallCostUsd(result.usage, result.reportedCostUsd);
   // Own running total (dossier_cost_usd), separate from ai_cost_usd (chat-only)
   // - the reader should see what chats cost vs. what generating this cost. The
   // dossier already succeeded, so a failed cost write must not turn it into an

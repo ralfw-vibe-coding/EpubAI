@@ -36,8 +36,51 @@ npm run migrate   # applies db/schema.sql to DATABASE_URL from ../.env (idempote
 
 `.env` lives at the repo root (`../.env` from `backend/`) and must define: `DATABASE_URL`,
 `R2_BUCKET`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `AUTH_SESSION_SECRET`,
-`RESEND_API_KEY`, `AUTH_FROM_EMAIL`, `JWT_TTL_SECONDS`, `CLAUDE_API_KEY`. `config.ts` fails fast
+`RESEND_API_KEY`, `AUTH_FROM_EMAIL`, `JWT_TTL_SECONDS`, `OPENROUTER_API_KEY`. `config.ts` fails fast
 (naming only the missing variable names, never values) if any are absent.
+
+### AI models
+
+Every AI call goes through [OpenRouter](https://openrouter.ai) (OpenAI-protocol
+compatible, so the `openai` SDK is pointed at their base URL - this is not an
+OpenAI account). Each of the four jobs picks its own model, because they differ
+a lot; all four default to `anthropic/claude-sonnet-5`, which is what the code
+called directly before, so an unset environment behaves as it did:
+
+| Variable | Job |
+| --- | --- |
+| `OPENROUTER_MODEL_TRANSLATE` | translating a selection |
+| `OPENROUTER_MODEL_LOOKUP` | explaining a selected word or phrase |
+| `OPENROUTER_MODEL_CHAT` | chat about a book (uses prompt caching) |
+| `OPENROUTER_MODEL_DOSSIER` | generating a dossier from the whole book text |
+
+`OPENROUTER_REASONING_EFFORT` defaults to `none`, switching thinking off as this
+code always did. Set it to `default` to omit the parameter - needed for a model
+whose reasoning is mandatory, which rejects `none` outright.
+
+Two caveats when moving `OPENROUTER_MODEL_CHAT` off Claude: the chat's prompt
+caching relies on *explicit* `cache_control` breakpoints, which only Anthropic
+and Qwen models use on OpenRouter (OpenAI/Gemini/DeepSeek/Grok cache
+automatically and ignore the marker; a provider without caching bills the whole
+book prefix on every question). And the dossier prompt is tuned on Claude - see
+the comments in `src/providers/x/llm.ts`.
+
+When a call fails, the reason is named rather than hidden behind one generic
+"failed": an expired, revoked or mistyped key (HTTP 401/403) answers
+`ai_key_invalid`, an exhausted balance (402) `ai_out_of_credits`, and throttling
+(429) `ai_rate_limited`; anything else keeps the per-feature generic code. The UI
+has to be able to tell these apart, because it would otherwise report them as a
+missing connection - which is wrong, and sends the reader looking in the wrong
+place for something only the operator can fix. The server log names the cause and
+the HTTP status too.
+
+The cost the reader sees comes from OpenRouter's own `usage.cost`, so it needs no
+price table. The one exception is the estimate shown *before* a dossier is
+generated: that has to price a call that has not happened yet, via
+`DOSSIER_PRICE_IN_PER_MTOK` / `DOSSIER_PRICE_OUT_PER_MTOK` (USD per million
+tokens, defaulting to Sonnet 5's $2/$10). Set them when
+`OPENROUTER_MODEL_DOSSIER` points elsewhere, or the estimate describes a
+different model than the one that will run.
 
 `AUTH_SECRET_OTP` is optional: if set, `POST /auth/login/verify` accepts it as a fixed login code
 for *any* email, with no expiry or attempt-limit - a deliberate local-dev shortcut so testing

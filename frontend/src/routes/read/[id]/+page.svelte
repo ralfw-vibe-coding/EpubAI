@@ -33,6 +33,7 @@
 	import { normalizeTag } from './tags';
 	import { detectSwipe, type Swipe } from './swipe';
 	import { copyText } from '../../../lib/clipboard';
+	import { aiErrorMessage } from '../../../lib/aiErrors';
 	import { initialGate, nextGate, type SelectionEvent } from './selectionGate';
 	import { selectionBarTop, SELECTION_BAR_HEIGHT_PX } from './selectionBarPlacement';
 	import { searchBook, highlightExcerpt, type BookSearchResult, MAX_BOOK_SEARCH_RESULTS } from './bookSearch';
@@ -379,12 +380,12 @@
 		try {
 			const text = await getProcessor().translateSelection(excerpt, translationLanguage);
 			aiResult = { kind: 'translate', loading: false, text, error: null };
-		} catch {
+		} catch (error) {
 			aiResult = {
 				kind: 'translate',
 				loading: false,
 				text: null,
-				error: 'Übersetzung fehlgeschlagen — keine Verbindung.'
+				error: aiErrorMessage(error, 'Übersetzung')
 			};
 		}
 	}
@@ -396,12 +397,12 @@
 		try {
 			const text = await getProcessor().lookupSelection(excerpt, translationLanguage);
 			aiResult = { kind: 'lookup', loading: false, text, error: null };
-		} catch {
+		} catch (error) {
 			aiResult = {
 				kind: 'lookup',
 				loading: false,
 				text: null,
-				error: 'Nachschlagen fehlgeschlagen — keine Verbindung.'
+				error: aiErrorMessage(error, 'Nachschlagen')
 			};
 		}
 	}
@@ -530,9 +531,9 @@
 				dossierUsed: reply.dossierUsed,
 				sessionCostUsd: chat.sessionCostUsd + reply.costUsd
 			};
-		} catch {
+		} catch (error) {
 			if (!chat) return;
-			chat = { ...chat, loading: false, error: 'Antwort fehlgeschlagen — keine Verbindung.' };
+			chat = { ...chat, loading: false, error: aiErrorMessage(error, 'Antwort') };
 		}
 	}
 

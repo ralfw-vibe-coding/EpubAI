@@ -9,7 +9,7 @@ vi.mock("../../src/providers/x/r2.js", () => ({
   putText: vi.fn(),
   getPresignedUrl: vi.fn()
 }));
-vi.mock("../../src/providers/x/claude.js", () => ({
+vi.mock("../../src/providers/x/llm.js", () => ({
   generateDossier: vi.fn()
 }));
 vi.mock("../../src/processor/shared/bookText.js", async (importOriginal) => {
@@ -20,9 +20,10 @@ vi.mock("../../src/processor/shared/bookText.js", async (importOriginal) => {
 import { generateDossier } from "../../src/processor/generateDossier.js";
 import * as bookRepo from "../../src/providers/d/bookRepo.js";
 import * as r2 from "../../src/providers/x/r2.js";
-import * as claude from "../../src/providers/x/claude.js";
+import * as llm from "../../src/providers/x/llm.js";
 import { ensureBookText } from "../../src/processor/shared/bookText.js";
 import { sign } from "../../src/providers/x/jwt.js";
+import { LlmError } from "../../src/domain/llmFailureRpu.js";
 import type { Book } from "../../src/domain/types.js";
 import type { TokenUsage } from "../../src/domain/aiCostRpu.js";
 
@@ -62,9 +63,10 @@ describe("generateDossier reactor", () => {
     vi.clearAllMocks();
     mocked(bookRepo.findById).mockResolvedValue(makeBook());
     mocked(ensureBookText).mockResolvedValue("Der komplette Buchtext.");
-    mocked(claude.generateDossier).mockResolvedValue({
+    mocked(llm.generateDossier).mockResolvedValue({
       text: "# Dossier\n\n1. KOPF ...",
-      usage: { ...noUsage, inputTokens: 1_000_000 }
+      usage: { ...noUsage, inputTokens: 1_000_000 },
+      reportedCostUsd: null
     });
     mocked(bookRepo.setDossierUploadedAt).mockResolvedValue(
       makeBook({ dossierUploadedAt: "2026-01-02T00:00:00.000Z" })
@@ -81,25 +83,45 @@ describe("generateDossier reactor", () => {
     mocked(bookRepo.findById).mockResolvedValue(null);
     const result = await generateDossier(token(), "missing-book");
     expect(result).toEqual({ status: 404, body: { error: "not_found" } });
-    expect(claude.generateDossier).not.toHaveBeenCalled();
+    expect(llm.generateDossier).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the book belongs to a different user (never leaks ownership)", async () => {
     mocked(bookRepo.findById).mockResolvedValue(makeBook({ userId: "someone-else" }));
     const result = await generateDossier(token(), "book-1");
     expect(result).toEqual({ status: 404, body: { error: "not_found" } });
-    expect(claude.generateDossier).not.toHaveBeenCalled();
+    expect(llm.generateDossier).not.toHaveBeenCalled();
   });
 
   it("returns 502 text_missing when the book has no extractable text", async () => {
     mocked(ensureBookText).mockResolvedValue(null);
     const result = await generateDossier(token(), "book-1");
     expect(result).toEqual({ status: 502, body: { error: "text_missing" } });
-    expect(claude.generateDossier).not.toHaveBeenCalled();
+    expect(llm.generateDossier).not.toHaveBeenCalled();
+  });
+
+  it("names an expired API key instead of failing generically", async () => {
+    mocked(llm.generateDossier).mockRejectedValue(
+      new LlmError("unauthorized", "OpenRouter rejected the API key (HTTP 401)")
+    );
+    const result = await generateDossier(token(), "book-1");
+
+    expect(result).toEqual({ status: 502, body: { error: "ai_key_invalid" } });
+    expect(r2.putText).not.toHaveBeenCalled();
+  });
+
+  it("names exhausted credit instead of failing generically", async () => {
+    // Beim Dossier fällt das am ehesten an: ein ganzes Buch auf einmal.
+    mocked(llm.generateDossier).mockRejectedValue(
+      new LlmError("out_of_credits", "OpenRouter reports no credit left")
+    );
+    const result = await generateDossier(token(), "book-1");
+
+    expect(result).toEqual({ status: 502, body: { error: "ai_out_of_credits" } });
   });
 
   it("returns 502 generation_failed when the Claude call throws", async () => {
-    mocked(claude.generateDossier).mockRejectedValue(new Error("network down"));
+    mocked(llm.generateDossier).mockRejectedValue(new Error("network down"));
     const result = await generateDossier(token(), "book-1");
     expect(result).toEqual({ status: 502, body: { error: "generation_failed" } });
     expect(r2.putText).not.toHaveBeenCalled();
@@ -115,7 +137,7 @@ describe("generateDossier reactor", () => {
   it("passes the catalog title/author as ground truth, so Claude doesn't have to derive them from the body text", async () => {
     mocked(bookRepo.findById).mockResolvedValue(makeBook({ title: "Der dressierte Nachwuchs", author: "Meyen, Michael" }));
     await generateDossier(token(), "book-1");
-    expect(claude.generateDossier).toHaveBeenCalledWith(
+    expect(llm.generateDossier).toHaveBeenCalledWith(
       "Der komplette Buchtext.",
       "Der dressierte Nachwuchs",
       "Meyen, Michael"
@@ -124,8 +146,21 @@ describe("generateDossier reactor", () => {
 
   it("computes and records the generation cost onto its own dossier_cost_usd total, not ai_cost_usd", async () => {
     await generateDossier(token(), "book-1");
-    // 1M uncached input tokens at the $2/1M intro rate.
+    // 1M uncached input tokens at the $2/1M fallback rate - no reported cost.
     expect(bookRepo.addDossierCost).toHaveBeenCalledWith("book-1", expect.closeTo(2.0, 6));
+  });
+
+  // Ein Dossier laeuft ueber ein ganzes Buch; hier faellt ein falscher Preis am
+  // deutlichsten auf. Gilt der gemeldete Betrag, nicht die eigene Rechnung.
+  it("records the cost OpenRouter reported instead of pricing the tokens itself", async () => {
+    mocked(llm.generateDossier).mockResolvedValue({
+      text: "# Dossier",
+      usage: { ...noUsage, inputTokens: 1_000_000 },
+      reportedCostUsd: 1.42
+    });
+    await generateDossier(token(), "book-1");
+
+    expect(bookRepo.addDossierCost).toHaveBeenCalledWith("book-1", expect.closeTo(1.42, 6));
   });
 
   it("returns the fresh cumulative dossierCostUsd (re-read after addDossierCost), not the stale pre-call value", async () => {

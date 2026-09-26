@@ -7,7 +7,7 @@ vi.mock("../../src/providers/d/bookRepo.js", () => ({
 vi.mock("../../src/providers/x/r2.js", () => ({
   getText: vi.fn()
 }));
-vi.mock("../../src/providers/x/claude.js", () => ({
+vi.mock("../../src/providers/x/llm.js", () => ({
   chatAboutBook: vi.fn()
 }));
 vi.mock("../../src/processor/shared/bookText.js", async (importOriginal) => {
@@ -18,10 +18,11 @@ vi.mock("../../src/processor/shared/bookText.js", async (importOriginal) => {
 import { chatAboutBook } from "../../src/processor/chatAboutBook.js";
 import * as bookRepo from "../../src/providers/d/bookRepo.js";
 import * as r2 from "../../src/providers/x/r2.js";
-import * as claude from "../../src/providers/x/claude.js";
+import * as llm from "../../src/providers/x/llm.js";
 import type { TokenUsage } from "../../src/domain/aiCostRpu.js";
 import { ensureBookText } from "../../src/processor/shared/bookText.js";
 import { sign } from "../../src/providers/x/jwt.js";
+import { LlmError } from "../../src/domain/llmFailureRpu.js";
 import type { Book } from "../../src/domain/types.js";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -64,7 +65,13 @@ const noUsage: TokenUsage = {
   cacheCreationInputTokens: 0,
   cacheReadInputTokens: 0
 };
-const reply = (text: string, usage: Partial<TokenUsage> = {}) => ({ text, usage: { ...noUsage, ...usage } });
+// Wie der echte Provider: reportedCostUsd gehoert dazu. Null heisst "OpenRouter
+// hat keinen Betrag gemeldet" - dann greift die Schaetzung aus den Tokens.
+const reply = (text: string, usage: Partial<TokenUsage> = {}, reportedCostUsd: number | null = null) => ({
+  text,
+  usage: { ...noUsage, ...usage },
+  reportedCostUsd
+});
 
 describe("chatAboutBook reactor", () => {
   beforeEach(() => {
@@ -72,7 +79,7 @@ describe("chatAboutBook reactor", () => {
     mocked(bookRepo.findById).mockResolvedValue(makeBook());
     mocked(ensureBookText).mockResolvedValue(BOOK_TEXT);
     mocked(r2.getText).mockResolvedValue(null);
-    mocked(claude.chatAboutBook).mockResolvedValue(reply("Die Antwort."));
+    mocked(llm.chatAboutBook).mockResolvedValue(reply("Die Antwort."));
   });
 
   describe("validation", () => {
@@ -98,7 +105,7 @@ describe("chatAboutBook reactor", () => {
       // Claude would reject it too; failing here gives a reason instead of a 502.
       const messages = [{ role: "assistant", content: "Hallo" }];
       expect((await chatAboutBook(token(), { bookId: "book-1", messages })).status).toBe(400);
-      expect(claude.chatAboutBook).not.toHaveBeenCalled();
+      expect(llm.chatAboutBook).not.toHaveBeenCalled();
     });
   });
 
@@ -119,7 +126,7 @@ describe("chatAboutBook reactor", () => {
       mocked(bookRepo.findById).mockResolvedValue(makeBook({ userId: "someone-else" }));
       const result = await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
       expect(result.status).toBe(404);
-      expect(claude.chatAboutBook).not.toHaveBeenCalled();
+      expect(llm.chatAboutBook).not.toHaveBeenCalled();
     });
   });
 
@@ -130,7 +137,7 @@ describe("chatAboutBook reactor", () => {
       expect(result.status).toBe(200);
       expect(result.body).toEqual({ text: "Die Antwort.", dossierUsed: false, costUsd: 0 });
 
-      const call = mocked(claude.chatAboutBook).mock.calls[0]![0];
+      const call = mocked(llm.chatAboutBook).mock.calls[0]![0];
       expect(call.selection).toBeNull();
       expect(call.context).toBeNull();
       expect(call.outline).toContain("# 1. Ein Medienforscher auf Abwegen");
@@ -139,7 +146,7 @@ describe("chatAboutBook reactor", () => {
 
     it("passes the book's title and author through", async () => {
       await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
-      const call = mocked(claude.chatAboutBook).mock.calls[0]![0];
+      const call = mocked(llm.chatAboutBook).mock.calls[0]![0];
       expect(call.title).toBe("Der dressierte Nachwuchs");
       expect(call.author).toBe("Michael Meyen");
     });
@@ -153,7 +160,7 @@ describe("chatAboutBook reactor", () => {
         messages: askAbout("Was meint er damit?")
       });
 
-      const call = mocked(claude.chatAboutBook).mock.calls[0]![0];
+      const call = mocked(llm.chatAboutBook).mock.calls[0]![0];
       expect(call.selection).toBe("Zwei Busse, sagt Mathias Bröckers.");
       expect(call.context).toContain("Zwei Busse, sagt Mathias Bröckers.");
       // The window carries the structure markers, so the model can place it.
@@ -168,14 +175,14 @@ describe("chatAboutBook reactor", () => {
         messages: askAbout("x")
       });
 
-      const call = mocked(claude.chatAboutBook).mock.calls[0]![0];
+      const call = mocked(llm.chatAboutBook).mock.calls[0]![0];
       expect(call.selection).toBe("Dieser Satz steht nicht im Buch.");
       expect(call.context).toBeNull();
     });
 
     it("treats a blank selection as no selection at all", async () => {
       await chatAboutBook(token(), { bookId: "book-1", selection: "   ", messages: askAbout("x") });
-      expect(mocked(claude.chatAboutBook).mock.calls[0]![0].selection).toBeNull();
+      expect(mocked(llm.chatAboutBook).mock.calls[0]![0].selection).toBeNull();
     });
 
     it("ignores a non-numeric reading position instead of failing", async () => {
@@ -195,7 +202,7 @@ describe("chatAboutBook reactor", () => {
       const result = await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
 
       expect(result.body).toMatchObject({ dossierUsed: false });
-      expect(mocked(claude.chatAboutBook).mock.calls[0]![0].dossier).toBeNull();
+      expect(mocked(llm.chatAboutBook).mock.calls[0]![0].dossier).toBeNull();
     });
 
     it("sends the dossier and reports dossierUsed: true when one exists", async () => {
@@ -203,7 +210,7 @@ describe("chatAboutBook reactor", () => {
       const result = await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
 
       expect(result.body).toMatchObject({ dossierUsed: true });
-      expect(mocked(claude.chatAboutBook).mock.calls[0]![0].dossier).toContain("Kernaussage");
+      expect(mocked(llm.chatAboutBook).mock.calls[0]![0].dossier).toContain("Kernaussage");
     });
 
     it("reads the dossier from the book's own prefix", async () => {
@@ -214,12 +221,23 @@ describe("chatAboutBook reactor", () => {
 
   describe("cost", () => {
     it("computes the call cost, adds it to the book, and returns it", async () => {
-      mocked(claude.chatAboutBook).mockResolvedValue(reply("Antwort", { inputTokens: 1_000_000 }));
+      mocked(llm.chatAboutBook).mockResolvedValue(reply("Antwort", { inputTokens: 1_000_000 }));
       const result = await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
 
-      // 1M uncached input tokens at the $2/1M intro rate.
+      // 1M uncached input tokens at the $2/1M fallback rate - no reported cost.
       expect((result.body as { costUsd: number }).costUsd).toBeCloseTo(2.0, 6);
       expect(bookRepo.addAiCost).toHaveBeenCalledWith("book-1", expect.closeTo(2.0, 6));
+    });
+
+    // Der Betrag von OpenRouter gilt, nicht die eigene Rechnung: er kennt das
+    // tatsaechlich benutzte Modell und die echten Cache-Treffer. Die Tokens hier
+    // wuerden nach der Fallback-Tabelle 2,00 ergeben - gemeldet sind 0,37.
+    it("records the cost OpenRouter reported instead of pricing the tokens itself", async () => {
+      mocked(llm.chatAboutBook).mockResolvedValue(reply("Antwort", { inputTokens: 1_000_000 }, 0.37));
+      const result = await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
+
+      expect((result.body as { costUsd: number }).costUsd).toBeCloseTo(0.37, 6);
+      expect(bookRepo.addAiCost).toHaveBeenCalledWith("book-1", expect.closeTo(0.37, 6));
     });
 
     it("still returns the answer when recording the cost fails", async () => {
@@ -239,11 +257,20 @@ describe("chatAboutBook reactor", () => {
 
       expect(result.status).toBe(502);
       expect(result.body).toEqual({ error: "text_missing" });
-      expect(claude.chatAboutBook).not.toHaveBeenCalled();
+      expect(llm.chatAboutBook).not.toHaveBeenCalled();
+    });
+
+    it("names an expired API key instead of failing generically", async () => {
+      mocked(llm.chatAboutBook).mockRejectedValue(
+        new LlmError("unauthorized", "OpenRouter rejected the API key (HTTP 401)")
+      );
+      const result = await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
+
+      expect(result).toEqual({ status: 502, body: { error: "ai_key_invalid" } });
     });
 
     it("returns 502 chat_failed when Claude is unreachable", async () => {
-      mocked(claude.chatAboutBook).mockRejectedValue(new Error("network down"));
+      mocked(llm.chatAboutBook).mockRejectedValue(new Error("network down"));
       const result = await chatAboutBook(token(), { bookId: "book-1", messages: askAbout("x") });
 
       expect(result.status).toBe(502);
@@ -259,6 +286,6 @@ describe("chatAboutBook reactor", () => {
     ];
     await chatAboutBook(token(), { bookId: "book-1", messages });
 
-    expect(mocked(claude.chatAboutBook).mock.calls[0]![0].messages).toEqual(messages);
+    expect(mocked(llm.chatAboutBook).mock.calls[0]![0].messages).toEqual(messages);
   });
 });

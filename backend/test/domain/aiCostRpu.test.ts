@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { chatCostUsd, estimateDossierCostUsd, type TokenUsage } from "../../src/domain/aiCostRpu.js";
+import {
+  aiCallCostUsd,
+  chatCostUsd,
+  estimateDossierCostUsd,
+  type TokenUsage
+} from "../../src/domain/aiCostRpu.js";
 
 const usage = (u: Partial<TokenUsage>): TokenUsage => ({
   inputTokens: 0,
@@ -7,6 +12,24 @@ const usage = (u: Partial<TokenUsage>): TokenUsage => ({
   cacheCreationInputTokens: 0,
   cacheReadInputTokens: 0,
   ...u
+});
+
+describe("aiCallCostUsd", () => {
+  it("uses the cost the provider reported", () => {
+    // Die Tokens wuerden 2,00 ergeben - gemeldet ist 0,42, und das gilt.
+    expect(aiCallCostUsd(usage({ inputTokens: 1_000_000 }), 0.42)).toBeCloseTo(0.42, 6);
+  });
+
+  it("takes a reported zero at face value", () => {
+    // Ein geschenkter Aufruf (Freikontingent, 0-Preis-Modell) ist echte 0 und
+    // darf nicht als "nichts gemeldet" durchfallen - sonst erfindet die Tabelle
+    // Kosten, die nie angefallen sind.
+    expect(aiCallCostUsd(usage({ inputTokens: 1_000_000 }), 0)).toBe(0);
+  });
+
+  it("falls back to the token table when nothing was reported", () => {
+    expect(aiCallCostUsd(usage({ inputTokens: 1_000_000 }), null)).toBeCloseTo(2.0, 6);
+  });
 });
 
 describe("chatCostUsd", () => {
@@ -44,6 +67,16 @@ describe("chatCostUsd", () => {
 });
 
 describe("estimateDossierCostUsd", () => {
+  it("prices with the rates it is given, not the built-in fallback", () => {
+    // Das Dossier-Modell ist konfigurierbar; die Schaetzung muss dessen Preis
+    // benutzen, weil der Leser auf ihre Grundlage hin Geld freigibt.
+    const text = "wort ".repeat(1000);
+    const cheap = estimateDossierCostUsd(text, { inputPerToken: 1 / 1_000_000, outputPerToken: 5 / 1_000_000 });
+    const dear = estimateDossierCostUsd(text, { inputPerToken: 5 / 1_000_000, outputPerToken: 25 / 1_000_000 });
+
+    expect(dear).toBeCloseTo(cheap * 5, 6);
+  });
+
   it("is not zero for an empty text, since the estimated output still costs something", () => {
     expect(estimateDossierCostUsd("")).toBeGreaterThan(0);
   });

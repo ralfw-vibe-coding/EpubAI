@@ -1,11 +1,12 @@
 import { authorizeBookAccess } from "../domain/bookRpu.js";
 import { bookOutline, contextWindow } from "../domain/bookTextRpu.js";
-import { chatCostUsd } from "../domain/aiCostRpu.js";
+import { aiCallCostUsd } from "../domain/aiCostRpu.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
 import * as r2 from "../providers/x/r2.js";
-import * as claude from "../providers/x/claude.js";
+import * as llm from "../providers/x/llm.js";
 import { requireUserId, AuthError } from "./shared/requireUserId.js";
 import { ok, type ReactorResult } from "./shared/result.js";
+import { llmErrorCode } from "../domain/llmFailureRpu.js";
 import { dossierKey, ensureBookText } from "./shared/bookText.js";
 
 export interface ChatAboutBookInput {
@@ -90,9 +91,9 @@ export async function chatAboutBook(
 
   const dossier = await r2.getText(dossierKey(userId, book.currentFileHash));
 
-  let result: claude.ChatAboutBookResult;
+  let result: llm.ChatAboutBookResult;
   try {
-    result = await claude.chatAboutBook({
+    result = await llm.chatAboutBook({
       title: book.title,
       author: book.author,
       outline: bookOutline(bookText),
@@ -102,11 +103,11 @@ export async function chatAboutBook(
       messages
     });
   } catch (err) {
-    console.error("[chat] Claude call failed:", err);
-    return ok(502, { error: "chat_failed" });
+    console.error("[chat] LLM call failed:", err);
+    return ok(502, { error: llmErrorCode(err, "chat_failed") });
   }
 
-  const costUsd = chatCostUsd(result.usage);
+  const costUsd = aiCallCostUsd(result.usage, result.reportedCostUsd);
   // The answer already succeeded, so a failed cost write must not turn it into
   // an error - the reader would lose the reply over a bookkeeping hiccup. Log
   // and carry on; the per-call cost still rides back in the response.

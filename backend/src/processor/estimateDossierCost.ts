@@ -1,5 +1,6 @@
 import { authorizeBookAccess } from "../domain/bookRpu.js";
 import { estimateDossierCostUsd } from "../domain/aiCostRpu.js";
+import { env } from "../config.js";
 import * as bookRepo from "../providers/d/bookRepo.js";
 import { requireUserId, AuthError } from "./shared/requireUserId.js";
 import { ok, type ReactorResult } from "./shared/result.js";
@@ -32,5 +33,12 @@ export async function estimateDossierCost(
   const bookText = await ensureBookText(userId, book);
   if (!bookText) return ok(502, { error: "text_missing" });
 
-  return ok(200, { estimatedUsd: estimateDossierCostUsd(bookText) });
+  // Priced with the configured dossier model's rates, not a constant: the
+  // reader approves a spend on the strength of this number.
+  return ok(200, {
+    estimatedUsd: estimateDossierCostUsd(bookText, {
+      inputPerToken: env.DOSSIER_PRICE_IN_PER_MTOK / 1_000_000,
+      outputPerToken: env.DOSSIER_PRICE_OUT_PER_MTOK / 1_000_000
+    })
+  });
 }

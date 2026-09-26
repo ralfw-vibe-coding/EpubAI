@@ -21,6 +21,7 @@
 	} from 'lucide-svelte';
 	import { marked } from 'marked';
 	import { bookCitation, copyText } from '../../../lib/clipboard';
+	import { aiErrorMessage } from '../../../lib/aiErrors';
 	import DOMPurify from 'dompurify';
 	import type { Annotation, AnnotationColor, BookDetail } from '../../../domain/types';
 	import { getProcessor, isAuthenticated } from '../../../portal/runtime';
@@ -212,9 +213,11 @@
 			'Das Buch ist noch ausgeliehen und muss erst zurückgegeben werden — auch auf anderen Geräten.'
 	};
 
+	// Nur was diesen Weg allein betrifft; alles Übrige - abgelaufener Schlüssel,
+	// leeres Guthaben, Drosselung, fehlende Verbindung - kommt aus aiErrorMessage,
+	// damit Leser und Buchdetail dasselbe sagen.
 	const GENERATE_ERROR_MESSAGES: Record<string, string> = {
-		text_missing: 'Für dieses Buch konnte kein Text extrahiert werden, ein Dossier kann nicht generiert werden.',
-		generation_failed: 'Dossier-Generierung ist fehlgeschlagen. Bitte später erneut versuchen.'
+		text_missing: 'Für dieses Buch konnte kein Text extrahiert werden, ein Dossier kann nicht generiert werden.'
 	};
 
 	onMount(async () => {
@@ -418,7 +421,7 @@
 			if (detail) detail = { ...detail, ...updated };
 		} catch (e) {
 			const code = e instanceof Error ? e.message : '';
-			dossierError = GENERATE_ERROR_MESSAGES[code] ?? 'Dossier konnte nicht generiert werden.';
+			dossierError = GENERATE_ERROR_MESSAGES[code] ?? aiErrorMessage(e, 'Dossier-Generierung');
 		} finally {
 			generating = false;
 			confirmingGenerate = false;

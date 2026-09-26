@@ -1,6 +1,7 @@
-import * as claude from "../providers/x/claude.js";
+import * as llm from "../providers/x/llm.js";
 import { requireUserId, AuthError } from "./shared/requireUserId.js";
 import { ok, type ReactorResult } from "./shared/result.js";
+import { llmErrorCode } from "../domain/llmFailureRpu.js";
 
 export interface TranslateTextInput {
   text: unknown;
@@ -33,9 +34,10 @@ export async function translateText(
   }
 
   try {
-    const text = await claude.translateText(input.text, input.lang);
+    const text = await llm.translateText(input.text, input.lang);
     return ok(200, { text });
-  } catch {
-    return ok(502, { error: "translate_failed" });
+  } catch (err) {
+    console.error("[translate] LLM call failed:", err);
+    return ok(502, { error: llmErrorCode(err, "translate_failed") });
   }
 }

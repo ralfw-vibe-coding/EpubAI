@@ -1,15 +1,89 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { env } from "../../config.js";
 import type { TokenUsage } from "../../domain/aiCostRpu.js";
+import { LlmError } from "../../domain/llmFailureRpu.js";
 
-// xProvider: Claude API for the two stateless AI reactors (translate/lookup).
-// Untested like the other thin external-SDK wrappers (resend.ts, r2.ts) - not
-// worth mocking a third-party client for. See Requirements 3.4/4.6: these are
-// standalone Claude calls with no relation to the (separate, book-text-based)
-// chat feature.
-const client = new Anthropic({ apiKey: env.CLAUDE_API_KEY });
+// xProvider: the LLM, reached through OpenRouter. Untested like the other thin
+// external-SDK wrappers (resend.ts, r2.ts) - not worth mocking a third-party
+// client for. See Requirements 3.4/4.6.
+//
+// OpenRouter speaks the OpenAI chat-completions protocol, so this uses the
+// OpenAI SDK pointed at their base URL - not an OpenAI account. The four jobs
+// below differ enough (a two-word lookup vs. a whole book) that each picks its
+// own model from the environment; all four default to Claude Sonnet 5, which is
+// what this code called directly before.
+const client = new OpenAI({
+  apiKey: env.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1",
+  // OpenRouter attributes usage to an app by these two headers. Optional, and
+  // purely cosmetic (they show up on their dashboard/leaderboards).
+  defaultHeaders: { "HTTP-Referer": "https://epubai.ralfw-deno.deno.net", "X-Title": "EpubAI" }
+});
 
-const MODEL = "claude-sonnet-5";
+/**
+ * Thinking was switched off for every call before this ran through OpenRouter
+ * (`thinking: { type: "disabled" }`), because none of these four jobs benefits
+ * from it and all four pay for it in latency and output tokens. The OpenRouter
+ * equivalent is `reasoning: { effort: "none" }`.
+ *
+ * A model whose reasoning is *mandatory* rejects that parameter outright, so it
+ * has to be droppable without a code change: OPENROUTER_REASONING_EFFORT set to
+ * "default" omits the field entirely.
+ */
+const REASONING =
+  env.OPENROUTER_REASONING_EFFORT === "default"
+    ? undefined
+    : ({ effort: env.OPENROUTER_REASONING_EFFORT } as const);
+
+/**
+ * One completion request.
+ *
+ * Exists so the OpenRouter-only fields live in exactly one place: `reasoning`
+ * is not part of the OpenAI protocol, and `cache_control` on a content part is
+ * not either, so both are invisible to the SDK's types. Declaring them here
+ * keeps the four call sites below plainly typed instead of each carrying its
+ * own cast - and if the SDK ever learns these fields, only this function has to
+ * change. The cast is on the way *into* the SDK; the response is typed as
+ * usual.
+ */
+type CompletionRequest = Omit<OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming, "messages"> & {
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  reasoning?: { effort: string };
+};
+
+/**
+ * Classified by HTTP status rather than by the SDK's error classes: OpenRouter
+ * answers an exhausted balance with 402, which the OpenAI SDK has no dedicated
+ * class for and hands over as a plain APIError. 401 is an expired, revoked or
+ * mistyped key; 403 is a key that exists but may not use this model (or a
+ * region/data-policy refusal), which from here needs the same operator action.
+ */
+function classify(err: unknown): LlmError {
+  const status = err instanceof OpenAI.APIError ? err.status : undefined;
+  const detail = err instanceof Error ? err.message : String(err);
+  if (status === 401 || status === 403) {
+    return new LlmError("unauthorized", `OpenRouter rejected the API key (HTTP ${status}): ${detail}`, { cause: err });
+  }
+  if (status === 402) {
+    return new LlmError("out_of_credits", `OpenRouter reports no credit left: ${detail}`, { cause: err });
+  }
+  if (status === 429) {
+    return new LlmError("rate_limited", `OpenRouter rate-limited this call: ${detail}`, { cause: err });
+  }
+  return new LlmError("unavailable", detail, { cause: err });
+}
+
+async function complete(body: CompletionRequest): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  try {
+    return await client.chat.completions.create(
+      body as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming
+    );
+  } catch (err) {
+    // Every one of the four jobs goes through here, so classifying once covers
+    // all of them - and none of them can forget to.
+    throw classify(err);
+  }
+}
 
 // The frontend only ever sends one of AVAILABLE_LANGUAGES's short codes
 // (frontend/src/routes/read/[id]/languages.ts) - mapped to a full English
@@ -29,21 +103,59 @@ function languageName(lang: string): string {
   return LANGUAGE_NAMES[lang] ?? lang;
 }
 
-function extractText(content: Anthropic.ContentBlock[]): string {
-  return content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("");
+/**
+ * The assistant text of a completion. Null content is possible (a finish_reason
+ * of "length" on an empty first token, a provider hiccup) and must not become
+ * the string "null" in front of the reader, so it collapses to empty.
+ */
+function extractText(response: OpenAI.Chat.Completions.ChatCompletion): string {
+  return response.choices[0]?.message?.content ?? "";
+}
+
+/**
+ * OpenRouter reports what it actually billed, so the displayed cost no longer
+ * depends on a hand-maintained price table (see aiCostRpu). Null when the field
+ * is missing or not a usable number - then the caller falls back to computing
+ * from tokens.
+ */
+function reportedCost(usage: unknown): number | null {
+  const cost = (usage as { cost?: unknown } | undefined)?.cost;
+  return typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : null;
+}
+
+/**
+ * Token counts, mapped from the OpenAI-shaped usage object. `prompt_tokens`
+ * counts cached and uncached prompt tokens together, so the uncached part is
+ * what remains after subtracting both cache figures - clamped at 0, because a
+ * provider that reports these inconsistently must not produce a negative count
+ * that then reads as a credit in the cost fallback.
+ */
+function tokenUsage(usage: OpenAI.Completions.CompletionUsage | undefined): TokenUsage {
+  const details = usage?.prompt_tokens_details as
+    | { cached_tokens?: number; cache_write_tokens?: number }
+    | undefined;
+  const cacheRead = details?.cached_tokens ?? 0;
+  const cacheWrite = details?.cache_write_tokens ?? 0;
+  const prompt = usage?.prompt_tokens ?? 0;
+  return {
+    inputTokens: Math.max(0, prompt - cacheRead - cacheWrite),
+    outputTokens: usage?.completion_tokens ?? 0,
+    cacheCreationInputTokens: cacheWrite,
+    cacheReadInputTokens: cacheRead
+  };
 }
 
 export async function translateText(text: string, lang: string): Promise<string> {
   const target = languageName(lang);
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await complete({
+    model: env.OPENROUTER_MODEL_TRANSLATE,
     max_tokens: 2048,
-    thinking: { type: "disabled" },
-    system:
-      `Translate the following text into ${target}.\n\n` +
+    reasoning: REASONING,
+    messages: [
+      {
+        role: "system",
+        content:
+          `Translate the following text into ${target}.\n\n` +
       `Write your ENTIRE response in ${target}. Every part of the output - the ` +
       "translation itself, any sense or usage descriptions, grammatical labels, and any " +
       `explanatory notes - must be written in ${target}. Do not switch back to the source ` +
@@ -54,12 +166,14 @@ export async function translateText(text: string, lang: string): Promise<string>
       `one common meaning - like a bilingual dictionary entry, with every description and sense ` +
       `label written in ${target}, not just one bare word. If it is a longer passage, give a ` +
       "natural, fluent translation of the whole passage instead.\n\n" +
-      "Output only the translation/dictionary entry itself, with no extra framing like " +
-      '"Here is the translation:".',
-    messages: [{ role: "user", content: text }]
+          "Output only the translation/dictionary entry itself, with no extra framing like " +
+          '"Here is the translation:".'
+      },
+      { role: "user", content: text }
+    ]
   });
 
-  return extractText(response.content);
+  return extractText(response);
 }
 
 export interface ChatTurn {
@@ -157,15 +271,36 @@ function bookBlock(input: ChatAboutBookInput): string {
  * With no dossier the prefix may fall under the model's minimum cacheable size,
  * in which case caching silently does nothing - which is fine, there is nothing
  * worth saving.
+ *
+ * The breakpoints below only do anything on a model whose provider uses
+ * *explicit* caching: Anthropic and Qwen via OpenRouter. OpenAI, Gemini,
+ * DeepSeek and Grok cache automatically and ignore the marker; a provider
+ * without caching at all bills the whole prefix on every question. So switching
+ * OPENROUTER_MODEL_CHAT away from Claude changes what a chat costs by more than
+ * the price-per-token difference suggests.
  */
 export interface ChatAboutBookResult {
   text: string;
   /** Token usage for cost accounting (see aiCostRpu). */
   usage: TokenUsage;
+  /** What OpenRouter says this call cost, in USD. Null if it did not say. */
+  reportedCostUsd: number | null;
 }
 
+/**
+ * A cacheable text part. The OpenAI SDK's own part type has no `cache_control`
+ * field - it is an OpenRouter extension, passed through to Anthropic - so the
+ * shape is declared here and cast at the call. Only the marker is extra; the
+ * rest is an ordinary OpenAI content part.
+ */
+type CachedTextPart = {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral"; ttl: "5m" };
+};
+
 export async function chatAboutBook(input: ChatAboutBookInput): Promise<ChatAboutBookResult> {
-  const system: Anthropic.TextBlockParam[] = [
+  const system: CachedTextPart[] = [
     { type: "text", text: CHAT_INSTRUCTIONS },
     { type: "text", text: bookBlock(input), cache_control: { type: "ephemeral", ttl: "5m" } }
   ];
@@ -178,25 +313,20 @@ export async function chatAboutBook(input: ChatAboutBookInput): Promise<ChatAbou
     });
   }
 
-  const messages = withExcerpt(input);
-
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await complete({
+    model: env.OPENROUTER_MODEL_CHAT,
     max_tokens: 2048,
-    thinking: { type: "disabled" },
-    system,
-    messages
+    reasoning: REASONING,
+    messages: [
+      { role: "system", content: system as OpenAI.Chat.Completions.ChatCompletionContentPartText[] },
+      ...withExcerpt(input)
+    ]
   });
 
-  const u = response.usage;
   return {
-    text: extractText(response.content),
-    usage: {
-      inputTokens: u.input_tokens,
-      outputTokens: u.output_tokens,
-      cacheCreationInputTokens: u.cache_creation_input_tokens ?? 0,
-      cacheReadInputTokens: u.cache_read_input_tokens ?? 0
-    }
+    text: extractText(response),
+    usage: tokenUsage(response.usage),
+    reportedCostUsd: reportedCost(response.usage)
   };
 }
 
@@ -207,8 +337,11 @@ export async function chatAboutBook(input: ChatAboutBookInput): Promise<ChatAbou
  * cannot drift from what the reader actually selected - and so the excerpt
  * stays out of the cached system prefix.
  */
-function withExcerpt(input: ChatAboutBookInput): Anthropic.MessageParam[] {
-  const messages: Anthropic.MessageParam[] = input.messages.map((m) => ({ role: m.role, content: m.content }));
+function withExcerpt(input: ChatAboutBookInput): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  const messages: Array<{ role: "user" | "assistant"; content: string }> = input.messages.map((m) => ({
+    role: m.role,
+    content: m.content
+  }));
   const preamble: string[] = [];
 
   if (input.selection) {
@@ -226,7 +359,7 @@ function withExcerpt(input: ChatAboutBookInput): Anthropic.MessageParam[] {
   }
 
   const first = messages[0];
-  if (preamble.length > 0 && first && first.role === "user" && typeof first.content === "string") {
+  if (preamble.length > 0 && first && first.role === "user") {
     first.content = `${preamble.join("\n\n")}\n\n---\n\n${first.content}`;
   }
   return messages;
@@ -352,6 +485,8 @@ STRUCTURE
 export interface GenerateDossierResult {
   text: string;
   usage: TokenUsage;
+  /** What OpenRouter says this call cost, in USD. Null if it did not say. */
+  reportedCostUsd: number | null;
 }
 
 /**
@@ -371,41 +506,43 @@ export async function generateDossier(
     "do not derive the title or author from the body text below, which may " +
     `contain other titles such as chapter headings):\nTitle: ${title}\nAuthor: ${author}`;
 
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await complete({
+    model: env.OPENROUTER_MODEL_DOSSIER,
     max_tokens: 8192,
-    thinking: { type: "disabled" },
-    system: DOSSIER_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: `${metadata}\n\n${bookText}` }]
+    reasoning: REASONING,
+    messages: [
+      { role: "system", content: DOSSIER_SYSTEM_PROMPT },
+      { role: "user", content: `${metadata}\n\n${bookText}` }
+    ]
   });
 
-  const u = response.usage;
   return {
-    text: extractText(response.content),
-    usage: {
-      inputTokens: u.input_tokens,
-      outputTokens: u.output_tokens,
-      cacheCreationInputTokens: u.cache_creation_input_tokens ?? 0,
-      cacheReadInputTokens: u.cache_read_input_tokens ?? 0
-    }
+    text: extractText(response),
+    usage: tokenUsage(response.usage),
+    reportedCostUsd: reportedCost(response.usage)
   };
 }
 
 export async function lookupText(text: string, lang: string): Promise<string> {
   const target = languageName(lang);
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await complete({
+    model: env.OPENROUTER_MODEL_LOOKUP,
     max_tokens: 2048,
-    thinking: { type: "disabled" },
-    system:
-      "The following is a short excerpt marked by a reader inside a book - a word, phrase, or " +
-      "concept, not necessarily a full sentence. Briefly explain it (2-4 sentences), as context " +
-      "or a definition for the reader.\n\n" +
-      `Write your ENTIRE response in ${target}. Every sentence must be written in ${target}; do ` +
-      "not switch to the language of the excerpt at any point. The only text that may appear in " +
-      "another language is the excerpt itself if you quote it.",
-    messages: [{ role: "user", content: text }]
+    reasoning: REASONING,
+    messages: [
+      {
+        role: "system",
+        content:
+          "The following is a short excerpt marked by a reader inside a book - a word, phrase, or " +
+          "concept, not necessarily a full sentence. Briefly explain it (2-4 sentences), as context " +
+          "or a definition for the reader.\n\n" +
+          `Write your ENTIRE response in ${target}. Every sentence must be written in ${target}; do ` +
+          "not switch to the language of the excerpt at any point. The only text that may appear in " +
+          "another language is the excerpt itself if you quote it."
+      },
+      { role: "user", content: text }
+    ]
   });
 
-  return extractText(response.content);
+  return extractText(response);
 }

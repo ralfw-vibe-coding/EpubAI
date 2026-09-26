@@ -34,8 +34,32 @@ const REQUIRED_VARS = [
   "RESEND_API_KEY",
   "AUTH_FROM_EMAIL",
   "JWT_TTL_SECONDS",
-  "CLAUDE_API_KEY"
+  "OPENROUTER_API_KEY"
 ] as const;
+
+// Every AI job picks its own model, because they differ a lot: translate and
+// look up are two-word jobs where latency shows, the chat lives off a cached
+// book prefix, and the dossier feeds a whole book in and wants 8k tokens out.
+// All four default to what this app used before it went through OpenRouter, so
+// an unset environment behaves exactly as it did.
+const DEFAULT_MODEL = "anthropic/claude-sonnet-5";
+
+// Only for the estimate shown BEFORE a dossier is generated - the cost of a
+// call that already happened comes from OpenRouter itself. Defaults are Claude
+// Sonnet 5's list price in USD per million tokens; override them when
+// OPENROUTER_MODEL_DOSSIER points somewhere else, or the estimate describes a
+// model that is not the one being asked.
+const DEFAULT_DOSSIER_PRICE_IN = 2.0;
+const DEFAULT_DOSSIER_PRICE_OUT = 10.0;
+
+function positiveNumber(raw: string | undefined, fallback: number, name: string): number {
+  if (raw === undefined || raw.length === 0) return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative number`);
+  }
+  return value;
+}
 
 function readEnv() {
   const missing = REQUIRED_VARS.filter((name) => !process.env[name] || process.env[name]!.length === 0);
@@ -64,7 +88,25 @@ function readEnv() {
     AUTH_SECRET_OTP: process.env.AUTH_SECRET_OTP || null,
     JWT_TTL_SECONDS: ttl,
     PORT: Number(process.env.PORT ?? 3000),
-    CLAUDE_API_KEY: process.env.CLAUDE_API_KEY!
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY!,
+    OPENROUTER_MODEL_TRANSLATE: process.env.OPENROUTER_MODEL_TRANSLATE || DEFAULT_MODEL,
+    OPENROUTER_MODEL_LOOKUP: process.env.OPENROUTER_MODEL_LOOKUP || DEFAULT_MODEL,
+    OPENROUTER_MODEL_CHAT: process.env.OPENROUTER_MODEL_CHAT || DEFAULT_MODEL,
+    OPENROUTER_MODEL_DOSSIER: process.env.OPENROUTER_MODEL_DOSSIER || DEFAULT_MODEL,
+    // "none" switches thinking off (what this code did directly before). A model
+    // whose reasoning is mandatory rejects that, so "default" omits the
+    // parameter and lets the model decide - see REASONING in providers/x/llm.ts.
+    OPENROUTER_REASONING_EFFORT: process.env.OPENROUTER_REASONING_EFFORT || "none",
+    DOSSIER_PRICE_IN_PER_MTOK: positiveNumber(
+      process.env.DOSSIER_PRICE_IN_PER_MTOK,
+      DEFAULT_DOSSIER_PRICE_IN,
+      "DOSSIER_PRICE_IN_PER_MTOK"
+    ),
+    DOSSIER_PRICE_OUT_PER_MTOK: positiveNumber(
+      process.env.DOSSIER_PRICE_OUT_PER_MTOK,
+      DEFAULT_DOSSIER_PRICE_OUT,
+      "DOSSIER_PRICE_OUT_PER_MTOK"
+    )
   };
 }
 
