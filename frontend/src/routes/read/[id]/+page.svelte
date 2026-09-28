@@ -33,6 +33,7 @@
 	import { normalizeTag } from './tags';
 	import { detectSwipe, type Swipe } from './swipe';
 	import { copyText } from '../../../lib/clipboard';
+	import { rewriteAbsoluteFontSizes } from './absoluteFontSizes';
 	import { aiErrorMessage } from '../../../lib/aiErrors';
 	import { initialGate, nextGate, type SelectionEvent } from './selectionGate';
 	import { selectionBarTop, SELECTION_BAR_HEIGHT_PX } from './selectionBarPlacement';
@@ -1245,6 +1246,15 @@
 					window: Window;
 				}) => {
 					contents.on('linkClicked', () => pushHistory());
+
+					// Bücher, die ihre Schriftgrößen als absolute Schlüsselwörter
+					// angeben (`font-size: small`), ließen sich sonst überhaupt
+					// nicht vergrößern - die Wörter rechnen gegen die Vorgabe des
+					// Browsers und ignorieren, was epub.js auf dem Körper setzt.
+					// Vor allem anderen, denn es verändert das Layout, und die
+					// Paginierung misst gleich danach.
+					setRootFontSize(contents.document);
+					rewriteAbsoluteFontSizes(contents.document);
 					// Rohes selectionchange, nicht epub.js' entprelltes 'selected':
 					// Nur so merken wir JEDE Änderung sofort und können die
 					// Farbleiste wieder ausblenden, solange noch gezogen wird
@@ -1508,6 +1518,26 @@
 		if (!rendition) return;
 		rendition.themes.fontSize(fontSizePx(prefs.fontIndex));
 		rendition.themes.default(readerThemeStyles(prefs.theme));
+		// Die Bezugsgröße für die umgeschriebenen Schlüsselwörter (siehe
+		// absoluteFontSizes.ts) muss mitwandern: themes.fontSize() fasst nur den
+		// Körper an, `rem` hängt aber am Wurzelelement. Für schon geladene
+		// Kapitel hier, für später geladene im content-Hook.
+		for (const c of currentContents()) setRootFontSize(c.document);
+	}
+
+	/**
+	 * Die Kapiteldokumente, die gerade im iframe stehen. `getContents()` fehlt in
+	 * epub.js' eigenen Typen (dieselbe Lücke wie bei Section.find(), siehe
+	 * bookSearch.ts), deshalb hier lokal beschrieben.
+	 */
+	function currentContents(): Array<{ document: Document }> {
+		const get = (rendition as unknown as { getContents?: () => unknown }).getContents;
+		const contents = typeof get === 'function' ? get.call(rendition) : null;
+		return Array.isArray(contents) ? (contents as Array<{ document: Document }>) : [];
+	}
+
+	function setRootFontSize(doc: Document) {
+		doc.documentElement.style.fontSize = fontSizePx(prefs.fontIndex);
 	}
 
 	// epub.js's resize() re-measures its container when called with no
