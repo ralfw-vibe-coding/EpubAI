@@ -34,6 +34,7 @@
 	import { detectSwipe, type Swipe } from './swipe';
 	import { copyText } from '../../../lib/clipboard';
 	import { rewriteAbsoluteFontSizes } from './absoluteFontSizes';
+	import { browserWakeLock, createWakeLockKeeper } from './screenWakeLock';
 	import { aiErrorMessage } from '../../../lib/aiErrors';
 	import { initialGate, nextGate, type SelectionEvent } from './selectionGate';
 	import { selectionBarTop, SELECTION_BAR_HEIGHT_PX } from './selectionBarPlacement';
@@ -1350,6 +1351,7 @@
 			});
 
 			document.addEventListener('visibilitychange', onVisibility);
+			void wakeLock.acquire();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Buch konnte nicht geöffnet werden.';
 			loading = false;
@@ -1385,8 +1387,29 @@
 		}
 	}
 
+	/**
+	 * Hält den Bildschirm wach, solange dieses Buch offen ist (siehe
+	 * screenWakeLock.ts). Der Leser schaut eine Seite oft länger an, als die
+	 * Bildschirmsperre des Geräts erlaubt - im Stromsparmodus von iOS 30
+	 * Sekunden. Nur hier im Leser, nicht in der Bibliothek: dort wird geklickt,
+	 * nicht gelesen.
+	 */
+	const wakeLock = createWakeLockKeeper(browserWakeLock(), (reason) =>
+		// Eine Ablehnung ist erwartbar (Stromsparmodus, schwacher Akku, Safari vor
+		// 18.4 in Web-Apps vom Home-Screen) und für den Leser nichts, wogegen er
+		// etwas tun könnte - also nur ins Protokoll, keine Meldung.
+		console.info('[wakeLock] Bildschirmsperre nicht unterdrückt:', reason)
+	);
+
 	function onVisibility() {
-		if (document.visibilityState === 'hidden') void save();
+		if (document.visibilityState === 'hidden') {
+			void save();
+			return;
+		}
+		// Das System zieht die Sperre beim Unsichtbarwerden ein; nach der Rückkehr
+		// muss sie neu angefordert werden, sonst gilt sie nur bis zum ersten
+		// App-Wechsel.
+		void wakeLock.acquire();
 	}
 
 	// A page turn otherwise happens instantly, easy to miss entirely on a quick
@@ -1625,6 +1648,10 @@
 
 	onDestroy(() => {
 		document.removeEventListener('visibilitychange', onVisibility);
+		// Beim Verlassen des Lesers freigeben, statt auf das System zu warten -
+		// sonst hielte die Bibliothek den Bildschirm wach, obwohl dort niemand
+		// liest.
+		void wakeLock.release();
 		if (toastTimer) clearTimeout(toastTimer);
 		if (chromeHideTimer) clearTimeout(chromeHideTimer);
 		if (noteSavedFlashTimer) clearTimeout(noteSavedFlashTimer);
